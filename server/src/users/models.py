@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models import Base
 
@@ -14,3 +14,5 @@ class UserModel(Base):
     hashed_password: Mapped[str]
 
     is_admin: Mapped[bool] = mapped_column(default=False)
+
+    created_posts: Mapped[list["PostModel"]] = relationship(back_populates="user")  # type: ignore

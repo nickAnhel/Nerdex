@@ -6,6 +6,7 @@ from src.config import settings
 # Routes
 from src.users.router import router as users_router
 from src.auth.router import router as auth_router
+from src.posts.router import router as posts_router
 
 # Exception handlers
 from src.exceptions import (
@@ -24,10 +25,18 @@ from src.users.exceptions import (
     UsernameOrEmailAlreadyExists,
 )
 
+from src.posts.exc_handlers import (
+    post_not_found_handler,
+)
+from src.posts.exceptions import (
+    PostNotFound,
+)
+
 
 def register_routes(app: FastAPI) -> None:
     app.include_router(auth_router)
     app.include_router(users_router)
+    app.include_router(posts_router)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -35,6 +44,8 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(UserNotFound, user_not_found_handler)  # type: ignore
     app.add_exception_handler(UsernameOrEmailAlreadyExists, username_or_email_already_exists_handler)  # type: ignore
+
+    app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
 
 
 def register_middleware(app: FastAPI) -> None:
