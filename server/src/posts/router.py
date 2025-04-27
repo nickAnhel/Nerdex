@@ -7,7 +7,7 @@ from src.users.schemas import UserGet
 from src.auth.dependencies import get_current_user
 from src.posts.dependencies import get_post_service
 from src.posts.enums import PostOrder
-from src.posts.schemas import PostCreate, PostGet, PostUpdate
+from src.posts.schemas import PostCreate, PostGet, PostUpdate, PostRating
 from src.posts.service import PostService
 
 
@@ -42,7 +42,7 @@ async def get_posts(
     )
 
 
-@router.get("/search")
+@router.get("/search", deprecated=True, description="In work")
 async def search_posts():
     pass
 
@@ -77,3 +77,51 @@ async def delete_post(
 ) -> Status:
     await post_service.delete_post(user=user, post_id=post_id)
     return Status(detail="Post deleted successfully")
+
+
+@router.post("/like")
+async def like_post(
+    post_id: uuid.UUID,
+    user: UserGet = Depends(get_current_user),
+    post_service: PostService = Depends(get_post_service),
+) -> PostRating:
+    return await post_service.add_like_to_post(
+        post_id=post_id,
+        user_id=user.user_id,
+    )
+
+
+@router.post("/dislike")
+async def dislike_post(
+    post_id: uuid.UUID,
+    user: UserGet = Depends(get_current_user),
+    post_service: PostService = Depends(get_post_service),
+) -> PostRating:
+    return await post_service.add_dislike_to_post(
+        post_id=post_id,
+        user_id=user.user_id,
+    )
+
+
+@router.delete("/like")
+async def unlike_post(
+    post_id: uuid.UUID,
+    user: UserGet = Depends(get_current_user),
+    post_service: PostService = Depends(get_post_service),
+) -> PostRating:
+    return await post_service.remove_like_from_post(
+        post_id=post_id,
+        user_id=user.user_id,
+    )
+
+
+@router.delete("/dislike")
+async def undislike_post(
+    post_id: uuid.UUID,
+    user: UserGet = Depends(get_current_user),
+    post_service: PostService = Depends(get_post_service),
+) -> PostRating:
+    return await post_service.remove_dislike_from_post(
+        post_id=post_id,
+        user_id=user.user_id,
+    )

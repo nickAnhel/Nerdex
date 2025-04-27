@@ -27,9 +27,11 @@ from src.users.exceptions import (
 
 from src.posts.exc_handlers import (
     post_not_found_handler,
+    post_already_rated_handler,
 )
 from src.posts.exceptions import (
     PostNotFound,
+    PostAlreadyRated,
 )
 
 
@@ -46,6 +48,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UsernameOrEmailAlreadyExists, username_or_email_already_exists_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
+    app.add_exception_handler(PostAlreadyRated, post_already_rated_handler)  # type: ignore
 
 
 def register_middleware(app: FastAPI) -> None:

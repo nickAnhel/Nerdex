@@ -1,9 +1,10 @@
+import uuid
 import typing as tp
 
-from sqlalchemy import insert, select, update, delete, desc
+from sqlalchemy import and_, insert, select, update, delete, desc, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.posts.models import PostModel
+from src.posts.models import PostModel, LikesModel, DislikesModel
 
 
 class PostRepository:
@@ -53,6 +54,18 @@ class PostRepository:
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
+    async def get_post_rating(
+        self,
+        **filters,
+    ) -> tuple[int, int]:
+        query = (
+            select(PostModel.likes, PostModel.dislikes)
+            .filter_by(**filters)
+        )
+
+        res = await self._session.execute(query)
+        return res.fetchone().tuple()  # type: ignore
+
     async def update(
         self,
         data: dict[str, tp.Any],
@@ -82,3 +95,171 @@ class PostRepository:
         res = await self._session.execute(stmt)
         await self._session.commit()
         return res.rowcount
+
+    async def like(
+        self,
+        post_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        insert_like_row_stmt = (
+            insert(LikesModel)
+            .values(
+                post_id=post_id,
+                user_id=user_id,
+            )
+        )
+
+        update_likes_count_stmt = (
+            update(PostModel)
+            .values(likes=PostModel.likes + 1)
+            .filter_by(post_id=post_id)
+        )
+
+        update_dislikes_count_stmt = (
+            update(PostModel)
+            .values(dislikes=PostModel.dislikes - 1)
+            .where(
+                and_(
+                    PostModel.post_id == post_id,
+                    exists(
+                        select(DislikesModel)
+                        .filter_by(
+                            post_id=post_id,
+                            user_id=user_id,
+                        )
+                    ),
+                )
+            )
+        )
+
+        delete_dislike_row_stmt = (
+            delete(DislikesModel)
+            .filter_by(
+                post_id=post_id,
+                user_id=user_id,
+            )
+        )
+
+        await self._session.execute(insert_like_row_stmt)
+        await self._session.execute(update_likes_count_stmt)
+        await self._session.execute(update_dislikes_count_stmt)
+        await self._session.execute(delete_dislike_row_stmt)
+        await self._session.commit()
+
+    async def unlike(
+        self,
+        post_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        update_likes_count_stmt = (
+            update(PostModel)
+            .values(likes=PostModel.likes - 1)
+            .where(
+                and_(
+                    PostModel.post_id == post_id,
+                    exists(
+                        select(LikesModel)
+                        .filter_by(
+                            post_id=post_id,
+                            user_id=user_id,
+                        )
+                    ),
+                )
+            )
+        )
+
+        delete_like_row_stmt = (
+            delete(LikesModel)
+            .filter_by(
+                post_id=post_id,
+                user_id=user_id,
+            )
+        )
+
+        await self._session.execute(update_likes_count_stmt)
+        await self._session.execute(delete_like_row_stmt)
+        await self._session.commit()
+
+    async def dislike(
+        self,
+        post_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        insert_dislike_row_stmt = (
+            insert(DislikesModel)
+            .values(
+                post_id=post_id,
+                user_id=user_id,
+            )
+        )
+
+        update_dislikes_count_stmt = (
+            update(PostModel)
+            .values(dislikes=PostModel.dislikes + 1)
+            .filter_by(post_id=post_id)
+        )
+
+        update_likes_count_stmt = (
+            update(PostModel)
+            .values(likes=PostModel.likes - 1)
+            .where(
+                and_(
+                    PostModel.post_id == post_id,
+                    exists(
+                        select(LikesModel)
+                        .filter_by(
+                            post_id=post_id,
+                            user_id=user_id,
+                        )
+                    ),
+                )
+            )
+        )
+
+        delete_like_row_stmt = (
+            delete(LikesModel)
+            .filter_by(
+                post_id=post_id,
+                user_id=user_id,
+            )
+        )
+
+        await self._session.execute(insert_dislike_row_stmt)
+        await self._session.execute(update_dislikes_count_stmt)
+        await self._session.execute(update_likes_count_stmt)
+        await self._session.execute(delete_like_row_stmt)
+        await self._session.commit()
+
+    async def undislike(
+        self,
+        post_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        update_dislikes_count_stmt = (
+            update(PostModel)
+            .values(dislikes=PostModel.dislikes - 1)
+            .where(
+                and_(
+                    PostModel.post_id == post_id,
+                    exists(
+                        select(DislikesModel)
+                        .filter_by(
+                            post_id=post_id,
+                            user_id=user_id,
+                        )
+                    ),
+                )
+            )
+        )
+
+        delete_dislike_row_stmt = (
+            delete(DislikesModel)
+            .filter_by(
+                post_id=post_id,
+                user_id=user_id,
+            )
+        )
+
+        await self._session.execute(update_dislikes_count_stmt)
+        await self._session.execute(delete_dislike_row_stmt)
+        await self._session.commit()
