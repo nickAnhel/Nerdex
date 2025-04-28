@@ -26,6 +26,8 @@ class UserModel(Base):
 
     created_posts: Mapped[list["PostModel"]] = relationship(  # type: ignore
         back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     liked_posts: Mapped["PostModel"] = relationship(  # type: ignore
         back_populates="liked_users",
