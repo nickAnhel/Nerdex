@@ -37,6 +37,13 @@ class PostModel(Base):
         secondary="user_post_dislikes",
     )
 
+    @property
+    def content_ellipsis(self) -> str:
+        if len(self.content) < 100:
+            return self.content
+
+        return " ".join(self.content.split()[:5]) + "..."
+
 
 class LikesModel(Base):
     __tablename__ = "user_post_likes"

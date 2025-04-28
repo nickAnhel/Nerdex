@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from src.admin.admin import create_admin
 from src.config import settings
 from src.setup_app import setup_app
 
@@ -12,6 +13,8 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
 )
+
+admin = create_admin(app)
 
 setup_app(app)
 

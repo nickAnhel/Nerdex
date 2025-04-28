@@ -49,11 +49,19 @@ class LoggingConfig(ConfigBase):
     model_config = SettingsConfigDict(env_prefix="logging_")
 
 
+class AdminSettings(ConfigBase):
+    secret_key: str
+    session_expire_minutes: int
+
+    model_config = SettingsConfigDict(env_prefix="admin_")
+
+
 class Settings(BaseSettings):
     db: DBSettings = Field(default_factory=DBSettings)  # type: ignore
     logging: LoggingConfig = Field(default_factory=LoggingConfig)  # type: ignore
     cors: CORSSettings = Field(default_factory=CORSSettings)  # type: ignore
     project: ProjectSettings = Field(default_factory=ProjectSettings)  # type: ignore
+    admin: AdminSettings = Field(default_factory=AdminSettings)  # type: ignore
 
 
 settings = Settings()
