@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.exc import NoResultFound, IntegrityError
 
+from src.exceptions import PermissionDenied
 from src.users.schemas import UserGet
 from src.posts.enums import PostOrder
 from src.posts.exceptions import PostNotFound, PostAlreadyRated
@@ -66,12 +67,17 @@ class PostService:
     ) -> PostGet:
         """Update post."""
 
-        post = await self._repository.update(
-            data=data.model_dump(),
-            post_id=post_id,
-            user_id=user.user_id,
-        )
-        return PostGet.model_validate(post)
+        try:
+            post = await self._repository.update(
+                data=data.model_dump(),
+                post_id=post_id,
+                user_id=user.user_id,
+            )
+            return PostGet.model_validate(post)
+        except NoResultFound as exc:
+            raise PermissionDenied(
+                f"User with id {user.user_id} can't edit post with id {post_id}"
+            ) from exc
 
     async def delete_post(
         self,
@@ -102,7 +108,9 @@ class PostService:
         try:
             await self._repository.like(post_id=post_id, user_id=user_id)
         except IntegrityError as exc:
-            raise PostAlreadyRated(f"Post with id {post_id!s} already liked by user with id {user_id!s}") from exc
+            raise PostAlreadyRated(
+                f"Post with id {post_id!s} already liked by user with id {user_id!s}"
+            ) from exc
 
         return await self.get_post_statistics(post_id=post_id)
 
@@ -126,7 +134,9 @@ class PostService:
         try:
             await self._repository.dislike(post_id=post_id, user_id=user_id)
         except IntegrityError as exc:
-            raise PostAlreadyRated(f"Post with id {post_id!s} already disliked by user with id {user_id!s}") from exc
+            raise PostAlreadyRated(
+                f"Post with id {post_id!s} already disliked by user with id {user_id!s}"
+            ) from exc
 
         return await self.get_post_statistics(post_id=post_id)
 
