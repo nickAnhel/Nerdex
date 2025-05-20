@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from src.auth.dependencies import get_current_user
+from src.auth.dependencies import get_current_user, get_current_optional_user
 from src.schemas import Status
 from src.users.dependencies import get_user_service
 from src.users.enums import UserOrder
@@ -105,3 +105,19 @@ async def unsubscribe_from_user(
 ) -> Status:
     await user_service.unsubscribe(user_id=user_id, subscriber_id=user.user_id)
     return Status(detail="User unsubscribed successfully")
+
+
+@router.get("/subscriptions")
+async def get_subscriptions(
+    user_id: UUID,
+    offset: int = 0,
+    limit: int = 100,
+    user: UserGet | None = Depends(get_current_optional_user),
+    user_service: UserService = Depends(get_user_service),
+) -> list[UserGet]:
+    return await user_service.get_subscriptions(
+        curr_user=user,
+        user_id=user_id,
+        offset=offset,
+        limit=limit,
+    )

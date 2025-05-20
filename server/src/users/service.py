@@ -153,27 +153,28 @@ class UserService:
                 f"User with id {subscriber_id} not found in subscribers of {user_id}"
             ) from exc
 
-    # async def get_subscriptions(
-    #     self,
-    #     user_id: uuid.UUID,
-    #     curr_user: UserGet | None = None,
-    #     offset: int = 0,
-    #     limit: int = 100,
-    # ) -> list[UserGet]:
-    #     """Get user subsctiptions."""
+    async def get_subscriptions(
+        self,
+        user_id: uuid.UUID,
+        curr_user: UserGet | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[UserGet]:
+        """Get user subsctiptions."""
 
-    #     try:
-    #         users = await self._repository.get_subscriptions(user_id=user_id)
-    #     except NoResultFound as exc:
-    #         raise UserNotFound(f"User with id {user_id} not found") from exc
+        try:
+            users = await self._repository.get_subscriptions(user_id=user_id)
+        except NoResultFound as exc:
+            raise UserNotFound(f"User with id {user_id} not found") from exc
 
-    #     users = users[offset : offset + limit]
-    #     return [
-    #         UserGet(
-    #             user_id=user.user_id,
-    #             username=user.username,
-    #             subscribers_count=user.subscribers_count,
-    #             is_subscribed=(curr_user and (curr_user.user_id in [u.id for u in user.subscribers])),
-    #         )
-    #         for user in users
-    #     ]
+        users = users[offset : offset + limit]
+        return [
+            UserGet(
+                user_id=user.user_id,
+                username=user.username,
+                subscribers_count=user.subscribers_count,
+                is_admin=user.is_admin,
+                is_subscribed=(curr_user and (curr_user.user_id in [u.user_id for u in user.subscribers])),
+            )
+            for user in users
+        ]

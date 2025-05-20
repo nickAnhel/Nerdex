@@ -14,6 +14,9 @@ class UserGet(BaseSchema):
     user_id: UUID
     username: str
     is_admin: bool
+    subscribers_count: int
+
+    is_subscribed: bool | None = None
 
 
 class UserGetWithPassword(UserGet):
