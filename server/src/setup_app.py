@@ -22,10 +22,16 @@ from src.exc_handlers import (
 from src.users.exc_handlers import (
     user_not_found_handler,
     username_or_email_already_exists_handler,
+    cant_subscribe_to_user_handler,
+    cant_unsubscribe_from_user_handler,
+    user_not_in_subscriptions_handler,
 )
 from src.users.exceptions import (
     UserNotFound,
     UsernameOrEmailAlreadyExists,
+    CantSubscribeToUser,
+    CantUnsubscribeFromUser,
+    UserNotInSubscriptions,
 )
 
 from src.posts.exc_handlers import (
@@ -79,6 +85,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         UsernameOrEmailAlreadyExists,
         username_or_email_already_exists_handler,  # type: ignore
     )
+    app.add_exception_handler(CantSubscribeToUser, cant_subscribe_to_user_handler)  # type: ignore
+    app.add_exception_handler(CantUnsubscribeFromUser, cant_unsubscribe_from_user_handler)  # type: ignore
+    app.add_exception_handler(UserNotInSubscriptions, user_not_in_subscriptions_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
     app.add_exception_handler(PostAlreadyRated, post_already_rated_handler)  # type: ignore

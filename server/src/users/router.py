@@ -1,15 +1,14 @@
-from uuid import UUID
 from typing import Annotated
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 
-from src.schemas import Status
 from src.auth.dependencies import get_current_user
-
+from src.schemas import Status
 from src.users.dependencies import get_user_service
-from src.users.service import UserService
-from src.users.schemas import UserCreate, UserUpdate, UserGet
 from src.users.enums import UserOrder
-
+from src.users.schemas import UserCreate, UserGet, UserUpdate
+from src.users.service import UserService
 
 router = APIRouter(
     prefix="/users",
@@ -86,3 +85,23 @@ async def delete_user(
 ) -> Status:
     await user_service.delete_user(user_id=user.user_id)
     return Status(detail="User deleted successfully")
+
+
+@router.post("/subscribe")
+async def subscribe_to_user(
+    user_id: UUID,
+    user: UserGet = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> Status:
+    await user_service.subscribe(user_id=user_id, subscriber_id=user.user_id)
+    return Status(detail="User subscribed successfully")
+
+
+@router.delete("/unsubscribe")
+async def unsubscribe_from_user(
+    user_id: UUID,
+    user: UserGet = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> Status:
+    await user_service.unsubscribe(user_id=user_id, subscriber_id=user.user_id)
+    return Status(detail="User unsubscribed successfully")
