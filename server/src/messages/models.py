@@ -22,3 +22,10 @@ class MessageModel(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
     user: Mapped["UserModel"] = relationship(back_populates="messages")
+
+    @property
+    def content_ellipsis(self) -> str:
+        if len(self.content) < 100:
+            return self.content
+
+        return " ".join(self.content.split()[:5]) + "..."
