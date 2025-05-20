@@ -56,12 +56,19 @@ class AdminSettings(ConfigBase):
     model_config = SettingsConfigDict(env_prefix="admin_")
 
 
+class WebsocketSettings(ConfigBase):
+    allowed_hosts: list[str]
+
+    model_config = SettingsConfigDict(env_prefix="ws_")
+
+
 class Settings(BaseSettings):
     db: DBSettings = Field(default_factory=DBSettings)  # type: ignore
     logging: LoggingConfig = Field(default_factory=LoggingConfig)  # type: ignore
     cors: CORSSettings = Field(default_factory=CORSSettings)  # type: ignore
     project: ProjectSettings = Field(default_factory=ProjectSettings)  # type: ignore
     admin: AdminSettings = Field(default_factory=AdminSettings)  # type: ignore
+    ws: WebsocketSettings = Field(default_factory=WebsocketSettings)  # type: ignore
 
 
 settings = Settings()

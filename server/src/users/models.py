@@ -37,3 +37,29 @@ class UserModel(Base):
         back_populates="disliked_users",
         secondary="user_post_dislikes",
     )
+    created_chats: Mapped[list["ChatModel"]] = relationship(  # type: ignore
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    joined_chats: Mapped[list["ChatModel"]] = relationship(  # type: ignore
+        back_populates="members",
+        secondary="chat_user",
+    )
+    events: Mapped[list["EventModel"]] = relationship(  # type: ignore
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="EventModel.user_id",
+    )
+    altered_events: Mapped[list["EventModel"]] = relationship(  # type: ignore
+        back_populates="altered_user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="EventModel.altered_user_id",
+    )
+    messages: Mapped[list["MessageModel"]] = relationship(  # type: ignore
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

@@ -12,6 +12,9 @@ from src.models import Base
 from src.users.models import *
 from src.posts.models import *
 from src.admin.models import *
+from src.chats.models import *
+from src.messages.models import *
+from src.events.models import *
 
 
 # this is the Alembic Config object, which provides

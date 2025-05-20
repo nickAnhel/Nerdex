@@ -1,4 +1,5 @@
 from uuid import UUID
+
 from pydantic import Field
 
 from src.schemas import BaseSchema
@@ -12,6 +13,7 @@ class UserCreate(BaseSchema):
 class UserGet(BaseSchema):
     user_id: UUID
     username: str
+    is_admin: bool
 
 
 class UserGetWithPassword(UserGet):
