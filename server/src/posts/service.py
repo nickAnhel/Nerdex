@@ -47,17 +47,25 @@ class PostService:
         desc: bool,
         offset: int,
         limit: int,
+        user: UserGet | None = None,
     ) -> list[PostGet]:
         """Get posts with pagination and sorting."""
 
-        posts = await self._repository.get_multi(
+        post_models = await self._repository.get_multi(
             order=order,
             order_desc=desc,
             offset=offset,
             limit=limit,
         )
 
-        return [PostGet.model_validate(user) for user in posts]
+        posts = [PostGet.model_validate(post) for post in post_models]
+
+        if user:
+            for post in posts:
+                post.is_liked = await self._repository.is_liked(user_id=user.user_id, post_id=post.post_id)
+                post.is_disliked = await self._repository.is_disliked(user_id=user.user_id, post_id=post.post_id)
+
+        return posts
 
     async def update_post(
         self,
@@ -160,7 +168,7 @@ class PostService:
     ) -> list[PostGet]:
         """Get user subscriptions posts with pagination and sorting."""
 
-        posts = await self._repository.get_user_subscriptions_posts(
+        post_models = await self._repository.get_user_subscriptions_posts(
             user_id=user_id,
             order=order,
             order_desc=desc,
@@ -168,4 +176,10 @@ class PostService:
             limit=limit,
         )
 
-        return [PostGet.model_validate(user) for user in posts]
+        posts = [PostGet.model_validate(post) for post in post_models]
+
+        for post in posts:
+            post.is_liked = await self._repository.is_liked(user_id=user_id, post_id=post.post_id)
+            post.is_disliked = await self._repository.is_disliked(user_id=user_id, post_id=post.post_id)
+
+        return posts

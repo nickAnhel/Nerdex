@@ -294,3 +294,35 @@ class PostRepository:
 
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def is_liked(
+        self,
+        user_id: uuid.UUID,
+        post_id: uuid.UUID
+    ) -> bool:
+        query = (
+            select(LikesModel)
+            .filter_by(
+                user_id=user_id,
+                post_id=post_id,
+            )
+        )
+
+        res = await self._session.execute(query)
+        return len(res.scalars().all()) == 1
+
+    async def is_disliked(
+        self,
+        user_id: uuid.UUID,
+        post_id: uuid.UUID
+    ) -> bool:
+        query = (
+            select(DislikesModel)
+            .filter_by(
+                user_id=user_id,
+                post_id=post_id,
+            )
+        )
+
+        res = await self._session.execute(query)
+        return len(res.scalars().all()) == 1

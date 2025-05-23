@@ -19,6 +19,8 @@ class PostGet(PostCreate):
     dislikes: int = Field(ge=0)
 
     user: UserGet
+    is_liked: bool | None = Field(default=None)
+    is_disliked: bool | None = Field(default=None)
 
 
 class PostUpdate(BaseSchema):

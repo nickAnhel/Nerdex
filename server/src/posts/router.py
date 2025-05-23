@@ -2,14 +2,13 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 
-from src.schemas import Status
-from src.users.schemas import UserGet
-from src.auth.dependencies import get_current_user
+from src.auth.dependencies import get_current_optional_user, get_current_user
 from src.posts.dependencies import get_post_service
 from src.posts.enums import PostOrder
-from src.posts.schemas import PostCreate, PostGet, PostUpdate, PostRating
+from src.posts.schemas import PostCreate, PostGet, PostRating, PostUpdate
 from src.posts.service import PostService
-
+from src.schemas import Status
+from src.users.schemas import UserGet
 
 router = APIRouter(
     prefix="/posts",
@@ -32,13 +31,16 @@ async def get_posts(
     desc: bool = False,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=0, lt=1000),
+    user: UserGet | None = Depends(get_current_optional_user),
     post_service: PostService = Depends(get_post_service),
 ) -> list[PostGet]:
+    print(user)
     return await post_service.get_posts(
         order=order,
         desc=desc,
         offset=offset,
         limit=limit,
+        user=user,
     )
 
 
