@@ -125,3 +125,21 @@ async def undislike_post(
         post_id=post_id,
         user_id=user.user_id,
     )
+
+
+@router.get("/subscriptions")
+async def get_subscriptions_posts(
+    order: PostOrder = PostOrder.ID,
+    desc: bool = False,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=0, lt=1000),
+    user: UserGet = Depends(get_current_user),
+    post_service: PostService = Depends(get_post_service),
+) -> list[PostGet]:
+    return await post_service.get_user_subscriptions_posts(
+        user_id=user.user_id,
+        order=order,
+        desc=desc,
+        offset=offset,
+        limit=limit,
+    )

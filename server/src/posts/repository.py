@@ -1,10 +1,12 @@
-import uuid
 import typing as tp
+import uuid
 
-from sqlalchemy import and_, insert, select, update, delete, desc, exists
+from sqlalchemy import and_, delete, desc, exists, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from src.posts.models import PostModel, LikesModel, DislikesModel
+from src.posts.models import DislikesModel, LikesModel, PostModel
+from src.users.models import SubscriptionModel
 
 
 class PostRepository:
@@ -19,6 +21,7 @@ class PostRepository:
             insert(PostModel)
             .values(**data)
             .returning(PostModel)
+            .options(selectinload(PostModel.user))
         )
 
         res = await self._session.execute(stmt)
@@ -33,6 +36,7 @@ class PostRepository:
         query = (
             select(PostModel)
             .filter_by(**filters)
+            .options(selectinload(PostModel.user))
         )
         result = await self._session.execute(query)
         return result.scalar_one()
@@ -49,6 +53,7 @@ class PostRepository:
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
+            .options(selectinload(PostModel.user))
         )
 
         result = await self._session.execute(query)
@@ -263,3 +268,29 @@ class PostRepository:
         await self._session.execute(update_dislikes_count_stmt)
         await self._session.execute(delete_dislike_row_stmt)
         await self._session.commit()
+
+    async def get_user_subscriptions_posts(
+        self,
+        user_id: uuid.UUID,
+        order: str,
+        order_desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[PostModel]:
+        subs_cte = (
+            select(SubscriptionModel.subscribed_id)
+            .filter_by(subscriber_id=user_id)
+            .cte()
+        )
+
+        query = (
+            select(PostModel)
+            .where(PostModel.user_id.in_(subs_cte))
+            .order_by(desc(order) if order_desc else order)
+            .offset(offset)
+            .limit(limit)
+            .options(selectinload(PostModel.user))
+        )
+
+        result = await self._session.execute(query)
+        return list(result.scalars().all())

@@ -149,3 +149,23 @@ class PostService:
 
         await self._repository.undislike(post_id=post_id, user_id=user_id)
         return await self.get_post_statistics(post_id=post_id)
+
+    async def get_user_subscriptions_posts(
+        self,
+        user_id: uuid.UUID,
+        order: PostOrder,
+        desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[PostGet]:
+        """Get user subscriptions posts with pagination and sorting."""
+
+        posts = await self._repository.get_user_subscriptions_posts(
+            user_id=user_id,
+            order=order,
+            order_desc=desc,
+            offset=offset,
+            limit=limit,
+        )
+
+        return [PostGet.model_validate(user) for user in posts]
