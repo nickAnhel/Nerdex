@@ -1,9 +1,9 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 
-from src.auth.dependencies import get_current_user, get_current_optional_user
+from src.auth.dependencies import get_current_optional_user, get_current_user
 from src.schemas import Status
 from src.users.dependencies import get_user_service
 from src.users.enums import UserOrder
@@ -121,3 +121,28 @@ async def get_subscriptions(
         offset=offset,
         limit=limit,
     )
+
+
+@router.put("/photo")
+async def update_profile_photo(
+    photo: UploadFile,
+    user: UserGet = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> Status:
+    if photo.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only jpeg or png files are allowed for profile photos",
+        )
+
+    await user_service.update_profile_photo(user_id=user.user_id, photo=photo.file)  # type: ignore
+    return Status(detail="Profile photo updated successfully")
+
+
+@router.delete("/photo")
+async def delete_profile_photo(
+    user: UserGet = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> Status:
+    await user_service.delete_profile_photo(user_id=user.user_id)
+    return Status(detail="Profile photo deleted successfully")

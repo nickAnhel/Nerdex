@@ -62,6 +62,22 @@ class WebsocketSettings(ConfigBase):
     model_config = SettingsConfigDict(env_prefix="ws_")
 
 
+class StorageSettings(ConfigBase):
+    access_key: str
+    secret_key: str
+    bucket_name: str
+    bucket_url: str
+    storage_url: str
+
+    model_config = SettingsConfigDict(env_prefix="storage_")
+
+
+class FilePrefixesSettings(ConfigBase):
+    profile_photo_small: str = "PPs@"
+    profile_photo_medium: str = "PPm@"
+    profile_photo_large: str = "PPl@"
+
+
 class Settings(BaseSettings):
     db: DBSettings = Field(default_factory=DBSettings)  # type: ignore
     logging: LoggingConfig = Field(default_factory=LoggingConfig)  # type: ignore
@@ -69,6 +85,8 @@ class Settings(BaseSettings):
     project: ProjectSettings = Field(default_factory=ProjectSettings)  # type: ignore
     admin: AdminSettings = Field(default_factory=AdminSettings)  # type: ignore
     ws: WebsocketSettings = Field(default_factory=WebsocketSettings)  # type: ignore
+    storage: StorageSettings = Field(default_factory=StorageSettings)  # type: ignore
+    file_prefixes: FilePrefixesSettings = Field(default_factory=FilePrefixesSettings)  # type: ignore
 
 
 settings = Settings()

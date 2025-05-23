@@ -67,6 +67,15 @@ from src.messages.exceptions import (
     CantUpdateMessage,
 )
 
+from src.s3.exc_handlers import (
+    cant_delete_file_handler,
+    cant_upload_file_handler,
+)
+from src.s3.exceptions import (
+    CantDeleteFileFromStorage,
+    CantUploadFileToStorage,
+)
+
 
 def register_routes(app: FastAPI) -> None:
     app.include_router(auth_router)
@@ -100,6 +109,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(CantDeleteMessage, cant_delete_message_handler)  # type: ignore
     app.add_exception_handler(CantUpdateMessage, cant_update_message_handler)  # type: ignore
+
+    app.add_exception_handler(CantDeleteFileFromStorage, cant_delete_file_handler)  # type: ignore
+    app.add_exception_handler(CantUploadFileToStorage, cant_upload_file_handler)  # type: ignore
 
 
 def register_middleware(app: FastAPI) -> None:
