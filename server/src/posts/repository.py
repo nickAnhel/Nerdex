@@ -81,6 +81,7 @@ class PostRepository:
             .filter_by(**filters)
             .values(**data)
             .returning(PostModel)
+            .options(selectinload(PostModel.user))
         )
 
         result = await self._session.execute(stmt)

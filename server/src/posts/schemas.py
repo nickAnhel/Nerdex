@@ -8,7 +8,7 @@ from src.users.schemas import UserGet
 
 
 class PostCreate(BaseSchema):
-    content: str = Field(max_length=8192)
+    content: str = Field(min_length=1, max_length=8192)
 
 
 class PostGet(PostCreate):
