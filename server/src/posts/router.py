@@ -31,6 +31,7 @@ async def get_posts(
     desc: bool = False,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=0, lt=1000),
+    user_id: uuid.UUID | None = None,
     user: UserGet | None = Depends(get_current_optional_user),
     post_service: PostService = Depends(get_post_service),
 ) -> list[PostGet]:
@@ -41,6 +42,7 @@ async def get_posts(
         offset=offset,
         limit=limit,
         user=user,
+        user_id=user_id,
     )
 
 

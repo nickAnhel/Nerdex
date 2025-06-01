@@ -47,9 +47,11 @@ class PostRepository:
         order_desc: bool,
         offset: int,
         limit: int,
+        **filters,
     ) -> list[PostModel]:
         query = (
             select(PostModel)
+            .filter_by(**filters)
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)

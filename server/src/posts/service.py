@@ -47,15 +47,19 @@ class PostService:
         desc: bool,
         offset: int,
         limit: int,
+        user_id: uuid.UUID | None = None,
         user: UserGet | None = None,
     ) -> list[PostGet]:
         """Get posts with pagination and sorting."""
+
+        filters = {"user_id": user_id} if user_id else {}
 
         post_models = await self._repository.get_multi(
             order=order,
             order_desc=desc,
             offset=offset,
             limit=limit,
+            **filters,
         )
 
         posts = [PostGet.model_validate(post) for post in post_models]
