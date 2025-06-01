@@ -30,8 +30,8 @@ async def get_jwt_token(
         value=refresh_token,
         max_age=auth_settings.refresh_token_expire_minutes,
         httponly=True,
-        samesite="none",
-        secure=False,
+        # samesite="none",
+        # secure=False,
     )
 
     return Token(
