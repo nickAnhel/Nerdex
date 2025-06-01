@@ -1,0 +1,20 @@
+#people {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    padding: 1rem 0;
+    overflow-y: scroll;
+    gap: 2rem;
+}
+
+#people::-webkit-scrollbar {
+    width: 0.3rem;
+    background: transparent;
+}
+
+#people::-webkit-scrollbar-thumb {
+    background-color: #8B40ED;
+    border-radius: 1rem;
+}

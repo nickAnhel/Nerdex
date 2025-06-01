@@ -43,5 +43,23 @@ services:
     depends_on:
       - db
 
+  client:
+    container_name: client
+    restart: on-failure
+    build:
+      context: ./client/
+      dockerfile: ./Dockerfile
+    command: bash -c "npm start"
+    ports:
+      - 3000:3000
+    env_file:
+      - ./client/.env
+    volumes:
+      - ./client/:/project/
+      - node_modules:/project/node_modules
+    depends_on:
+      - server
+
 volumes:
   postgres_data:
+  node_modules:

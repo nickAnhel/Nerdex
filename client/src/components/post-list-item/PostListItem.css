@@ -1,0 +1,158 @@
+.post-list-item {
+    background-color: #1f1f1f;
+    padding: 1rem;
+    border-radius: 1rem;
+    color: #e8eaed;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.post-list-item:last-child {
+    margin-bottom: 1rem;
+}
+
+.post-list-item .header {
+    font-weight: bold;
+    font-size: 1.1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+.post-list-item .author {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    font-size: 1.3rem;
+    cursor: pointer;
+    color: #fff;
+    transition: all .3s linear;
+}
+
+.post-list-item .author:hover {
+    opacity: .8;
+}
+
+.post-list-item .author p {
+    line-height: 2rem;
+}
+
+.post-list-item .author img {
+    width: 2rem;
+    aspect-ratio: 1/1;
+    border-radius: 2rem;
+    cursor: pointer;
+    transition: all 0.1s linear;
+    object-fit: cover;
+}
+
+.post-list-item .header span {
+    font-weight: normal;
+    font-size: .9rem;
+    color: #aaa;
+}
+
+.post-list-item .content img {
+    max-width: 100%;
+}
+
+.post-list-item .content p:first-child {
+    margin-top: 0;
+}
+
+.post-list-item .content p:last-child {
+    margin-bottom: 0;
+}
+
+.post-list-item .content p {
+    margin: .5rem 0;
+    line-height: 1.6;
+}
+
+.post-list-item .content h1:first-child,
+.post-list-item .content h2:first-child,
+.post-list-item .content h3:first-child,
+.post-list-item .content h4:first-child,
+.post-list-item .content h5:first-child,
+.post-list-item .content h6:first-child {
+    margin-top: 0;
+}
+
+.post-list-item .content h1,
+.post-list-item .content h2,
+.post-list-item .content h3,
+.post-list-item .content h4,
+.post-list-item .content h5,
+.post-list-item .content h6 {
+    margin: .5rem 0;
+}
+
+.post-list-item .content ul,
+.post-list-item .content ol {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.post-list-item .content li {
+    margin-bottom: 0.25rem;
+}
+
+.post-list-item .content pre {
+    border-radius: 0.3ыrem;
+    overflow-x: auto;
+    font-size: 0.9rem;
+}
+
+.post-list-item .content code {
+    font-family: 'Fira Code', monospace;
+}
+
+.post-list-item .actions {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: .5rem;
+    padding-top: .5rem;
+    border-top: 1px solid #333;
+}
+
+.post-list-item .actions button {
+    width: 15%;
+    background-color: transparent;
+    border: 1px solid #9d50ff;
+    color: #9d50ff;
+    padding: 0.3rem 0.8rem;
+    border-radius: 0.3rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin: 0;
+}
+
+.post-list-item .actions button.active {
+    background-color: #9d50ff;
+    color: #fff;
+}
+
+.post-list-item .actions button:hover {
+    background-color: #9d50ff;
+    color: #0a0a0a;
+}
+
+.post-list-item .actions button:disabled:hover {
+    cursor: not-allowed;
+    background: transparent;
+    color: #9d50ff;
+}
+
+.post-list-item .actions img {
+    cursor: pointer;
+    transition: all .3s linear;
+}
+
+.post-list-item .actions img:hover {
+    opacity: .8;
+}

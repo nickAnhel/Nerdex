@@ -1,0 +1,25 @@
+.chat-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.chat-list .chats {
+    width: 100%;
+    display: flex;
+    gap: .5rem;
+    flex-direction: column;
+    align-items: center;
+}
+
+.chat-list p {
+    color: #7e7e7e;
+    font-size: 1.2rem;
+}
+
+.chat-list .loader {
+    height: 1rem;
+    padding: 1rem 0;
+    width: calc(100% - 1rem);
+}

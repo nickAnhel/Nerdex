@@ -1,0 +1,102 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Montserrat", sans-serif;
+}
+
+#root {
+    height: 100vh;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: #fff;
+    background-color: #0a0a0a;
+}
+
+button {
+    background: #9D50FF;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+    width: 100%;
+    margin-top: 1rem;
+    transition: all 0.3s linear;
+}
+
+button:hover {
+    background: #8B40ED;
+    box-shadow: 0 0 20px rgba(157, 80, 255, 0.5);
+}
+
+button:focus {
+    outline: none;
+    background: #8B40ED;
+    box-shadow: 0 0 20px rgba(157, 80, 255, 0.5);
+}
+
+button:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    background: #8B40ED;
+}
+
+button:disabled:hover,
+button:disabled:focus {
+    box-shadow: none;
+}
+
+button:active {
+    box-shadow: none;
+}
+
+input[type="text"],
+input[type="password"] {
+    width: 100%;
+    padding: 0.5rem 1rem;
+    background: transparent;
+    border: 1px solid #fff;
+    border-radius: 0.5rem;
+    color: #fff;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+    outline: none;
+    border-color: #9D50FF;
+    box-shadow: 0 0 15px rgba(157, 80, 255, 0.4);
+}
+
+input::placeholder {
+    color: #7e7e7e;
+}
+
+a {
+    color: #9D50FF;
+    text-decoration: none;
+    transition: opacity .2s ease;
+}
+
+a:focus {
+    outline: none;
+    opacity: 0.8;
+}
+
+*::-webkit-scrollbar {
+    width: 0.3rem;
+    height: 0.2rem;
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: #8B40ED;
+    border-radius: 1rem;
+}

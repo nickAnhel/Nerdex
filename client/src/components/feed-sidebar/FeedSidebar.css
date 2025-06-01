@@ -1,0 +1,51 @@
+#feed-sidebar {
+    width: 20%;
+    height: fit-content;
+    padding: 1rem;
+    background-color: #1a1a1a;
+    border-radius: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+#feed-sidebar button {
+    font-size: 1.2rem;
+    margin-top: 1.5rem;
+}
+
+#feed-sidebar hr {
+    width: 100%;
+    border-color: #404040;
+    border-style: solid;
+}
+
+#feed-page-selector {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.feed-sidebar-item {
+    font-size: 1.4rem;
+    border-radius: .5rem;
+    font-weight: 600;
+    transition: all .1s linear;
+    color: #404040;
+    /* padding: .5rem; */
+    /* background-color: #404040; */
+    /* box-shadow: 0 0 20px rgba(0, 0, 0, 0.15); */
+}
+
+.feed-sidebar-item:hover {
+    opacity: .8;
+}
+
+.feed-sidebar-item.active {
+    color: #fff;
+}

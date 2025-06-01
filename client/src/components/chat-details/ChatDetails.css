@@ -1,0 +1,175 @@
+.chat-details {
+    width: calc(80% - 1rem);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 3rem;
+    border-radius: 100px;
+    padding: 0 .5rem;
+    /* background-color: #505050; */
+}
+
+.header-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.header-actions img {
+    width: 1.5rem;
+    aspect-ratio: 1/1;
+    padding: 0;
+    cursor: pointer;
+    transition: all .2s linear;
+}
+
+.header-actions img:hover {
+    opacity: .8;
+}
+
+.header-label {
+    display: flex;
+    align-items: center;
+    gap: .2rem;
+}
+
+#options {
+    display: none;
+    position: absolute;
+    right: 1.5rem;
+    top: 3.5rem;
+    background-color: #1e1e1e;
+    border-radius: .5rem;
+    padding: .3rem;
+    z-index: 1000;
+
+    flex-direction: column;
+    gap: .25rem;
+}
+
+#options hr {
+    color: #fff;
+    opacity: .1;
+}
+
+.option {
+    display: flex;
+    align-items: center;
+    padding: .5rem;
+    border-radius: .3rem;
+    color: #dbdbdb;
+    transition: background-color 0.2s;
+    gap: .5rem;
+}
+
+.option:hover {
+    cursor: pointer;
+    background-color: #3b3b3b;
+}
+
+.option img {
+    width: 1.3rem;
+    aspect-ratio: 1/1;
+}
+
+.danger {
+    color: #f73636;
+}
+
+.danger img {
+    filter: brightness(0) saturate(100%) invert(37%) sepia(36%) saturate(5484%) hue-rotate(339deg) brightness(96%) contrast(107%);
+}
+
+.danger:hover {
+    cursor: pointer;
+    /* background-color: #613333; */
+    background-color: #680909;
+}
+
+.header-label img {
+    width: 3rem;
+    height: 3rem;
+    padding: .5rem;
+    opacity: .3;
+}
+
+.header-label h2 {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #fff;
+}
+
+.chat-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0 15%;
+    gap: 1rem;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.chat-footer {
+    padding: 0 10%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    position: relative;
+    gap: .5rem;
+}
+
+.chat-footer .msg-box {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    background-color: #1e1e1e;
+    border-radius: .75rem;
+    padding: .75rem 1.25rem;
+    transition: all .1s;
+}
+
+.chat-footer #message-input {
+    font-family: inherit;
+    width: 100%;
+    height: 25px;
+    min-height: 25px;
+    max-height: 200px;
+    font-size: 20px;
+    line-height: 25px;
+    background: transparent;
+    color: #dbdbdb;
+    resize: none;
+    border: none;
+    overflow-y: auto;
+    scrollbar-width: none;
+    box-sizing: content-box;
+    transition: all .1s;
+}
+
+.chat-footer #message-input:focus {
+    outline: none;
+}
+
+.chat-footer button {
+    width: 3rem;
+    height: 3rem;
+    padding: .5rem;
+    border-radius: 3rem;
+    border: none;
+    margin: 0;
+}
+
+.hidden {
+    display: none;
+}
+
+#join-btn {
+    margin: 0 auto;
+    width: 20%;
+    font-size: 1.2rem;
+}

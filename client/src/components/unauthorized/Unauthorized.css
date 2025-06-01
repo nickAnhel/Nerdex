@@ -1,0 +1,20 @@
+#unauthorized {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    /* color: #404040; */
+}
+
+#unauthorized h1 {
+    margin: 0;
+    font-size: 4rem;
+}
+
+#unauthorized p {
+    margin: 0;
+    font-size: 1.5rem;
+}

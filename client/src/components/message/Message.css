@@ -1,0 +1,56 @@
+.msg {
+    display: flex;
+    gap: .5rem;
+    align-items: flex-end;
+    min-width: 7rem;
+    max-width: 60%;
+}
+
+.msg img {
+    width: 2.5rem;
+    aspect-ratio: 1/1;
+    object-fit: cover;
+    border-radius: 3rem;
+}
+
+.msg-info {
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    font-size: 1.1em;
+    color: #fff;
+    padding: .5rem .75rem;
+    border-radius: .75rem;
+    background-color: #1e1e1e;
+    gap: .1rem;
+}
+
+.msg .msg-label {
+    display: flex;
+    justify-content: space-between;
+    color: #7e7e7e;
+    font-size: 0.7em;
+}
+
+.msg .msg-text {
+    font-size: 1em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.you {
+    flex-direction: row-reverse;
+    align-self: flex-end;
+}
+
+.you .msg-info {
+    background-color: #9D50FF;
+}
+
+.you .msg-label {
+    color: #eee;
+}
+
+.username {
+    margin-right: 1em;
+}
