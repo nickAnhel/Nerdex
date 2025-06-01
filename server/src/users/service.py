@@ -12,7 +12,7 @@ from src.users.enums import UserOrder
 from src.users.exceptions import (
     CantSubscribeToUser,
     CantUnsubscribeFromUser,
-    UsernameOrEmailAlreadyExists,
+    UsernameAlreadyExists,
     UserNotFound,
     UserNotInSubscriptions,
 )
@@ -42,8 +42,13 @@ class UserService:
         user_data["hashed_password"] = get_password_hash(user_data["password"])
         del user_data["password"]
 
-        user = await self._repository.create(user_data)
-        return UserGet.model_validate(user)
+        try:
+            user = await self._repository.create(user_data)
+            return UserGet.model_validate(user)
+        except IntegrityError as exc:
+            raise UsernameAlreadyExists(
+                f"Username {data.username!r} already exists"
+            ) from exc
 
     async def get_user(
         self,
@@ -148,7 +153,7 @@ class UserService:
             return UserGet.model_validate(user)
 
         except IntegrityError as exc:
-            raise UsernameOrEmailAlreadyExists(
+            raise UsernameAlreadyExists(
                 f"User with username {data.username} already exists"
             ) from exc
 

@@ -31,7 +31,7 @@ from src.users.exc_handlers import (
 )
 from src.users.exceptions import (
     UserNotFound,
-    UsernameOrEmailAlreadyExists,
+    UsernameAlreadyExists,
     CantSubscribeToUser,
     CantUnsubscribeFromUser,
     UserNotInSubscriptions,
@@ -96,7 +96,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(UserNotFound, user_not_found_handler)  # type: ignore
     app.add_exception_handler(
-        UsernameOrEmailAlreadyExists,
+        UsernameAlreadyExists,
         username_or_email_already_exists_handler,  # type: ignore
     )
     app.add_exception_handler(CantSubscribeToUser, cant_subscribe_to_user_handler)  # type: ignore

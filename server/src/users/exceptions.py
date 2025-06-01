@@ -5,10 +5,10 @@ class UserNotFound(Exception):
         super().__init__(message)
 
 
-class UsernameOrEmailAlreadyExists(Exception):
-    """Username or email already exists exception."""
+class UsernameAlreadyExists(Exception):
+    """Username already exists exception."""
 
-    def __init__(self, message="Username or email already exists") -> None:
+    def __init__(self, message="Username already exists") -> None:
         super().__init__(message)
 
 
