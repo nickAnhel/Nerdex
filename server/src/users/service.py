@@ -47,6 +47,7 @@ class UserService:
 
     async def get_user(
         self,
+        curr_user: UserGet | None = None,
         include_password: bool = False,
         **filters,
     ) -> UserGet | UserGetWithPassword:
@@ -61,7 +62,16 @@ class UserService:
         if include_password:
             return UserGetWithPassword.model_validate(user)
 
-        return UserGet.model_validate(user)
+        return UserGet(
+            user_id=user.user_id,
+            username=user.username,
+            subscribers_count=user.subscribers_count,
+            is_admin=user.is_admin,
+            is_subscribed=(
+                curr_user
+                and (curr_user.user_id in [u.user_id for u in user.subscribers])
+            ),
+        )
 
     async def get_users(
         self,
@@ -69,6 +79,7 @@ class UserService:
         desc: bool,
         offset: int,
         limit: int,
+        curr_user: UserGet | None = None,
     ) -> list[UserGet]:
         """Get users with pagination and sorting."""
 
@@ -79,13 +90,26 @@ class UserService:
             limit=limit,
         )
 
-        return [UserGet.model_validate(user) for user in users]
+        return [
+            UserGet(
+                user_id=user.user_id,
+                username=user.username,
+                subscribers_count=user.subscribers_count,
+                is_admin=user.is_admin,
+                is_subscribed=(
+                    curr_user
+                    and (curr_user.user_id in [u.user_id for u in user.subscribers])
+                ),
+            )
+            for user in users
+        ]
 
     async def search_users(
         self,
         query: str,
         offset: int,
         limit: int,
+        curr_user: UserGet | None = None,
     ) -> list[UserGet]:
         """Search users with pagination and sorting."""
 
@@ -95,7 +119,19 @@ class UserService:
             limit=limit,
         )
 
-        return [UserGet.model_validate(user) for user in users]
+        return [
+            UserGet(
+                user_id=user.user_id,
+                username=user.username,
+                subscribers_count=user.subscribers_count,
+                is_admin=user.is_admin,
+                is_subscribed=(
+                    curr_user
+                    and (curr_user.user_id in [u.user_id for u in user.subscribers])
+                ),
+            )
+            for user in users
+        ]
 
     async def update_user(
         self,

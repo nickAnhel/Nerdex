@@ -50,6 +50,7 @@ class UserRepository:
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
+            .options(selectinload(UserModel.subscribers))
         )
 
         result = await self._session.execute(query)
@@ -74,6 +75,7 @@ class UserRepository:
             )
             .offset(offset)
             .limit(limit)
+            .options(selectinload(UserModel.subscribers))
         )
 
         res = await self._session.execute(query)
