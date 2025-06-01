@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
 
+# WebSockets
+from src.chats.sockets import socket_app as ws_app
+
 # Routes
 from src.users.router import router as users_router
 from src.auth.router import router as auth_router
@@ -84,6 +87,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(chats_router)
     app.include_router(messages_router)
     app.include_router(events_router)
+
+    app.mount("/ws", ws_app)
 
 
 def register_exception_handlers(app: FastAPI) -> None:

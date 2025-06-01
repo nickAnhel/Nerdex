@@ -83,6 +83,24 @@ async def search_chats(
     )
 
 
+@router.get("/user")
+async def get_joined_chats(
+    order: ChatOrder = ChatOrder.ID,
+    order_desc: bool = False,
+    offset: int = 0,
+    limit: int = 100,
+    user: UserGet = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+) -> list[ChatGet]:
+    return await service.get_user_joined_chats(
+        user=user,
+        order=order,
+        order_desc=order_desc,
+        offset=offset,
+        limit=limit,
+    )
+
+
 @router.get("/{chat_id}")
 async def get_chat(
     chat_id: uuid.UUID,

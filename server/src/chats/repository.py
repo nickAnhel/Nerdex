@@ -220,3 +220,29 @@ class ChatRepository:
 
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+
+    async def get_user_joined_chats(
+        self,
+        user_id: uuid.UUID,
+        order: str,
+        order_desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ChatModel]:
+        chat_ids_query = (
+            select(MembershipModel.chat_id)
+            .filter_by(user_id=user_id)
+            .cte()
+        )
+
+        query = (
+            select(ChatModel)
+            .where(ChatModel.chat_id.in_(chat_ids_query))
+            .order_by(desc(order) if order_desc else order)
+            .offset(offset)
+            .limit(limit)
+        )
+
+        result = await self._session.execute(query)
+        return list(result.scalars().all())

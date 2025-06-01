@@ -258,3 +258,20 @@ class ChatService:
             limit=limit,
         )
         return [ChatGet.model_validate(chat) for chat in chats]
+
+    async def get_user_joined_chats(
+        self,
+        user: UserGet,
+        order: ChatOrder,
+        order_desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ChatGet]:
+        chats = await self._repository.get_user_joined_chats(
+            user_id=user.user_id,
+            order=order,
+            order_desc=order_desc,
+            offset=offset,
+            limit=limit,
+        )
+        return [ChatGet.model_validate(chat) for chat in chats]

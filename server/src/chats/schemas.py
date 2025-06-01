@@ -13,7 +13,7 @@ TitleStr = Annotated[str, Field(min_length=1, max_length=64)]
 class ChatCreate(BaseSchema):
     title: TitleStr
     is_private: bool = False
-    members: list[uuid.UUID]
+    members: list[uuid.UUID] = Field(default_factory=list)
 
 
 class ChatGet(BaseSchema):
