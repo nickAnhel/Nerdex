@@ -158,7 +158,7 @@ function ChatDetails() {
     }, [chat, store.user]);
 
     useEffect(() => {
-        socket.current = io("ws://localhost:8000", {
+        socket.current = io(process.env.REACT_APP_WS_HOST, {
             path: "/ws",
             transports: ["websocket"],
             upgrade: false,
