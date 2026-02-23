@@ -18,6 +18,8 @@ import Chats from "./pages/chats/Chats";
 import Feed from "./pages/feed/Feed";
 import People from "./pages/people/People";
 import Profile from "./pages/profile/Profile";
+import Articles from "./pages/articles/Articles";
+import Videos from "./pages/videos/Videos";
 
 import GlobalFeed from "./pages/global-feed/GlobalFeed";
 import PersonalFeed from "./pages/personal-feed/PersonalFeed";
@@ -86,6 +88,14 @@ const router = createBrowserRouter([
                         element: <PersonalFeed />,
                     },
                 ]
+            },
+            {
+                path: "articles",
+                element: <Articles />,
+            },
+            {
+                path: "videos",
+                element: <Videos />,
             },
             {
                 path: "profile",
