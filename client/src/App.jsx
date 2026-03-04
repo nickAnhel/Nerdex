@@ -20,6 +20,7 @@ import People from "./pages/people/People";
 import Profile from "./pages/profile/Profile";
 import Articles from "./pages/articles/Articles";
 import Videos from "./pages/videos/Videos";
+import Courses from "./pages/courses/Courses";
 
 import GlobalFeed from "./pages/global-feed/GlobalFeed";
 import PersonalFeed from "./pages/personal-feed/PersonalFeed";
@@ -96,6 +97,10 @@ const router = createBrowserRouter([
             {
                 path: "videos",
                 element: <Videos />,
+            },
+            {
+                path: "courses",
+                element: <Courses />,
             },
             {
                 path: "profile",

@@ -35,6 +35,10 @@ function Sidebar() {
                     <img src="/assets/videos.svg" alt="Videos" />
                     Videos
                 </NavLink>
+                <NavLink to="/courses" className="sidebar-item">
+                    <img src="/assets/courses.svg" alt="Courses" />
+                    Courses
+                </NavLink>
                 <NavLink to="/chats" className="sidebar-item">
                     <img src="/assets/chats.svg" alt="Chats" />
                     Chats
