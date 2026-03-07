@@ -8,7 +8,7 @@ from sqlalchemy import select
 from src.admin.repository import SessionRepository
 from src.auth.utils import validate_password
 from src.config import settings
-from src.database import async_session_maker
+from src.common.database import async_session_maker
 from src.users.models import UserModel
 
 

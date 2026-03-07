@@ -3,7 +3,7 @@ import uuid
 
 from pydantic import Field
 
-from src.schemas import BaseSchema
+from src.common.schemas import BaseSchema
 from src.users.schemas import UserGet
 
 

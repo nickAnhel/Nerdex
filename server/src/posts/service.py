@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy.exc import NoResultFound, IntegrityError
 
-from src.exceptions import PermissionDenied
+from src.common.exceptions import PermissionDenied
 from src.users.schemas import UserGet
 from src.posts.enums import PostOrder
 from src.posts.exceptions import PostNotFound, PostAlreadyRated

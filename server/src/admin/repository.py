@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import delete, insert, select
 
 from src.admin.models import SessionModel
-from src.database import async_session_maker
+from src.common.database import async_session_maker
 
 
 class SessionRepository:
