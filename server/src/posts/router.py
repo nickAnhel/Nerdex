@@ -7,7 +7,7 @@ from src.posts.dependencies import get_post_service
 from src.posts.enums import PostOrder
 from src.posts.schemas import PostCreate, PostGet, PostRating, PostUpdate
 from src.posts.service import PostService
-from src.schemas import Status
+from server.src.common.schemas import Status
 from src.users.schemas import UserGet
 
 router = APIRouter(

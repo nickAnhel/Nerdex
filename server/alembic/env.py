@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from src.config import settings
-from src.models import Base
+from server.src.common.models import Base
 from src.users.models import *
 from src.posts.models import *
 from src.admin.models import *

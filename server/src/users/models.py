@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.models import Base
+from server.src.common.models import Base
 
 
 class SubscriptionModel(Base):

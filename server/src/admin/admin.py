@@ -11,7 +11,7 @@ from src.admin.views import (
     UserAdminView,
 )
 from src.config import settings
-from src.database import async_engine
+from server.src.common.database import async_engine
 
 
 def create_admin(app) -> Admin:

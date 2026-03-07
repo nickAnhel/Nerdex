@@ -18,7 +18,7 @@ from src.events.dependencies import get_event_service
 from src.events.enums import EventType
 from src.events.schemas import EventCreate
 from src.events.service import EventService
-from src.schemas import Status
+from server.src.common.schemas import Status
 from src.users.schemas import UserGet
 
 router = APIRouter(

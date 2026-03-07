@@ -4,7 +4,7 @@ import datetime
 from sqlalchemy import ForeignKey, DateTime, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.models import Base
+from server.src.common.models import Base
 
 
 class PostModel(Base):

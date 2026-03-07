@@ -18,7 +18,7 @@ from src.chats.schemas import (
     EventHistoryItem,
     MessageHistoryItem,
 )
-from src.exceptions import PermissionDenied
+from server.src.common.exceptions import PermissionDenied
 from src.messages.models import MessageModel
 from src.users.schemas import UserGet
 

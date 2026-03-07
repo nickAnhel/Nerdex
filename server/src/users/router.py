@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 
 from src.auth.dependencies import get_current_optional_user, get_current_user
-from src.schemas import Status
+from server.src.common.schemas import Status
 from src.users.dependencies import get_user_service
 from src.users.enums import UserOrder
 from src.users.schemas import UserCreate, UserGet, UserUpdate

@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.models import Base
+from server.src.common.models import Base
 
 
 class ChatModel(Base):

@@ -15,10 +15,10 @@ from src.messages.router import router as messages_router
 from src.events.router import router as events_router
 
 # Exception handlers
-from src.exceptions import (
+from server.src.common.exceptions import (
     PermissionDenied,
 )
-from src.exc_handlers import (
+from server.src.common.exc_handlers import (
     permission_denied_handler,
 )
 

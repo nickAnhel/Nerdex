@@ -3,7 +3,7 @@ import uuid
 
 from pydantic import Field
 
-from src.schemas import BaseSchema
+from server.src.common.schemas import BaseSchema
 
 type Username = tp.Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]{1,32}$")]
 

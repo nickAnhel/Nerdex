@@ -9,7 +9,7 @@ from src.messages.dependencies import get_message_service
 from src.messages.enums import MessagesOrder
 from src.messages.schemas import MessageGet, MessageGetWithUser, MessageUpdate
 from src.messages.service import MessageService
-from src.schemas import Status
+from server.src.common.schemas import Status
 from src.users.schemas import UserGet
 
 router = APIRouter(
