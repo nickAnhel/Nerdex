@@ -1,81 +1,27 @@
-import uuid
-import datetime
+from __future__ import annotations
 
-from sqlalchemy import ForeignKey, DateTime, text
+import uuid
+
+from sqlalchemy import CheckConstraint, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.models import Base
+from src.common.models import Base
+from src.content.models import ContentModel
 
 
-class PostModel(Base):
-    __tablename__ = "posts"
-
-    post_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE")
+class PostDetailsModel(Base):
+    __tablename__ = "post_details"
+    __table_args__ = (
+        CheckConstraint("char_length(body_text) <= 2048", name="ck_post_details_body_text_max_length"),
     )
 
-    content: Mapped[str]
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-    likes: Mapped[int] = mapped_column(default=0, server_default=text("0"))
-    dislikes: Mapped[int] = mapped_column(default=0, server_default=text("0"))
-
-    user: Mapped["UserModel"] = relationship(  # type: ignore
-        back_populates="created_posts", passive_deletes=True
-    )
-
-    liked_users: Mapped["UserModel"] = relationship(  # type: ignore
-        back_populates="liked_posts",
-        secondary="user_post_likes",
-    )
-    disliked_users: Mapped["UserModel"] = relationship(  # type: ignore
-        back_populates="disliked_posts",
-        secondary="user_post_dislikes",
-    )
-
-    @property
-    def content_ellipsis(self) -> str:
-        if len(self.content) < 100:
-            return self.content
-
-        return " ".join(self.content.split()[:5]) + "..."
-
-
-class LikesModel(Base):
-    __tablename__ = "user_post_likes"
-
-    post_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("posts.post_id", ondelete="CASCADE"),
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content.content_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
+    body_text: Mapped[str] = mapped_column(Text)
 
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
-    )
-
-
-class DislikesModel(Base):
-    __tablename__ = "user_post_dislikes"
-
-    post_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("posts.post_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.user_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    content: Mapped[ContentModel] = relationship(
+        back_populates="post_details",
+        passive_deletes=True,
     )

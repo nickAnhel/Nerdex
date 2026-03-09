@@ -1,6 +1,6 @@
 from fastapi import HTTPException, Request, status
 
-from src.exceptions import PermissionDenied
+from src.common.exceptions import PermissionDenied
 
 
 async def permission_denied_handler(request: Request, exc: PermissionDenied) -> HTTPException:

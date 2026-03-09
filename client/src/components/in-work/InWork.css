@@ -1,0 +1,19 @@
+#in-work {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+#in-work h1 {
+    margin: 0;
+    font-size: 4rem;
+}
+
+#in-work p {
+    margin: 0;
+    font-size: 1.5rem;
+}

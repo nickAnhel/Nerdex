@@ -9,6 +9,8 @@ import PostService from "../../service/PostService";
 
 import NotFound from "../../components/not-found/NotFound";
 import Loader from "../../components/loader/Loader";
+import PostModal from "../../components/post-modal/PostModal";
+import PostDetails from "../post-details/PostDetails";
 
 import PostList from "../../components/post-list/PostList";
 import UserList from "../../components/user-list/UserList";
@@ -16,13 +18,14 @@ import UserList from "../../components/user-list/UserList";
 
 function UserDetails() {
     const { store } = useContext(StoreContext);
+    const ownerPostFilters = ["all", "public", "private", "drafts"];
 
     const [tab, setTab] = useState("posts");
+    const [postFilter, setPostFilter] = useState("all");
+    const [isCreatePostModalActive, setIsCreatePostModalActive] = useState(false);
 
     const params = useParams();
     const username = params.username.slice(1);
-
-    const [postsElement, setPostsElement] = useState();
 
     const [user, setUser] = useState({});
 
@@ -45,10 +48,7 @@ function UserDetails() {
                 setUserProfilePhotoSrc(`${process.env.REACT_APP_STORAGE_URL}PPl@${res.data.user_id}?${performance.now()}`);
                 setUserProfilePhotoStyle({});
                 setTab("posts");
-
-                setPostsElement(
-                    <PostList fetchPosts={PostService.getPosts} filters={{ desc: true, order: "created_at", user_id: res.data.user_id }} refresh={user} />
-                );
+                setPostFilter("all");
 
             } catch (e) {
                 setUserNotFound(true);
@@ -118,6 +118,8 @@ function UserDetails() {
         )
     }
 
+    const isOwner = store.user.user_id == user.user_id;
+
     return (
         <div id="user-details">
             <div className="user-card">
@@ -182,7 +184,47 @@ function UserDetails() {
 
                 {
                     tab === "posts" &&
-                    postsElement
+                    <>
+                        {
+                            isOwner &&
+                            <div className="posts-toolbar">
+                                <div className="post-filter-tabs">
+                                    {ownerPostFilters.map((filter) => (
+                                        <button
+                                            key={filter}
+                                            type="button"
+                                            className={postFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
+                                            onClick={() => setPostFilter(filter)}
+                                        >
+                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="create-post-button"
+                                    onClick={() => setIsCreatePostModalActive(true)}
+                                >
+                                    Create post
+                                </button>
+                            </div>
+                        }
+
+                        {
+                            user.user_id &&
+                            <PostList
+                                fetchPosts={PostService.getPosts}
+                                filters={{
+                                    desc: true,
+                                    order: "created_at",
+                                    user_id: user.user_id,
+                                    profile_filter: isOwner ? postFilter : "public",
+                                }}
+                                refresh={`${store.isRefreshPosts}-${user.user_id}-${postFilter}`}
+                            />
+                        }
+                    </>
                 }
 
                 {
@@ -190,6 +232,16 @@ function UserDetails() {
                     <UserList fetchUsers={UserService.getSubsctiptions} filters={{ user_id: user.user_id }} />
                 }
             </div>
+
+            <PostModal
+                active={isCreatePostModalActive}
+                setActive={setIsCreatePostModalActive}
+                savePostFunc={PostService.createPost}
+                modalHeader={"Create new post"}
+                buttonText={"Create"}
+                navigateTo={(post) => `/people/@${post.user.username}`}
+            />
+            <PostDetails />
         </div>
     )
 }

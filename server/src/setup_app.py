@@ -15,10 +15,10 @@ from src.messages.router import router as messages_router
 from src.events.router import router as events_router
 
 # Exception handlers
-from src.exceptions import (
+from src.common.exceptions import (
     PermissionDenied,
 )
-from src.exc_handlers import (
+from src.common.exc_handlers import (
     permission_denied_handler,
 )
 
@@ -37,14 +37,8 @@ from src.users.exceptions import (
     UserNotInSubscriptions,
 )
 
-from src.posts.exc_handlers import (
-    post_not_found_handler,
-    post_already_rated_handler,
-)
-from src.posts.exceptions import (
-    PostNotFound,
-    PostAlreadyRated,
-)
+from src.posts.exc_handlers import post_not_found_handler
+from src.posts.exceptions import PostNotFound
 
 from src.chats.exc_handlers import (
     chat_not_found_handler,
@@ -104,7 +98,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UserNotInSubscriptions, user_not_in_subscriptions_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
-    app.add_exception_handler(PostAlreadyRated, post_already_rated_handler)  # type: ignore
 
     app.add_exception_handler(ChatNotFound, chat_not_found_handler)  # type: ignore
     app.add_exception_handler(AlreadyInChat, already_in_chat_handler)  # type: ignore

@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.models import Base
+from src.common.models import Base
 
 
 class EventModel(Base):

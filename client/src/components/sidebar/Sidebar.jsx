@@ -27,6 +27,18 @@ function Sidebar() {
                     <img src="/assets/feed.svg" alt="Feed" />
                     Feed
                 </NavLink>
+                <NavLink to="/articles" className="sidebar-item">
+                    <img src="/assets/articles.svg" alt="Articles" />
+                    Articles
+                </NavLink>
+                <NavLink to="/videos" className="sidebar-item">
+                    <img src="/assets/videos.svg" alt="Videos" />
+                    Videos
+                </NavLink>
+                <NavLink to="/courses" className="sidebar-item">
+                    <img src="/assets/courses.svg" alt="Courses" />
+                    Courses
+                </NavLink>
                 <NavLink to="/chats" className="sidebar-item">
                     <img src="/assets/chats.svg" alt="Chats" />
                     Chats

@@ -12,6 +12,7 @@ const POSTS_IN_PORTION = 5;
 function PostList({ fetchPosts, filters, refresh }) {
     const lastItem = createRef();
     const observerLoader = useRef();
+    const filtersKey = JSON.stringify(filters || {});
 
     const [posts, setPosts] = useState([]);
     const [offset, setOffset] = useState(0);
@@ -23,7 +24,7 @@ function PostList({ fetchPosts, filters, refresh }) {
     useEffect(() => {
         setOffset(0);
         setPosts([]);
-    }, [refresh]);
+    }, [refresh, filtersKey]);
 
     const { isLoading, isError, isSuccess, error } = useQuery(
         async () => {
@@ -36,9 +37,13 @@ function PostList({ fetchPosts, filters, refresh }) {
             return res.data;
         },
         {
-            keys: [offset, refresh],
+            keys: [offset, refresh, filtersKey],
             onSuccess: (fetchedPosts) => {
-                setPosts((prevPosts) => [...prevPosts, ...fetchedPosts]);
+                setPosts((prevPosts) => (
+                    offset === 0
+                        ? fetchedPosts
+                        : [...prevPosts, ...fetchedPosts]
+                ));
             }
 
         }

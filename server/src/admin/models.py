@@ -5,7 +5,7 @@ from sqlalchemy import TIMESTAMP, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.config import settings
-from src.models import Base
+from src.common.models import Base
 
 
 class SessionModel(Base):

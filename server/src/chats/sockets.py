@@ -3,7 +3,7 @@ from typing import Any
 import socketio
 
 from src.config import settings
-from src.database import async_session_maker
+from src.common.database import async_session_maker
 from src.messages.dependencies import get_message_service
 from src.messages.schemas import MessageCreate, MessageCreateWS, MessageGetWS
 

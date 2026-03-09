@@ -5,7 +5,7 @@ from pydantic import Field
 
 from src.events.schemas import EventGetWithUsers
 from src.messages.schemas import MessageGetWithUser
-from src.schemas import BaseSchema
+from src.common.schemas import BaseSchema
 
 TitleStr = Annotated[str, Field(min_length=1, max_length=64)]
 

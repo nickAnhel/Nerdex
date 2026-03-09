@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import "./Feed.css";
 
 import FeedSidebar from "../../components/feed-sidebar/FeedSidebar";
+import PostDetails from "../post-details/PostDetails";
 
 
 function Feed() {
@@ -9,6 +10,7 @@ function Feed() {
         <div id="feed">
             <FeedSidebar />
             <Outlet />
+            <PostDetails />
         </div>
     )
 }

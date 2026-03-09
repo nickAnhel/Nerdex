@@ -2,7 +2,7 @@ import datetime
 import uuid
 
 from src.events.enums import EventType
-from src.schemas import BaseSchema
+from src.common.schemas import BaseSchema
 from src.users.schemas import UserGet
 
 
