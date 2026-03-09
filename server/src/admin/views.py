@@ -2,9 +2,9 @@ from sqladmin import ModelView
 
 from src.admin.models import SessionModel
 from src.chats.models import ChatModel, MembershipModel
+from src.content.models import ContentModel
 from src.events.models import EventModel
 from src.messages.models import MessageModel
-from src.posts.models import PostModel
 from src.users.models import UserModel
 
 
@@ -16,16 +16,19 @@ class UserAdminView(ModelView, model=UserModel):
     can_delete = False
 
 
-class PostAdminView(ModelView, model=PostModel):
+class PostAdminView(ModelView, model=ContentModel):
     column_list = [
-        "post_id",
-        "user_id",
-        "content_ellipsis",
-        "likes",
-        "dislikes",
+        "content_id",
+        "author_id",
+        "content_type",
+        "status",
+        "visibility",
+        "content_body_ellipsis",
+        "likes_count",
+        "dislikes_count",
         "created_at",
     ]
-    column_searchable_list = ["post_id"]
+    column_searchable_list = ["content_id"]
 
 
 class SessionAdminView(ModelView, model=SessionModel):

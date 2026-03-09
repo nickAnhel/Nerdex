@@ -23,6 +23,12 @@
     justify-content: space-between;
 }
 
+.post-list-item .post-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 .post-list-item .author {
     display: flex;
     gap: .5rem;
@@ -54,6 +60,30 @@
     font-weight: normal;
     font-size: .9rem;
     color: #aaa;
+}
+
+.post-list-item .post-badges {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.post-list-item .post-badge {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid #3a3a3a;
+    color: #bdbdbd;
+}
+
+.post-list-item .post-badge.draft {
+    border-color: #d9a441;
+    color: #f2cf82;
+}
+
+.post-list-item .post-badge.private {
+    border-color: #5f8cff;
+    color: #9db6ff;
 }
 
 .post-list-item .content img {
@@ -111,6 +141,20 @@
     font-family: 'Fira Code', monospace;
 }
 
+.post-list-item .open-post-link {
+    width: fit-content;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #9d50ff;
+    cursor: pointer;
+}
+
+.post-list-item .open-post-link:hover {
+    color: #b978ff;
+}
+
 .post-list-item .actions {
     display: flex;
     flex-direction: row;
@@ -121,7 +165,7 @@
 }
 
 .post-list-item .actions button {
-    width: 15%;
+    min-width: 5rem;
     background-color: transparent;
     border: 1px solid #9d50ff;
     color: #9d50ff;
@@ -155,4 +199,60 @@
 
 .post-list-item .actions img:hover {
     opacity: .8;
+}
+
+.delete-post-modal {
+    width: min(28rem, calc(100vw - 3rem));
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.delete-post-modal h2 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.delete-post-modal p {
+    margin: 0;
+    color: #b3b3b3;
+    line-height: 1.5;
+}
+
+.delete-post-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.delete-post-modal-actions button {
+    width: auto;
+    margin: 0;
+    min-width: 7rem;
+}
+
+.delete-post-modal-actions button.secondary {
+    background: transparent;
+    border: 1px solid #5b5b5b;
+    color: #c8c8c8;
+}
+
+.delete-post-modal-actions button.secondary:hover,
+.delete-post-modal-actions button.secondary:focus {
+    background: transparent;
+    border-color: #7a7a7a;
+    color: #ffffff;
+    box-shadow: none;
+}
+
+.delete-post-modal-actions button.danger {
+    background: #c94b63;
+    color: #ffffff;
+}
+
+.delete-post-modal-actions button.danger:hover,
+.delete-post-modal-actions button.danger:focus {
+    background: #b53d54;
+    box-shadow: 0 0 20px rgba(201, 75, 99, 0.35);
 }

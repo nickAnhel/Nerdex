@@ -39,18 +39,15 @@ class UserModel(Base):
 
     is_admin: Mapped[bool] = mapped_column(default=False)
 
-    created_posts: Mapped[list["PostModel"]] = relationship(  # type: ignore
-        back_populates="user",
+    created_posts: Mapped[list["ContentModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="author",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    liked_posts: Mapped["PostModel"] = relationship(  # type: ignore
-        back_populates="liked_users",
-        secondary="user_post_likes",
-    )
-    disliked_posts: Mapped["PostModel"] = relationship(  # type: ignore
-        back_populates="disliked_users",
-        secondary="user_post_dislikes",
+    content_reactions: Mapped[list["ContentReactionModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     created_chats: Mapped[list["ChatModel"]] = relationship(  # type: ignore
         back_populates="owner",

@@ -37,14 +37,8 @@ from src.users.exceptions import (
     UserNotInSubscriptions,
 )
 
-from src.posts.exc_handlers import (
-    post_not_found_handler,
-    post_already_rated_handler,
-)
-from src.posts.exceptions import (
-    PostNotFound,
-    PostAlreadyRated,
-)
+from src.posts.exc_handlers import post_not_found_handler
+from src.posts.exceptions import PostNotFound
 
 from src.chats.exc_handlers import (
     chat_not_found_handler,
@@ -104,7 +98,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UserNotInSubscriptions, user_not_in_subscriptions_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
-    app.add_exception_handler(PostAlreadyRated, post_already_rated_handler)  # type: ignore
 
     app.add_exception_handler(ChatNotFound, chat_not_found_handler)  # type: ignore
     app.add_exception_handler(AlreadyInChat, already_in_chat_handler)  # type: ignore

@@ -1,11 +1,16 @@
-import typing as tp
+from __future__ import annotations
+
+import datetime
 import uuid
 
-from sqlalchemy import and_, delete, desc, exists, insert, select, update
+from sqlalchemy import delete, desc, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.posts.models import DislikesModel, LikesModel, PostModel
+from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
+from src.content.models import ContentModel, ContentReactionModel
+from src.posts.enums import PostOrder, PostProfileFilter
+from src.posts.models import PostDetailsModel
 from src.users.models import SubscriptionModel
 
 
@@ -15,317 +20,368 @@ class PostRepository:
 
     async def create(
         self,
-        data: dict[str, tp.Any],
-    ) -> PostModel:
+        *,
+        author_id: uuid.UUID,
+        body_text: str,
+        status: ContentStatusEnum,
+        visibility: ContentVisibilityEnum,
+        created_at: datetime.datetime,
+        updated_at: datetime.datetime,
+        published_at: datetime.datetime | None,
+    ) -> ContentModel:
         stmt = (
-            insert(PostModel)
-            .values(**data)
-            .returning(PostModel)
-            .options(selectinload(PostModel.user))
+            insert(ContentModel)
+            .values(
+                author_id=author_id,
+                content_type=ContentTypeEnum.POST,
+                status=status,
+                visibility=visibility,
+                created_at=created_at,
+                updated_at=updated_at,
+                published_at=published_at,
+            )
+            .returning(ContentModel.content_id)
         )
+        result = await self._session.execute(stmt)
+        content_id = result.scalar_one()
 
-        res = await self._session.execute(stmt)
+        await self._session.execute(
+            insert(PostDetailsModel).values(
+                content_id=content_id,
+                body_text=body_text,
+            )
+        )
         await self._session.commit()
-
-        return res.scalar_one()
+        return await self.get_single(content_id=content_id)
 
     async def get_single(
         self,
-        **filters,
-    ) -> PostModel:
-        query = (
-            select(PostModel)
-            .filter_by(**filters)
-            .options(selectinload(PostModel.user))
-        )
-        result = await self._session.execute(query)
-        return result.scalar_one()
+        content_id: uuid.UUID,
+        viewer_id: uuid.UUID | None = None,
+    ) -> ContentModel | None:
+        stmt = self._build_post_query(viewer_id=viewer_id).where(ContentModel.content_id == content_id)
+        result = await self._session.execute(stmt)
+        return self._one_or_none(result, viewer_id=viewer_id)
 
-    async def get_multi(
+    async def get_feed(
         self,
-        order: str,
+        *,
+        viewer_id: uuid.UUID | None,
+        order: PostOrder,
         order_desc: bool,
         offset: int,
         limit: int,
-        **filters,
-    ) -> list[PostModel]:
-        query = (
-            select(PostModel)
-            .filter_by(**filters)
-            .order_by(desc(order) if order_desc else order)
+    ) -> list[ContentModel]:
+        stmt = (
+            self._build_post_query(viewer_id=viewer_id)
+            .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+            .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
+            .where(ContentModel.deleted_at.is_(None))
+            .order_by(self._order_by_clause(order=order, order_desc=order_desc))
             .offset(offset)
             .limit(limit)
-            .options(selectinload(PostModel.user))
         )
-
-        result = await self._session.execute(query)
-        return list(result.scalars().all())
-
-    async def get_post_rating(
-        self,
-        **filters,
-    ) -> tuple[int, int]:
-        query = (
-            select(PostModel.likes, PostModel.dislikes)
-            .filter_by(**filters)
-        )
-
-        res = await self._session.execute(query)
-        return res.fetchone().tuple()  # type: ignore
-
-    async def update(
-        self,
-        data: dict[str, tp.Any],
-        **filters,
-    ) -> PostModel:
-        stmt = (
-            update(PostModel)
-            .filter_by(**filters)
-            .values(**data)
-            .returning(PostModel)
-            .options(selectinload(PostModel.user))
-        )
-
         result = await self._session.execute(stmt)
-        await self._session.commit()
+        return self._many(result, viewer_id=viewer_id)
 
-        return result.scalar_one()
-
-    async def delete(
+    async def get_author_posts(
         self,
-        **filters,
-    ) -> int:
+        *,
+        author_id: uuid.UUID,
+        viewer_id: uuid.UUID | None,
+        profile_filter: PostProfileFilter,
+        order: PostOrder,
+        order_desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ContentModel]:
         stmt = (
-            delete(PostModel)
-            .filter_by(**filters)
+            self._build_post_query(viewer_id=viewer_id)
+            .where(ContentModel.author_id == author_id)
+            .where(ContentModel.deleted_at.is_(None))
         )
 
-        res = await self._session.execute(stmt)
-        await self._session.commit()
-        return res.rowcount
-
-    async def like(
-        self,
-        post_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        insert_like_row_stmt = (
-            insert(LikesModel)
-            .values(
-                post_id=post_id,
-                user_id=user_id,
-            )
-        )
-
-        update_likes_count_stmt = (
-            update(PostModel)
-            .values(likes=PostModel.likes + 1)
-            .filter_by(post_id=post_id)
-        )
-
-        update_dislikes_count_stmt = (
-            update(PostModel)
-            .values(dislikes=PostModel.dislikes - 1)
-            .where(
-                and_(
-                    PostModel.post_id == post_id,
-                    exists(
-                        select(DislikesModel)
-                        .filter_by(
-                            post_id=post_id,
-                            user_id=user_id,
-                        )
-                    ),
+        if viewer_id == author_id:
+            if profile_filter == PostProfileFilter.ALL:
+                stmt = stmt.where(
+                    ContentModel.status.in_(
+                        [ContentStatusEnum.PUBLISHED, ContentStatusEnum.DRAFT]
+                    )
                 )
-            )
-        )
-
-        delete_dislike_row_stmt = (
-            delete(DislikesModel)
-            .filter_by(
-                post_id=post_id,
-                user_id=user_id,
-            )
-        )
-
-        await self._session.execute(insert_like_row_stmt)
-        await self._session.execute(update_likes_count_stmt)
-        await self._session.execute(update_dislikes_count_stmt)
-        await self._session.execute(delete_dislike_row_stmt)
-        await self._session.commit()
-
-    async def unlike(
-        self,
-        post_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        update_likes_count_stmt = (
-            update(PostModel)
-            .values(likes=PostModel.likes - 1)
-            .where(
-                and_(
-                    PostModel.post_id == post_id,
-                    exists(
-                        select(LikesModel)
-                        .filter_by(
-                            post_id=post_id,
-                            user_id=user_id,
-                        )
-                    ),
+            elif profile_filter == PostProfileFilter.DRAFTS:
+                stmt = stmt.where(ContentModel.status == ContentStatusEnum.DRAFT)
+            elif profile_filter == PostProfileFilter.PRIVATE:
+                stmt = (
+                    stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                    .where(ContentModel.visibility == ContentVisibilityEnum.PRIVATE)
                 )
-            )
-        )
-
-        delete_like_row_stmt = (
-            delete(LikesModel)
-            .filter_by(
-                post_id=post_id,
-                user_id=user_id,
-            )
-        )
-
-        await self._session.execute(update_likes_count_stmt)
-        await self._session.execute(delete_like_row_stmt)
-        await self._session.commit()
-
-    async def dislike(
-        self,
-        post_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        insert_dislike_row_stmt = (
-            insert(DislikesModel)
-            .values(
-                post_id=post_id,
-                user_id=user_id,
-            )
-        )
-
-        update_dislikes_count_stmt = (
-            update(PostModel)
-            .values(dislikes=PostModel.dislikes + 1)
-            .filter_by(post_id=post_id)
-        )
-
-        update_likes_count_stmt = (
-            update(PostModel)
-            .values(likes=PostModel.likes - 1)
-            .where(
-                and_(
-                    PostModel.post_id == post_id,
-                    exists(
-                        select(LikesModel)
-                        .filter_by(
-                            post_id=post_id,
-                            user_id=user_id,
-                        )
-                    ),
+            else:
+                stmt = (
+                    stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                    .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
                 )
+        else:
+            stmt = (
+                stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
             )
+
+        stmt = (
+            stmt.order_by(self._order_by_clause(order=order, order_desc=order_desc))
+            .offset(offset)
+            .limit(limit)
         )
-
-        delete_like_row_stmt = (
-            delete(LikesModel)
-            .filter_by(
-                post_id=post_id,
-                user_id=user_id,
-            )
-        )
-
-        await self._session.execute(insert_dislike_row_stmt)
-        await self._session.execute(update_dislikes_count_stmt)
-        await self._session.execute(update_likes_count_stmt)
-        await self._session.execute(delete_like_row_stmt)
-        await self._session.commit()
-
-    async def undislike(
-        self,
-        post_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        update_dislikes_count_stmt = (
-            update(PostModel)
-            .values(dislikes=PostModel.dislikes - 1)
-            .where(
-                and_(
-                    PostModel.post_id == post_id,
-                    exists(
-                        select(DislikesModel)
-                        .filter_by(
-                            post_id=post_id,
-                            user_id=user_id,
-                        )
-                    ),
-                )
-            )
-        )
-
-        delete_dislike_row_stmt = (
-            delete(DislikesModel)
-            .filter_by(
-                post_id=post_id,
-                user_id=user_id,
-            )
-        )
-
-        await self._session.execute(update_dislikes_count_stmt)
-        await self._session.execute(delete_dislike_row_stmt)
-        await self._session.commit()
+        result = await self._session.execute(stmt)
+        return self._many(result, viewer_id=viewer_id)
 
     async def get_user_subscriptions_posts(
         self,
+        *,
         user_id: uuid.UUID,
-        order: str,
+        order: PostOrder,
         order_desc: bool,
         offset: int,
         limit: int,
-    ) -> list[PostModel]:
-        subs_cte = (
+    ) -> list[ContentModel]:
+        subs_subquery = (
             select(SubscriptionModel.subscribed_id)
-            .filter_by(subscriber_id=user_id)
-            .cte()
+            .where(SubscriptionModel.subscriber_id == user_id)
+            .subquery()
         )
 
-        query = (
-            select(PostModel)
-            .where(PostModel.user_id.in_(subs_cte))
-            .order_by(desc(order) if order_desc else order)
+        stmt = (
+            self._build_post_query(viewer_id=user_id)
+            .where(ContentModel.author_id.in_(select(subs_subquery.c.subscribed_id)))
+            .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+            .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
+            .where(ContentModel.deleted_at.is_(None))
+            .order_by(self._order_by_clause(order=order, order_desc=order_desc))
             .offset(offset)
             .limit(limit)
-            .options(selectinload(PostModel.user))
         )
+        result = await self._session.execute(stmt)
+        return self._many(result, viewer_id=user_id)
 
-        result = await self._session.execute(query)
-        return list(result.scalars().all())
-
-    async def is_liked(
+    async def update_post(
         self,
+        *,
+        content_id: uuid.UUID,
+        body_text: str,
+        status: ContentStatusEnum,
+        visibility: ContentVisibilityEnum,
+        updated_at: datetime.datetime,
+        published_at: datetime.datetime | None,
+    ) -> ContentModel:
+        await self._session.execute(
+            update(ContentModel)
+            .where(ContentModel.content_id == content_id)
+            .values(
+                status=status,
+                visibility=visibility,
+                updated_at=updated_at,
+                published_at=published_at,
+            )
+        )
+        await self._session.execute(
+            update(PostDetailsModel)
+            .where(PostDetailsModel.content_id == content_id)
+            .values(body_text=body_text)
+        )
+        await self._session.commit()
+        return await self.get_single(content_id=content_id)
+
+    async def soft_delete_post(
+        self,
+        *,
+        content_id: uuid.UUID,
+        updated_at: datetime.datetime,
+        deleted_at: datetime.datetime,
+    ) -> ContentModel:
+        await self._session.execute(
+            update(ContentModel)
+            .where(ContentModel.content_id == content_id)
+            .values(
+                status=ContentStatusEnum.DELETED,
+                deleted_at=deleted_at,
+                updated_at=updated_at,
+            )
+        )
+        await self._session.commit()
+        return await self.get_single(content_id=content_id)
+
+    async def set_reaction(
+        self,
+        *,
+        content_id: uuid.UUID,
         user_id: uuid.UUID,
-        post_id: uuid.UUID
-    ) -> bool:
-        query = (
-            select(LikesModel)
-            .filter_by(
-                user_id=user_id,
-                post_id=post_id,
+        reaction_type: ReactionTypeEnum,
+    ) -> None:
+        existing = await self._get_reaction(content_id=content_id, user_id=user_id)
+
+        if existing is None:
+            await self._session.execute(
+                insert(ContentReactionModel).values(
+                    content_id=content_id,
+                    user_id=user_id,
+                    reaction_type=reaction_type,
+                )
+            )
+            await self._update_reaction_counters(
+                content_id=content_id,
+                like_delta=1 if reaction_type == ReactionTypeEnum.LIKE else 0,
+                dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
+            )
+            await self._session.commit()
+            return
+
+        if existing.reaction_type == reaction_type:
+            return
+
+        await self._session.execute(
+            update(ContentReactionModel)
+            .where(ContentReactionModel.content_id == content_id)
+            .where(ContentReactionModel.user_id == user_id)
+            .values(reaction_type=reaction_type)
+        )
+        await self._update_reaction_counters(
+            content_id=content_id,
+            like_delta=1 if reaction_type == ReactionTypeEnum.LIKE else -1,
+            dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else -1,
+        )
+        await self._session.commit()
+
+    async def remove_reaction(
+        self,
+        *,
+        content_id: uuid.UUID,
+        user_id: uuid.UUID,
+        reaction_type: ReactionTypeEnum,
+    ) -> None:
+        existing = await self._get_reaction(content_id=content_id, user_id=user_id)
+        if existing is None or existing.reaction_type != reaction_type:
+            return
+
+        await self._session.execute(
+            delete(ContentReactionModel)
+            .where(ContentReactionModel.content_id == content_id)
+            .where(ContentReactionModel.user_id == user_id)
+        )
+        await self._update_reaction_counters(
+            content_id=content_id,
+            like_delta=-1 if reaction_type == ReactionTypeEnum.LIKE else 0,
+            dislike_delta=-1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
+        )
+        await self._session.commit()
+
+    async def _get_reaction(
+        self,
+        *,
+        content_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> ContentReactionModel | None:
+        result = await self._session.execute(
+            select(ContentReactionModel)
+            .where(ContentReactionModel.content_id == content_id)
+            .where(ContentReactionModel.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def _update_reaction_counters(
+        self,
+        *,
+        content_id: uuid.UUID,
+        like_delta: int,
+        dislike_delta: int,
+    ) -> None:
+        await self._session.execute(
+            update(ContentModel)
+            .where(ContentModel.content_id == content_id)
+            .values(
+                likes_count=ContentModel.likes_count + like_delta,
+                dislikes_count=ContentModel.dislikes_count + dislike_delta,
             )
         )
 
-        res = await self._session.execute(query)
-        return len(res.scalars().all()) == 1
+    def _build_post_query(self, viewer_id: uuid.UUID | None):
+        reaction_subquery = self._reaction_subquery(viewer_id=viewer_id)
 
-    async def is_disliked(
-        self,
-        user_id: uuid.UUID,
-        post_id: uuid.UUID
-    ) -> bool:
-        query = (
-            select(DislikesModel)
-            .filter_by(
-                user_id=user_id,
-                post_id=post_id,
+        if reaction_subquery is None:
+            return (
+                select(ContentModel)
+                .where(ContentModel.content_type == ContentTypeEnum.POST)
+                .options(
+                    selectinload(ContentModel.author),
+                    selectinload(ContentModel.post_details),
+                )
+            )
+
+        return (
+            select(
+                ContentModel,
+                reaction_subquery.c.reaction_type.label("my_reaction"),
+            )
+            .outerjoin(
+                reaction_subquery,
+                ContentModel.content_id == reaction_subquery.c.content_id,
+            )
+            .where(ContentModel.content_type == ContentTypeEnum.POST)
+            .options(
+                selectinload(ContentModel.author),
+                selectinload(ContentModel.post_details),
             )
         )
 
-        res = await self._session.execute(query)
-        return len(res.scalars().all()) == 1
+    def _reaction_subquery(self, viewer_id: uuid.UUID | None):
+        if viewer_id is None:
+            return None
+
+        return (
+            select(
+                ContentReactionModel.content_id,
+                ContentReactionModel.reaction_type,
+            )
+            .where(ContentReactionModel.user_id == viewer_id)
+            .subquery()
+        )
+
+    def _many(self, result, viewer_id: uuid.UUID | None) -> list[ContentModel]:  # type: ignore[no-untyped-def]
+        if viewer_id is None:
+            posts = list(result.scalars().unique().all())
+            for post in posts:
+                post.my_reaction = None
+                post.is_owner = False
+            return posts
+
+        posts: list[ContentModel] = []
+        for post, my_reaction in result.unique().all():
+            post.my_reaction = my_reaction
+            post.is_owner = post.author_id == viewer_id
+            posts.append(post)
+        return posts
+
+    def _one_or_none(self, result, viewer_id: uuid.UUID | None) -> ContentModel | None:  # type: ignore[no-untyped-def]
+        if viewer_id is None:
+            post = result.scalar_one_or_none()
+            if post is not None:
+                post.my_reaction = None
+                post.is_owner = False
+            return post
+
+        row = result.one_or_none()
+        if row is None:
+            return None
+
+        post, my_reaction = row
+        post.my_reaction = my_reaction
+        post.is_owner = post.author_id == viewer_id
+        return post
+
+    def _order_by_clause(self, order: PostOrder, order_desc: bool):
+        order_mapping = {
+            PostOrder.ID: ContentModel.content_id,
+            PostOrder.CREATED_AT: ContentModel.created_at,
+            PostOrder.UPDATED_AT: ContentModel.updated_at,
+            PostOrder.PUBLISHED_AT: ContentModel.published_at,
+        }
+        column = order_mapping[order]
+        return desc(column) if order_desc else column

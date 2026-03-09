@@ -1,5 +1,5 @@
-import { useState, forwardRef, useContext } from "react";
-import { Link } from "react-router-dom";
+import { useContext, useEffect, useState, forwardRef } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -10,22 +10,34 @@ import "./PostListItem.css";
 import { StoreContext } from "../..";
 import PostService from "../../service/PostService";
 
+import Modal from "../modal/Modal";
+import Loader from "../loader/Loader";
 import PostModal from "../post-modal/PostModal"
 
 
 const PostListItem = forwardRef((props, ref) => {
     const { store } = useContext(StoreContext);
+    const navigate = useNavigate();
+    const location = useLocation();
 
     const [userProfilePhotoSrc, setUserProfilePhotoSrc] = useState(
         `${process.env.REACT_APP_STORAGE_URL}PPs@${props.post.user.user_id}?${performance.now()}`
     );
 
     const [post, setPost] = useState(props.post)
-
-    const [isLiked, setIsLiked] = useState(props.post.is_liked);
-    const [isDisliked, setIsDisliked] = useState(props.post.is_disliked);
+    const [myReaction, setMyReaction] = useState(props.post.my_reaction);
 
     const [isEditPostModalActive, setIsEditPostModalActive] = useState(false);
+    const [isDeletePostModalActive, setIsDeletePostModalActive] = useState(false);
+    const [isDeletingPost, setIsDeletingPost] = useState(false);
+
+    useEffect(() => {
+        setPost(props.post);
+        setMyReaction(props.post.my_reaction);
+        setUserProfilePhotoSrc(
+            `${process.env.REACT_APP_STORAGE_URL}PPs@${props.post.user.user_id}?${performance.now()}`
+        );
+    }, [props.post]);
 
     const formatCreatedAt = (createdAt) => {
         const date = new Date(createdAt);
@@ -33,93 +45,96 @@ const PostListItem = forwardRef((props, ref) => {
     };
 
     const handleLike = async () => {
-        if (isLiked) {
-            setIsLiked(false);
+        const res = myReaction === "like"
+            ? await PostService.unlikePost(post.post_id)
+            : await PostService.likePost(post.post_id);
 
-            const res = await PostService.unlikePost(props.post.post_id);
-
-            setPost((prev) => ({
-                ...prev,
-                likes: res.data.likes,
-                dislikes: res.data.dislikes,
-            }));
-        } else {
-            setIsLiked(true);
-            setIsDisliked(false);
-
-            const res = await PostService.likePost(props.post.post_id);
-
-            setPost((prev) => ({
-                ...prev,
-                likes: res.data.likes,
-                dislikes: res.data.dislikes,
-            }));
-        }
+        setMyReaction(res.data.my_reaction);
+        setPost((prev) => ({
+            ...prev,
+            likes_count: res.data.likes_count,
+            dislikes_count: res.data.dislikes_count,
+            my_reaction: res.data.my_reaction,
+        }));
     }
 
     const handleDislike = async () => {
-        if (isDisliked) {
-            setIsDisliked(false);
+        const res = myReaction === "dislike"
+            ? await PostService.undislikePost(post.post_id)
+            : await PostService.dislikePost(post.post_id);
 
-            const res = await PostService.undislikePost(props.post.post_id);
-
-            setPost((prev) => ({
-                ...prev,
-                likes: res.data.likes,
-                dislikes: res.data.dislikes,
-            }));
-
-        } else {
-            setIsDisliked(true);
-            setIsLiked(false);
-
-            const res = await PostService.dislikePost(props.post.post_id);
-
-            setPost((prev) => ({
-                ...prev,
-                likes: res.data.likes,
-                dislikes: res.data.dislikes,
-            }));
-        }
+        setMyReaction(res.data.my_reaction);
+        setPost((prev) => ({
+            ...prev,
+            likes_count: res.data.likes_count,
+            dislikes_count: res.data.dislikes_count,
+            my_reaction: res.data.my_reaction,
+        }));
     }
 
-    const handleDeletePost = async (e) => {
+    const handleDeletePost = async () => {
+        setIsDeletingPost(true);
+
         try {
-            await PostService.deletePost(props.post.post_id);
-            props.removePost(post.post_id);
+            await PostService.deletePost(post.post_id);
+            if (props.removePost) {
+                props.removePost(post.post_id);
+            }
+            if (props.onDelete) {
+                props.onDelete(post.post_id);
+            }
+            setIsDeletePostModalActive(false);
 
         } catch (e) {
             console.log(e);
             console.log(e?.response?.data?.detail);
         } finally {
+            setIsDeletingPost(false);
             store.refreshPosts();
         }
     }
 
-    const setPostContent = (content) => {
-        setPost(
-            (prev) => ({
-                ...prev,
-                content: content,
-            })
-        );
-    }
+    const canReact = store.isAuthenticated && post.status === "published";
+    const isLiked = myReaction === "like";
+    const isDisliked = myReaction === "dislike";
+
+    const buildPostQueryLocation = (postId) => {
+        const nextSearchParams = new URLSearchParams(location.search);
+        nextSearchParams.set("p", postId);
+
+        return {
+            pathname: location.pathname,
+            search: `?${nextSearchParams.toString()}`,
+        };
+    };
 
     return (
         <div className="post-list-item" ref={ref}>
             <div className="header">
-                <Link to={`/people/@${post.user.username}`} className="author">
-                    <img
-                        src={userProfilePhotoSrc}
-                        onError={() => { setUserProfilePhotoSrc("../../../assets/profile.svg") }}
-                        alt={`${post.user.username} profile photo`}
-                    />
-                    <p>
-                        {post.user.username}
-                    </p>
-                </Link>
+                <div className="post-meta">
+                    <Link to={`/people/@${post.user.username}`} className="author">
+                        <img
+                            src={userProfilePhotoSrc}
+                            onError={() => { setUserProfilePhotoSrc("../../../assets/profile.svg") }}
+                            alt={`${post.user.username} profile photo`}
+                        />
+                        <p>
+                            {post.user.username}
+                        </p>
+                    </Link>
+                    <div className="post-badges">
+                        {
+                            post.status === "draft" &&
+                            <span className="post-badge draft">Draft</span>
+                        }
+                        {
+                            post.visibility === "private" &&
+                            <span className="post-badge private">Private</span>
+                        }
+                    </div>
+                </div>
                 <span>
-                    {formatCreatedAt(post.created_at)}
+                    {formatCreatedAt(post.published_at || post.created_at)}
                 </span>
             </div>
             <div className="content">
@@ -149,12 +164,22 @@ const PostListItem = forwardRef((props, ref) => {
                     {post.content}
                 </ReactMarkdown>
             </div>
+            {
+                props.showDetailLink !== false &&
+                <button
+                    type="button"
+                    className="open-post-link"
+                    onClick={() => navigate(buildPostQueryLocation(post.post_id))}
+                >
+                    Open post
+                </button>
+            }
             <div className="actions">
                 {
-                    store.user.user_id == props.post.user_id &&
+                    post.is_owner &&
                     <>
                         <img
-                            onClick={(e) => { handleDeletePost(e); }}
+                            onClick={() => { setIsDeletePostModalActive(true); }}
                             src="../../../assets/delete.svg"
                             alt="Delete post"
                         />
@@ -169,16 +194,16 @@ const PostListItem = forwardRef((props, ref) => {
                 <button
                     className={isLiked ? "active" : ""}
                     onClick={handleLike}
-                    disabled={!store.isAuthenticated}
+                    disabled={!canReact}
                 >
-                    🖒 {post.likes}
+                    🖒 {post.likes_count}
                 </button>
                 <button
                     className={isDisliked ? "active" : ""}
                     onClick={handleDislike}
-                    disabled={!store.isAuthenticated}
+                    disabled={!canReact}
                 >
-                    🖓 {post.dislikes}
+                    🖓 {post.dislikes_count}
                 </button>
             </div>
 
@@ -186,12 +211,47 @@ const PostListItem = forwardRef((props, ref) => {
                 active={isEditPostModalActive}
                 setActive={setIsEditPostModalActive}
                 content={post.content}
-                setContent={setPostContent}
+                status={post.status}
+                visibility={post.visibility}
+                onSaved={setPost}
                 savePostFunc={PostService.updatePost}
+                navigateTo={(savedPost) => buildPostQueryLocation(savedPost.post_id)}
                 postId={post.post_id}
                 modalHeader={"Edit post"}
                 buttonText={"Save"}
             />
+
+            <Modal
+                active={isDeletePostModalActive}
+                setActive={() => {
+                    if (!isDeletingPost) {
+                        setIsDeletePostModalActive(false);
+                    }
+                }}
+            >
+                <div className="delete-post-modal">
+                    <h2>Delete post?</h2>
+                    <p>This action will hide the post from regular lists. You can&apos;t undo it from the interface.</p>
+                    <div className="delete-post-modal-actions">
+                        <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => setIsDeletePostModalActive(false)}
+                            disabled={isDeletingPost}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="danger"
+                            onClick={handleDeletePost}
+                            disabled={isDeletingPost}
+                        >
+                            {isDeletingPost ? <Loader /> : "Delete"}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 });

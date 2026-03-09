@@ -45,7 +45,7 @@ function FeedSidebar() {
                 savePostFunc={PostService.createPost}
                 modalHeader={"Create new post"}
                 buttonText={"Create"}
-                navigateTo={`/people/@${store.user.username}`}
+                navigateTo={(post) => `/people/@${post.user.username}`}
             />
         </div>
     );
