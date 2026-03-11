@@ -1,0 +1,79 @@
+.tag-input {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tag-input-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.tag-input-header span {
+    font-size: 0.95rem;
+    color: #bdbdbd;
+}
+
+.tag-input-header p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #8a8a8a;
+    line-height: 1.4;
+}
+
+.tag-input-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid #4a4a4a;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.tag-input-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.tag-input-field input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: #fff;
+    font-size: 1rem;
+    outline: none;
+}
+
+.tag-input-field input::placeholder {
+    color: #747474;
+}
+
+.tag-input-error {
+    color: #ff8f8f;
+    font-size: 0.85rem;
+}
+
+.tag-input-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-input-suggestions button {
+    margin: 0;
+    width: auto;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid #5b5b5b;
+    background: transparent;
+    color: #d6d6d6;
+    font-size: 0.85rem;
+}
+
+.tag-input-suggestions button:hover {
+    border-color: #9d50ff;
+    color: #ffffff;
+}

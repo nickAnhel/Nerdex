@@ -155,6 +155,12 @@
     color: #b978ff;
 }
 
+.post-list-item .post-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
 .post-list-item .actions {
     display: flex;
     flex-direction: row;

@@ -15,6 +15,7 @@ from src.content.enums import (
     ContentVisibilityEnum,
     ReactionTypeEnum,
 )
+from src.tags.models import ContentTagModel, TagModel
 
 
 def _enum_values(enum_cls):  # type: ignore[no-untyped-def]
@@ -85,6 +86,19 @@ class ContentModel(Base):
         back_populates="content",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    content_tags: Mapped[list[ContentTagModel]] = relationship(
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        overlaps="contents,tags",
+    )
+    tags: Mapped[list[TagModel]] = relationship(
+        secondary="content_tags",
+        back_populates="contents",
+        passive_deletes=True,
+        order_by="TagModel.slug",
+        overlaps="content_tags,tag,content",
     )
 
     @property
