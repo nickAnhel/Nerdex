@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
@@ -9,12 +9,19 @@ from src.posts.enums import PostOrder, PostProfileFilter
 from src.posts.exceptions import PostNotFound
 from src.posts.schemas import PostCreate, PostUpdate
 from src.posts.service import PostService
+from src.tags.service import TagService
 from src.users.schemas import UserGet
 
 
 @dataclass
 class FakePostDetails:
     body_text: str
+
+
+@dataclass
+class FakeTag:
+    tag_id: uuid.UUID
+    slug: str
 
 
 @dataclass
@@ -33,6 +40,7 @@ class FakePost:
     dislikes_count: int = 0
     my_reaction: ReactionTypeEnum | None = None
     is_owner: bool = False
+    tags: list[FakeTag] = field(default_factory=list)
 
     @property
     def post_id(self) -> uuid.UUID:
@@ -68,6 +76,7 @@ class FakePostRepository:
         created_at: datetime.datetime,
         updated_at: datetime.datetime,
         published_at: datetime.datetime | None,
+        commit: bool = True,
     ) -> FakePost:
         post = FakePost(
             content_id=uuid.uuid4(),
@@ -209,6 +218,7 @@ class FakePostRepository:
         visibility: ContentVisibilityEnum,
         updated_at: datetime.datetime,
         published_at: datetime.datetime | None,
+        commit: bool = True,
     ) -> FakePost:
         post = self.posts[content_id]
         post.post_details.body_text = body_text
@@ -217,6 +227,9 @@ class FakePostRepository:
         post.updated_at = updated_at
         post.published_at = published_at
         return self._decorate(post, viewer_id=post.author_id)
+
+    async def commit(self) -> None:
+        return None
 
     async def soft_delete_post(
         self,
@@ -334,10 +347,82 @@ class FakePostRepository:
         return post
 
 
+class FakeTagRepository:
+    def __init__(self, post_repository: FakePostRepository) -> None:
+        self.post_repository = post_repository
+        self.tags_by_slug: dict[str, FakeTag] = {}
+        self.tags_by_id: dict[uuid.UUID, FakeTag] = {}
+        self.content_tags: dict[uuid.UUID, list[uuid.UUID]] = {}
+
+    async def suggest_tags(
+        self,
+        *,
+        prefix: str,
+        limit: int,
+    ) -> list[FakeTag]:
+        matching_tags = [
+            tag for slug, tag in sorted(self.tags_by_slug.items())
+            if slug.startswith(prefix)
+        ]
+        return matching_tags[:limit]
+
+    async def resolve_tags(self, slugs: list[str]) -> list[FakeTag]:
+        resolved_tags: list[FakeTag] = []
+        for slug in slugs:
+            existing_tag = self.tags_by_slug.get(slug)
+            if existing_tag is None:
+                existing_tag = FakeTag(tag_id=uuid.uuid4(), slug=slug)
+                self.tags_by_slug[slug] = existing_tag
+                self.tags_by_id[existing_tag.tag_id] = existing_tag
+            resolved_tags.append(existing_tag)
+
+        return resolved_tags
+
+    async def replace_content_tags(
+        self,
+        *,
+        content_id: uuid.UUID,
+        tag_ids: list[uuid.UUID],
+        commit: bool = True,
+    ) -> None:
+        unique_tag_ids = list(dict.fromkeys(tag_ids))
+        unique_tag_ids.sort(key=lambda tag_id: self.tags_by_id[tag_id].slug)
+        self.content_tags[content_id] = unique_tag_ids
+        if content_id in self.post_repository.posts:
+            self.post_repository.posts[content_id].tags = [
+                self.tags_by_id[tag_id] for tag_id in unique_tag_ids
+            ]
+
+    def seed_tag(
+        self,
+        slug: str,
+        *,
+        content_id: uuid.UUID | None = None,
+    ) -> FakeTag:
+        tag = self.tags_by_slug.get(slug)
+        if tag is None:
+            tag = FakeTag(tag_id=uuid.uuid4(), slug=slug)
+            self.tags_by_slug[slug] = tag
+            self.tags_by_id[tag.tag_id] = tag
+
+        if content_id is not None:
+            content_tag_ids = self.content_tags.setdefault(content_id, [])
+            if tag.tag_id not in content_tag_ids:
+                content_tag_ids.append(tag.tag_id)
+            content_tag_ids.sort(key=lambda tag_id: self.tags_by_id[tag_id].slug)
+            if content_id in self.post_repository.posts:
+                self.post_repository.posts[content_id].tags = [
+                    self.tags_by_id[tag_id] for tag_id in content_tag_ids
+                ]
+
+        return tag
+
+
 @dataclass
 class ServiceBundle:
     service: PostService
     repository: FakePostRepository
+    tag_repository: FakeTagRepository
     author: UserGet
     stranger: UserGet
     follower: UserGet
@@ -370,10 +455,15 @@ def service_bundle() -> ServiceBundle:
             follower.user_id: follower,
         }
     )
+    tag_repository = FakeTagRepository(post_repository=repository)
     repository.subscriptions.add((follower.user_id, author.user_id))
     return ServiceBundle(
-        service=PostService(repository=repository),
+        service=PostService(
+            repository=repository,
+            tag_service=TagService(repository=tag_repository),
+        ),
         repository=repository,
+        tag_repository=tag_repository,
         author=author,
         stranger=stranger,
         follower=follower,
@@ -402,6 +492,43 @@ async def test_create_post_creates_content_and_post_details(service_bundle: Serv
     assert post.status == ContentStatusEnum.PUBLISHED
     assert post.visibility == ContentVisibilityEnum.PUBLIC
     assert stored.post_details.body_text == "public body"
+    assert post.tags == []
+
+
+@pytest.mark.anyio
+async def test_create_post_with_new_tags_creates_tags_and_links(service_bundle: ServiceBundle) -> None:
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(content="tagged body", tags=["python", "тест"]),
+    )
+
+    stored = service_bundle.repository.posts[post.post_id]
+    assert [tag.slug for tag in post.tags] == ["python", "тест"]
+    assert [tag.slug for tag in stored.tags] == ["python", "тест"]
+    assert set(service_bundle.tag_repository.tags_by_slug) == {"python", "тест"}
+
+
+@pytest.mark.anyio
+async def test_create_post_reuses_existing_tags_without_duplicates(service_bundle: ServiceBundle) -> None:
+    existing = service_bundle.tag_repository.seed_tag("python")
+
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(content="reuse tag", tags=["python"]),
+    )
+
+    assert len(service_bundle.tag_repository.tags_by_slug) == 1
+    assert post.tags[0].tag_id == existing.tag_id
+
+
+@pytest.mark.anyio
+async def test_create_post_collapses_duplicate_tags(service_bundle: ServiceBundle) -> None:
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(content="dedupe tags", tags=["python", "python", "тест", "python"]),
+    )
+
+    assert [tag.slug for tag in post.tags] == ["python", "тест"]
 
 
 @pytest.mark.anyio
@@ -437,11 +564,14 @@ async def test_get_post_returns_public_published_post(service_bundle: ServiceBun
         created_at=dt(0),
         published_at=dt(0),
     )
+    service_bundle.tag_repository.seed_tag("python", content_id=post.content_id)
+    service_bundle.tag_repository.seed_tag("backend", content_id=post.content_id)
 
     result = await service_bundle.service.get_post(post.content_id, user=service_bundle.stranger)
 
     assert result.post_id == post.content_id
     assert result.content == "public post"
+    assert [tag.slug for tag in result.tags] == ["backend", "python"]
 
 
 @pytest.mark.anyio
@@ -526,6 +656,72 @@ async def test_update_post_updates_body_text_and_updated_at(service_bundle: Serv
 
     assert updated.content == "after"
     assert updated.updated_at > old_updated_at
+
+
+@pytest.mark.anyio
+async def test_update_post_replaces_tags_set(service_bundle: ServiceBundle) -> None:
+    post = service_bundle.repository.seed_post(
+        author=service_bundle.author,
+        content="before",
+        status=ContentStatusEnum.PUBLISHED,
+        visibility=ContentVisibilityEnum.PUBLIC,
+        created_at=dt(5),
+        published_at=dt(5),
+    )
+    service_bundle.tag_repository.seed_tag("old", content_id=post.content_id)
+
+    updated = await service_bundle.service.update_post(
+        service_bundle.author,
+        post.content_id,
+        PostUpdate(tags=["new", "ещё"]),
+    )
+
+    assert [tag.slug for tag in updated.tags] == ["new", "ещё"]
+    assert [tag.slug for tag in service_bundle.repository.posts[post.content_id].tags] == ["new", "ещё"]
+
+
+@pytest.mark.anyio
+async def test_update_post_can_remove_all_tags(service_bundle: ServiceBundle) -> None:
+    post = service_bundle.repository.seed_post(
+        author=service_bundle.author,
+        content="before",
+        status=ContentStatusEnum.PUBLISHED,
+        visibility=ContentVisibilityEnum.PUBLIC,
+        created_at=dt(5),
+        published_at=dt(5),
+    )
+    service_bundle.tag_repository.seed_tag("old", content_id=post.content_id)
+
+    updated = await service_bundle.service.update_post(
+        service_bundle.author,
+        post.content_id,
+        PostUpdate(tags=[]),
+    )
+
+    assert updated.tags == []
+    assert service_bundle.repository.posts[post.content_id].tags == []
+
+
+@pytest.mark.anyio
+async def test_update_post_without_tags_does_not_change_existing_tags(service_bundle: ServiceBundle) -> None:
+    post = service_bundle.repository.seed_post(
+        author=service_bundle.author,
+        content="before",
+        status=ContentStatusEnum.PUBLISHED,
+        visibility=ContentVisibilityEnum.PUBLIC,
+        created_at=dt(5),
+        published_at=dt(5),
+    )
+    service_bundle.tag_repository.seed_tag("keep", content_id=post.content_id)
+
+    updated = await service_bundle.service.update_post(
+        service_bundle.author,
+        post.content_id,
+        PostUpdate(content="after"),
+    )
+
+    assert updated.content == "after"
+    assert [tag.slug for tag in updated.tags] == ["keep"]
 
 
 @pytest.mark.anyio
@@ -843,6 +1039,7 @@ async def test_subscriptions_list_returns_my_reaction_correctly(service_bundle: 
     )
     service_bundle.repository.reactions[(post.content_id, service_bundle.follower.user_id)] = ReactionTypeEnum.DISLIKE
     post.dislikes_count = 1
+    service_bundle.tag_repository.seed_tag("python", content_id=post.content_id)
 
     posts = await service_bundle.service.get_user_subscriptions_posts(
         user_id=service_bundle.follower.user_id,
@@ -854,11 +1051,12 @@ async def test_subscriptions_list_returns_my_reaction_correctly(service_bundle: 
 
     assert len(posts) == 1
     assert posts[0].my_reaction == ReactionTypeEnum.DISLIKE
+    assert [tag.slug for tag in posts[0].tags] == ["python"]
 
 
 @pytest.mark.anyio
 async def test_feed_does_not_include_private_posts(service_bundle: ServiceBundle) -> None:
-    service_bundle.repository.seed_post(
+    public_post = service_bundle.repository.seed_post(
         author=service_bundle.author,
         content="public",
         status=ContentStatusEnum.PUBLISHED,
@@ -866,7 +1064,7 @@ async def test_feed_does_not_include_private_posts(service_bundle: ServiceBundle
         created_at=dt(26),
         published_at=dt(26),
     )
-    service_bundle.repository.seed_post(
+    private_post = service_bundle.repository.seed_post(
         author=service_bundle.author,
         content="private",
         status=ContentStatusEnum.PUBLISHED,
@@ -874,6 +1072,8 @@ async def test_feed_does_not_include_private_posts(service_bundle: ServiceBundle
         created_at=dt(27),
         published_at=dt(27),
     )
+    service_bundle.tag_repository.seed_tag("feed", content_id=public_post.content_id)
+    service_bundle.tag_repository.seed_tag("hidden", content_id=private_post.content_id)
 
     posts = await service_bundle.service.get_posts(
         order=PostOrder.CREATED_AT,
@@ -884,6 +1084,7 @@ async def test_feed_does_not_include_private_posts(service_bundle: ServiceBundle
     )
 
     assert [post.content for post in posts] == ["public"]
+    assert [tag.slug for tag in posts[0].tags] == ["feed"]
 
 
 @pytest.mark.anyio

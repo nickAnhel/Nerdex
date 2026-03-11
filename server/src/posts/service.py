@@ -9,12 +9,18 @@ from src.posts.enums import PostOrder, PostProfileFilter, PostWriteStatus, PostW
 from src.posts.exceptions import PostNotFound
 from src.posts.repository import PostRepository
 from src.posts.schemas import PostCreate, PostGet, PostRating, PostUpdate
+from src.tags.service import TagService
 from src.users.schemas import UserGet
 
 
 class PostService:
-    def __init__(self, repository: PostRepository) -> None:
+    def __init__(
+        self,
+        repository: PostRepository,
+        tag_service: TagService,
+    ) -> None:
         self._repository = repository
+        self._tag_service = tag_service
 
     async def create_post(
         self,
@@ -24,6 +30,7 @@ class PostService:
         now = self._now()
         status = self._map_status(data.status)
         visibility = self._map_visibility(data.visibility)
+        tags = self._tag_service.normalize_tags(data.tags)
 
         post = await self._repository.create(
             author_id=user.user_id,
@@ -33,7 +40,19 @@ class PostService:
             created_at=now,
             updated_at=now,
             published_at=now if status == ContentStatusEnum.PUBLISHED else None,
+            commit=False,
         )
+        if tags:
+            resolved_tags = await self._tag_service.resolve_tags(tags)
+            await self._tag_service.replace_content_tags(
+                content_id=post.content_id,
+                tag_ids=[tag.tag_id for tag in resolved_tags],
+                commit=False,
+            )
+        await self._repository.commit()
+        post = await self._repository.get_single(content_id=post.content_id, viewer_id=user.user_id)
+        if post is None:
+            raise PostNotFound("Created post is unavailable")
         post.is_owner = True
         return PostGet.model_validate(post)
 
@@ -101,6 +120,11 @@ class PostService:
             raise PostNotFound(f"Post with id {post_id!s} not found")
 
         payload = data.model_dump(exclude_none=True)
+        next_tags = (
+            self._tag_service.normalize_tags(payload["tags"])
+            if "tags" in payload
+            else None
+        )
         next_status = self._map_status(payload["status"]) if "status" in payload else post.status
         next_visibility = (
             self._map_visibility(payload["visibility"])
@@ -123,9 +147,19 @@ class PostService:
             visibility=next_visibility,
             updated_at=updated_at,
             published_at=published_at,
+            commit=False,
         )
-        updated_post.my_reaction = post.my_reaction
-        updated_post.is_owner = True
+        if next_tags is not None:
+            resolved_tags = await self._tag_service.resolve_tags(next_tags)
+            await self._tag_service.replace_content_tags(
+                content_id=post_id,
+                tag_ids=[tag.tag_id for tag in resolved_tags],
+                commit=False,
+            )
+        await self._repository.commit()
+        updated_post = await self._repository.get_single(content_id=post_id, viewer_id=user.user_id)
+        if updated_post is None:
+            raise PostNotFound(f"Post with id {post_id!s} not found")
         return PostGet.model_validate(updated_post)
 
     async def delete_post(

@@ -93,6 +93,12 @@
     color: #8a8a8a;
 }
 
+#create-post-form .post-save-error {
+    width: 100%;
+    color: #ff8f8f;
+    font-size: 0.9rem;
+}
+
 #create-post-form button {
     font-size: 1.2rem;
     margin: 0;

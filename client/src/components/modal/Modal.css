@@ -21,12 +21,13 @@
 .modal-content {
     padding: 1rem;
     border-radius: 1rem;
-    /* background-color: #242424; */
     background-color: #1f1f1f;
-    transform: scale(0.8);
-    transition: 0.1s;
+    opacity: 0;
+    margin-top: 1rem;
+    transition: opacity 0.1s, margin-top 0.1s;
 }
 
 .modal-content.active {
-    transform: scale(1);
+    opacity: 1;
+    margin-top: 0;
 }

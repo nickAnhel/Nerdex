@@ -13,6 +13,7 @@ import PostService from "../../service/PostService";
 import Modal from "../modal/Modal";
 import Loader from "../loader/Loader";
 import PostModal from "../post-modal/PostModal"
+import TagChip from "../tag-chip/TagChip";
 
 
 const PostListItem = forwardRef((props, ref) => {
@@ -165,6 +166,19 @@ const PostListItem = forwardRef((props, ref) => {
                 </ReactMarkdown>
             </div>
             {
+                post.tags?.length > 0 &&
+                <div className="post-tags">
+                    {
+                        post.tags.map((tag) => (
+                            <TagChip
+                                key={tag.tag_id || tag.slug}
+                                slug={tag.slug}
+                            />
+                        ))
+                    }
+                </div>
+            }
+            {
                 props.showDetailLink !== false &&
                 <button
                     type="button"
@@ -213,6 +227,7 @@ const PostListItem = forwardRef((props, ref) => {
                 content={post.content}
                 status={post.status}
                 visibility={post.visibility}
+                tags={post.tags}
                 onSaved={setPost}
                 savePostFunc={PostService.updatePost}
                 navigateTo={(savedPost) => buildPostQueryLocation(savedPost.post_id)}

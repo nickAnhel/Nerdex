@@ -7,6 +7,7 @@ from sqlalchemy import delete, desc, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+import src.tags.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel, ContentReactionModel
 from src.posts.enums import PostOrder, PostProfileFilter
@@ -28,6 +29,7 @@ class PostRepository:
         created_at: datetime.datetime,
         updated_at: datetime.datetime,
         published_at: datetime.datetime | None,
+        commit: bool = True,
     ) -> ContentModel:
         stmt = (
             insert(ContentModel)
@@ -51,7 +53,10 @@ class PostRepository:
                 body_text=body_text,
             )
         )
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         return await self.get_single(content_id=content_id)
 
     async def get_single(
@@ -171,6 +176,7 @@ class PostRepository:
         visibility: ContentVisibilityEnum,
         updated_at: datetime.datetime,
         published_at: datetime.datetime | None,
+        commit: bool = True,
     ) -> ContentModel:
         await self._session.execute(
             update(ContentModel)
@@ -187,8 +193,14 @@ class PostRepository:
             .where(PostDetailsModel.content_id == content_id)
             .values(body_text=body_text)
         )
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         return await self.get_single(content_id=content_id)
+
+    async def commit(self) -> None:
+        await self._session.commit()
 
     async def soft_delete_post(
         self,
@@ -312,6 +324,7 @@ class PostRepository:
                 .options(
                     selectinload(ContentModel.author),
                     selectinload(ContentModel.post_details),
+                    selectinload(ContentModel.tags),
                 )
             )
 
@@ -328,6 +341,7 @@ class PostRepository:
             .options(
                 selectinload(ContentModel.author),
                 selectinload(ContentModel.post_details),
+                selectinload(ContentModel.tags),
             )
         )
 

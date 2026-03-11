@@ -75,3 +75,12 @@ def test_subscriptions_query_binds_lowercase_content_enums() -> None:
     assert "post" in enum_values
     assert "published" in enum_values
     assert "public" in enum_values
+
+
+def test_post_query_preloads_tags_to_avoid_n_plus_one() -> None:
+    repository = PostRepository(session=None)  # type: ignore[arg-type]
+
+    stmt = repository._build_post_query(viewer_id=None)
+    option_paths = [str(option.path) for option in stmt._with_options]
+
+    assert any("ContentModel.tags" in path for path in option_paths)

@@ -10,6 +10,7 @@ from alembic import context
 from src.config import settings
 from src.common.models import Base
 from src.content.models import *
+from src.tags.models import *
 from src.users.models import *
 from src.posts.models import *
 from src.admin.models import *

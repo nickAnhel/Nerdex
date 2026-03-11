@@ -1,0 +1,33 @@
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid #434343;
+    background: rgba(157, 80, 255, 0.12);
+    color: #d9c0ff;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+.tag-chip-label {
+    white-space: nowrap;
+}
+
+.tag-chip-remove {
+    margin: 0;
+    padding: 0;
+    width: 1rem;
+    min-width: 1rem;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.tag-chip-remove:hover {
+    color: #ffffff;
+}
