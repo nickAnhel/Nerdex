@@ -10,6 +10,7 @@ from src.chats.sockets import socket_app as ws_app
 from src.users.router import router as users_router
 from src.auth.router import router as auth_router
 from src.posts.router import router as posts_router
+from src.comments.router import router as comments_router
 from src.tags.router import router as tags_router
 from src.chats.router import router as chats_router
 from src.messages.router import router as messages_router
@@ -40,6 +41,8 @@ from src.users.exceptions import (
 
 from src.posts.exc_handlers import post_not_found_handler
 from src.posts.exceptions import PostNotFound
+from src.comments.exc_handlers import comment_not_found_handler, invalid_comment_handler
+from src.comments.exceptions import CommentNotFound, InvalidComment
 from src.tags.exc_handlers import invalid_tag_handler
 from src.tags.exceptions import InvalidTag
 
@@ -81,6 +84,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(auth_router)
     app.include_router(users_router)
     app.include_router(posts_router)
+    app.include_router(comments_router)
     app.include_router(tags_router)
     app.include_router(chats_router)
     app.include_router(messages_router)
@@ -102,6 +106,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UserNotInSubscriptions, user_not_in_subscriptions_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
+    app.add_exception_handler(CommentNotFound, comment_not_found_handler)  # type: ignore
+    app.add_exception_handler(InvalidComment, invalid_comment_handler)  # type: ignore
     app.add_exception_handler(InvalidTag, invalid_tag_handler)  # type: ignore
 
     app.add_exception_handler(ChatNotFound, chat_not_found_handler)  # type: ignore

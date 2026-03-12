@@ -4,6 +4,7 @@ import datetime
 import uuid
 
 from src.common.exceptions import PermissionDenied
+from src.content.access import can_view_content
 from src.content.enums import ContentStatusEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.posts.enums import PostOrder, PostProfileFilter, PostWriteStatus, PostWriteVisibility
 from src.posts.exceptions import PostNotFound
@@ -310,13 +311,7 @@ class PostService:
         post,
         viewer_id: uuid.UUID | None,
     ) -> bool:
-        if post.status == ContentStatusEnum.DELETED or post.deleted_at is not None:
-            return False
-        if post.status == ContentStatusEnum.PUBLISHED and post.visibility == ContentVisibilityEnum.PUBLIC:
-            return True
-        if viewer_id is None or post.author_id != viewer_id:
-            return False
-        return post.status in {ContentStatusEnum.PUBLISHED, ContentStatusEnum.DRAFT}
+        return can_view_content(content=post, viewer_id=viewer_id)
 
     def _map_status(self, status: PostWriteStatus) -> ContentStatusEnum:
         return ContentStatusEnum(status.value)

@@ -14,6 +14,9 @@ import Modal from "../modal/Modal";
 import Loader from "../loader/Loader";
 import PostModal from "../post-modal/PostModal"
 import TagChip from "../tag-chip/TagChip";
+import CommentIcon from "../icons/CommentIcon";
+import DislikeIcon from "../icons/DislikeIcon";
+import LikeIcon from "../icons/LikeIcon";
 
 
 const PostListItem = forwardRef((props, ref) => {
@@ -178,16 +181,6 @@ const PostListItem = forwardRef((props, ref) => {
                     }
                 </div>
             }
-            {
-                props.showDetailLink !== false &&
-                <button
-                    type="button"
-                    className="open-post-link"
-                    onClick={() => navigate(buildPostQueryLocation(post.post_id))}
-                >
-                    Open post
-                </button>
-            }
             <div className="actions">
                 {
                     post.is_owner &&
@@ -206,18 +199,36 @@ const PostListItem = forwardRef((props, ref) => {
                 }
 
                 <button
+                    type="button"
+                    className={`comment-count-button ${props.showDetailLink === false ? "static" : ""}`}
+                    onClick={() => {
+                        if (props.showDetailLink !== false) {
+                            navigate(buildPostQueryLocation(post.post_id));
+                        }
+                    }}
+                >
+                    <span className="comment-count-icon" aria-hidden="true">
+                        <CommentIcon />
+                    </span>
+                    <span>{post.comments_count}</span>
+                </button>
+                <button
                     className={isLiked ? "active" : ""}
                     onClick={handleLike}
                     disabled={!canReact}
+                    aria-label={isLiked ? "Remove like" : "Like post"}
                 >
-                    🖒 {post.likes_count}
+                    <LikeIcon />
+                    <span>{post.likes_count}</span>
                 </button>
                 <button
                     className={isDisliked ? "active" : ""}
                     onClick={handleDislike}
                     disabled={!canReact}
+                    aria-label={isDisliked ? "Remove dislike" : "Dislike post"}
                 >
-                    🖓 {post.dislikes_count}
+                    <DislikeIcon />
+                    <span>{post.dislikes_count}</span>
                 </button>
             </div>
 

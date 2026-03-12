@@ -5,6 +5,7 @@
     flex-direction: column;
     gap: 1rem;
     overflow-y: auto;
+    padding-right: 0.25rem;
 }
 
 #post-details .loader-wrapper {
@@ -29,9 +30,15 @@
     color: #a8a8a8;
 }
 
+#post-details .post-details-comments {
+    border-top: 1px solid #2a2a2a;
+    padding-top: 1rem;
+}
+
 @media (max-width: 900px) {
     #post-details {
         width: 100%;
         max-height: calc(100vh - 2rem);
+        padding-right: 0;
     }
 }
