@@ -34,6 +34,7 @@ class PostGet(BaseSchema):
     updated_at: datetime.datetime
     published_at: datetime.datetime | None = None
     deleted_at: datetime.datetime | None = None
+    comments_count: int = Field(ge=0)
     likes_count: int = Field(ge=0)
     dislikes_count: int = Field(ge=0)
     user: UserGet

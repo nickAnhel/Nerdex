@@ -141,20 +141,6 @@
     font-family: 'Fira Code', monospace;
 }
 
-.post-list-item .open-post-link {
-    width: fit-content;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: #9d50ff;
-    cursor: pointer;
-}
-
-.post-list-item .open-post-link:hover {
-    color: #b978ff;
-}
-
 .post-list-item .post-tags {
     display: flex;
     flex-wrap: wrap;
@@ -180,6 +166,34 @@
     cursor: pointer;
     transition: all 0.2s ease;
     margin: 0;
+}
+
+.post-list-item .actions .comment-count-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.post-list-item .actions .comment-count-button .comment-count-icon {
+    width: 1rem;
+    height: 1rem;
+    display: inline-flex;
+}
+
+.post-list-item .actions .comment-count-button svg {
+    width: 1rem;
+    height: 1rem;
+    color: currentColor;
+}
+
+.post-list-item .actions .comment-count-button.static {
+    cursor: default;
+}
+
+.post-list-item .actions .comment-count-button.static:hover {
+    background-color: transparent;
+    color: #9d50ff;
 }
 
 .post-list-item .actions button.active {

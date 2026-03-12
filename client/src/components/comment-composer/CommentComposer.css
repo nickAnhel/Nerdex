@@ -1,0 +1,71 @@
+.comment-composer {
+    background: #171717;
+    border: 1px solid #2a2a2a;
+    border-radius: 0.9rem;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.comment-composer textarea {
+    width: 100%;
+    min-height: 2.5rem;
+    max-height: 13.75rem;
+    resize: none;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid #313131;
+    border-radius: 0.75rem;
+    background: #111111;
+    color: #f1f1f1;
+    line-height: 1.45;
+    box-sizing: border-box;
+}
+
+.comment-composer textarea:focus {
+    outline: none;
+    border-color: #9d50ff;
+}
+
+.comment-composer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.comment-composer-meta {
+    font-size: 0.8rem;
+    color: #969696;
+}
+
+.comment-composer-actions {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.comment-composer-actions button {
+    width: auto;
+    margin: 0;
+    min-width: 5.5rem;
+    padding: 0.55rem 0.9rem;
+}
+
+.comment-composer-actions button.secondary {
+    background: transparent;
+    border: 1px solid #4b4b4b;
+    color: #c9c9c9;
+}
+
+.comment-composer-actions button.secondary:hover {
+    background: transparent;
+    border-color: #747474;
+    color: #ffffff;
+}
+
+.comment-composer-error {
+    margin: 0;
+    color: #ff9ba7;
+    font-size: 0.85rem;
+}

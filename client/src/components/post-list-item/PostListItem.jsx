@@ -178,16 +178,6 @@ const PostListItem = forwardRef((props, ref) => {
                     }
                 </div>
             }
-            {
-                props.showDetailLink !== false &&
-                <button
-                    type="button"
-                    className="open-post-link"
-                    onClick={() => navigate(buildPostQueryLocation(post.post_id))}
-                >
-                    Open post
-                </button>
-            }
             <div className="actions">
                 {
                     post.is_owner &&
@@ -205,6 +195,27 @@ const PostListItem = forwardRef((props, ref) => {
                     </>
                 }
 
+                <button
+                    type="button"
+                    className={`comment-count-button ${props.showDetailLink === false ? "static" : ""}`}
+                    onClick={() => {
+                        if (props.showDetailLink !== false) {
+                            navigate(buildPostQueryLocation(post.post_id));
+                        }
+                    }}
+                >
+                    <span className="comment-count-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path
+                                d="M7 18.5H4.5C3.95 18.5 3.5 18.05 3.5 17.5V6.5C3.5 5.95 3.95 5.5 4.5 5.5H19.5C20.05 5.5 20.5 5.95 20.5 6.5V17.5C20.5 18.05 20.05 18.5 19.5 18.5H10.5L7 21V18.5Z"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinejoin="round"
+                            />
+                        </svg>
+                    </span>
+                    <span>{post.comments_count}</span>
+                </button>
                 <button
                     className={isLiked ? "active" : ""}
                     onClick={handleLike}

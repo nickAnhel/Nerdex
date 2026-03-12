@@ -82,6 +82,11 @@ class ContentModel(Base):
         passive_deletes=True,
         uselist=False,
     )
+    comments: Mapped[list["CommentModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     reactions: Mapped[list["ContentReactionModel"]] = relationship(
         back_populates="content",
         cascade="all, delete-orphan",

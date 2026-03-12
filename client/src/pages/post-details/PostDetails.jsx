@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import "./PostDetails.css";
 
 import Loader from "../../components/loader/Loader";
+import CommentSection from "../../components/comment-section/CommentSection";
 import Modal from "../../components/modal/Modal";
 import PostListItem from "../../components/post-list-item/PostListItem";
 import PostService from "../../service/PostService";
@@ -16,6 +17,19 @@ function PostDetails() {
     const [isLoading, setIsLoading] = useState(true);
     const [post, setPost] = useState(null);
     const [isUnavailable, setIsUnavailable] = useState(false);
+
+    const handleCommentsCountChange = (delta) => {
+        setPost((prevPost) => {
+            if (!prevPost) {
+                return prevPost;
+            }
+
+            return {
+                ...prevPost,
+                comments_count: Math.max(0, prevPost.comments_count + delta),
+            };
+        });
+    };
 
     const closePostDetails = () => {
         const nextSearchParams = new URLSearchParams(searchParams);
@@ -79,16 +93,21 @@ function PostDetails() {
     }
 
     return (
-        <Modal active={true} setActive={closePostDetails}>
-            <div id="post-details">
-                <PostListItem
-                    post={post}
-                    showDetailLink={false}
-                    onDelete={closePostDetails}
-                />
-            </div>
-        </Modal>
-    );
+            <Modal active={true} setActive={closePostDetails}>
+                <div id="post-details">
+                    <PostListItem
+                        post={post}
+                        showDetailLink={false}
+                        onDelete={closePostDetails}
+                    />
+                    <CommentSection
+                        contentId={post.post_id}
+                        isEnabled={post.status === "published"}
+                        onCommentsCountChange={handleCommentsCountChange}
+                    />
+                </div>
+            </Modal>
+        );
 }
 
 export default PostDetails;
