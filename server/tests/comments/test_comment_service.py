@@ -9,7 +9,7 @@ from src.comments.exceptions import CommentNotFound, InvalidComment
 from src.comments.repository import (
     CommentAuthorRow,
     CommentPageResult,
-    CommentParentRefRow,
+    CommentRefRow,
     CommentRatingRow,
     CommentState,
     CommentViewRow,
@@ -17,6 +17,7 @@ from src.comments.repository import (
 )
 from src.comments.schemas import CommentCreate, CommentUpdate
 from src.comments.service import CommentService
+from src.comments.threading import MAX_COMMENT_DEPTH
 from src.common.exceptions import PermissionDenied
 from src.content.enums import ContentStatusEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.users.schemas import UserGet
@@ -39,6 +40,7 @@ class FakeComment:
     author_id: uuid.UUID
     parent_comment_id: uuid.UUID | None
     root_comment_id: uuid.UUID | None
+    reply_to_comment_id: uuid.UUID | None
     depth: int
     body_text: str
     created_at: datetime.datetime
@@ -92,6 +94,7 @@ class FakeCommentRepository:
         author_id: uuid.UUID,
         parent_comment_id: uuid.UUID | None,
         root_comment_id: uuid.UUID | None,
+        reply_to_comment_id: uuid.UUID | None,
         depth: int,
         body_text: str,
         created_at: datetime.datetime,
@@ -104,6 +107,7 @@ class FakeCommentRepository:
             author_id=author_id,
             parent_comment_id=parent_comment_id,
             root_comment_id=root_comment_id,
+            reply_to_comment_id=reply_to_comment_id,
             depth=depth,
             body_text=body_text,
             created_at=created_at,
@@ -218,6 +222,7 @@ class FakeCommentRepository:
         self,
         *,
         parent_comment_id: uuid.UUID,
+        root_comment_id: uuid.UUID | None,
         viewer_id: uuid.UUID | None,
         offset: int,
         limit: int,
@@ -226,6 +231,7 @@ class FakeCommentRepository:
         comments = [
             comment for comment in self.comments.values()
             if comment.parent_comment_id == parent_comment_id
+            and (root_comment_id is None or comment.root_comment_id == root_comment_id)
             and self._is_visible(comment)
         ]
         comments.sort(key=lambda comment: comment.created_at)
@@ -333,20 +339,39 @@ class FakeCommentRepository:
         body_text: str,
         created_at: datetime.datetime,
         parent_comment_id: uuid.UUID | None = None,
+        root_comment_id: uuid.UUID | None = None,
+        reply_to_comment_id: uuid.UUID | None = None,
+        depth: int | None = None,
         deleted_at: datetime.datetime | None = None,
     ) -> FakeComment:
         parent_comment = self.comments.get(parent_comment_id) if parent_comment_id else None
+        resolved_depth = depth
+        resolved_root_comment_id = root_comment_id
+        resolved_reply_to_comment_id = reply_to_comment_id
+
+        if parent_comment is None:
+            if resolved_depth is None:
+                resolved_depth = 0
+        else:
+            if resolved_depth is None:
+                resolved_depth = min(parent_comment.depth + 1, MAX_COMMENT_DEPTH)
+            if resolved_root_comment_id is None:
+                resolved_root_comment_id = (
+                    parent_comment.comment_id
+                    if parent_comment.depth == 0
+                    else parent_comment.root_comment_id
+                )
+            if resolved_reply_to_comment_id is None:
+                resolved_reply_to_comment_id = parent_comment.comment_id
+
         comment = FakeComment(
             comment_id=uuid.uuid4(),
             content_id=content_id,
             author_id=author.user_id,
             parent_comment_id=parent_comment_id,
-            root_comment_id=(
-                None
-                if parent_comment is None
-                else (parent_comment.root_comment_id or parent_comment.comment_id)
-            ),
-            depth=0 if parent_comment is None else parent_comment.depth + 1,
+            root_comment_id=resolved_root_comment_id,
+            reply_to_comment_id=resolved_reply_to_comment_id,
+            depth=resolved_depth if resolved_depth is not None else 0,
             body_text=body_text,
             created_at=created_at,
             updated_at=created_at,
@@ -416,6 +441,7 @@ class FakeCommentRepository:
             author_id=comment.author_id,
             parent_comment_id=comment.parent_comment_id,
             root_comment_id=comment.root_comment_id,
+            reply_to_comment_id=comment.reply_to_comment_id,
             depth=comment.depth,
             body_text=comment.body_text,
             replies_count=comment.replies_count,
@@ -432,7 +458,7 @@ class FakeCommentRepository:
         comment: FakeComment,
         viewer_id: uuid.UUID | None,
     ) -> CommentViewRow:
-        parent_comment = self.comments.get(comment.parent_comment_id) if comment.parent_comment_id else None
+        reply_to_comment = self.comments.get(comment.reply_to_comment_id) if comment.reply_to_comment_id else None
         author = None
         if comment.deleted_at is None:
             user = self.users[comment.author_id]
@@ -442,14 +468,14 @@ class FakeCommentRepository:
             )
 
         reply_to_username = None
-        if parent_comment is not None and parent_comment.deleted_at is None:
-            reply_to_username = self.users[parent_comment.author_id].username
+        if reply_to_comment is not None and reply_to_comment.deleted_at is None:
+            reply_to_username = self.users[reply_to_comment.author_id].username
 
-        parent_comment_ref = None
-        if parent_comment is not None:
-            parent_comment_ref = CommentParentRefRow(
-                comment_id=parent_comment.comment_id,
-                is_deleted=parent_comment.deleted_at is not None,
+        reply_to_comment_ref = None
+        if reply_to_comment is not None:
+            reply_to_comment_ref = CommentRefRow(
+                comment_id=reply_to_comment.comment_id,
+                is_deleted=reply_to_comment.deleted_at is not None,
             )
 
         return CommentViewRow(
@@ -458,6 +484,7 @@ class FakeCommentRepository:
             author=author,
             parent_comment_id=comment.parent_comment_id,
             root_comment_id=comment.root_comment_id,
+            reply_to_comment_id=comment.reply_to_comment_id,
             depth=comment.depth,
             body_text=None if comment.deleted_at is not None else comment.body_text,
             created_at=comment.created_at,
@@ -469,8 +496,9 @@ class FakeCommentRepository:
             my_reaction=self.reactions.get((comment.comment_id, viewer_id)) if viewer_id else None,
             is_owner=viewer_id == comment.author_id,
             is_deleted=comment.deleted_at is not None,
+            reply_to_comment_depth=reply_to_comment.depth if reply_to_comment is not None else None,
             reply_to_username=reply_to_username,
-            parent_comment_ref=parent_comment_ref,
+            reply_to_comment_ref=reply_to_comment_ref,
         )
 
     def _is_visible(self, comment: FakeComment) -> bool:
@@ -544,15 +572,17 @@ async def test_create_root_comment_for_published_public_content_works(service_bu
     stored = service_bundle.repository.comments[comment.comment_id]
     assert comment.parent_comment_id is None
     assert comment.root_comment_id is None
+    assert comment.reply_to_comment_id is None
     assert comment.depth == 0
     assert stored.parent_comment_id is None
     assert stored.root_comment_id is None
+    assert stored.reply_to_comment_id is None
     assert stored.depth == 0
     assert service_bundle.repository.contents[content.content_id].comments_count == 1
 
 
 @pytest.mark.anyio
-async def test_create_reply_sets_parent_root_and_depth_correctly(service_bundle: ServiceBundle) -> None:
+async def test_reply_to_depth_zero_sets_parent_root_reply_to_and_depth(service_bundle: ServiceBundle) -> None:
     content = service_bundle.repository.seed_content(author=service_bundle.author)
     root_comment = service_bundle.repository.seed_comment(
         content_id=content.content_id,
@@ -570,39 +600,77 @@ async def test_create_reply_sets_parent_root_and_depth_correctly(service_bundle:
     stored = service_bundle.repository.comments[reply.comment_id]
     assert reply.parent_comment_id == root_comment.comment_id
     assert reply.root_comment_id == root_comment.comment_id
+    assert reply.reply_to_comment_id == root_comment.comment_id
     assert reply.depth == 1
     assert stored.parent_comment_id == root_comment.comment_id
     assert stored.root_comment_id == root_comment.comment_id
+    assert stored.reply_to_comment_id == root_comment.comment_id
     assert stored.depth == 1
 
 
 @pytest.mark.anyio
-async def test_deep_reply_is_allowed(service_bundle: ServiceBundle) -> None:
+async def test_reply_to_depth_one_sets_parent_root_reply_to_and_depth(service_bundle: ServiceBundle) -> None:
     content = service_bundle.repository.seed_content(author=service_bundle.author)
-    parent = service_bundle.repository.seed_comment(
+    root = service_bundle.repository.seed_comment(
         content_id=content.content_id,
         author=service_bundle.author,
-        body_text="depth0",
+        body_text="root",
         created_at=dt(0),
     )
-    for minute in range(1, 6):
-        parent = service_bundle.repository.seed_comment(
-            content_id=content.content_id,
-            author=service_bundle.author,
-            body_text=f"depth{minute}",
-            created_at=dt(minute),
-            parent_comment_id=parent.comment_id,
-        )
-
-    reply = await service_bundle.service.create_reply(
-        comment_id=parent.comment_id,
-        user=service_bundle.stranger,
-        data=CommentCreate(body_text="still valid"),
+    depth_one = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="depth1",
+        created_at=dt(1),
+        parent_comment_id=root.comment_id,
     )
 
-    assert reply.parent_comment_id == parent.comment_id
-    assert reply.root_comment_id is not None
-    assert reply.depth == parent.depth + 1
+    reply = await service_bundle.service.create_reply(
+        comment_id=depth_one.comment_id,
+        user=service_bundle.second_user,
+        data=CommentCreate(body_text="depth2"),
+    )
+
+    assert reply.parent_comment_id == depth_one.comment_id
+    assert reply.root_comment_id == root.comment_id
+    assert reply.reply_to_comment_id == depth_one.comment_id
+    assert reply.depth == 2
+
+
+@pytest.mark.anyio
+async def test_reply_to_depth_two_stays_in_same_display_group(service_bundle: ServiceBundle) -> None:
+    content = service_bundle.repository.seed_content(author=service_bundle.author)
+    root = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.author,
+        body_text="root",
+        created_at=dt(0),
+    )
+    depth_one = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="depth1",
+        created_at=dt(1),
+        parent_comment_id=root.comment_id,
+    )
+    depth_two = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.second_user,
+        body_text="depth2",
+        created_at=dt(2),
+        parent_comment_id=depth_one.comment_id,
+    )
+
+    reply = await service_bundle.service.create_reply(
+        comment_id=depth_two.comment_id,
+        user=service_bundle.author,
+        data=CommentCreate(body_text="same branch"),
+    )
+
+    assert reply.parent_comment_id == depth_one.comment_id
+    assert reply.root_comment_id == root.comment_id
+    assert reply.reply_to_comment_id == depth_two.comment_id
+    assert reply.depth == 2
 
 
 @pytest.mark.anyio
@@ -885,6 +953,82 @@ async def test_replies_are_sorted_by_created_at_asc(service_bundle: ServiceBundl
 
 
 @pytest.mark.anyio
+async def test_depth_two_replies_are_sorted_by_created_at_asc(service_bundle: ServiceBundle) -> None:
+    content = service_bundle.repository.seed_content(author=service_bundle.author)
+    root = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.author,
+        body_text="root",
+        created_at=dt(0),
+    )
+    depth_one = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="depth1",
+        created_at=dt(1),
+        parent_comment_id=root.comment_id,
+    )
+    first = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="later",
+        created_at=dt(3),
+        parent_comment_id=depth_one.comment_id,
+    )
+    second = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.second_user,
+        body_text="earlier",
+        created_at=dt(2),
+        parent_comment_id=depth_one.comment_id,
+    )
+
+    page = await service_bundle.service.get_replies(
+        comment_id=depth_one.comment_id,
+        offset=0,
+        limit=20,
+        user=service_bundle.author,
+    )
+
+    assert [item.comment_id for item in page.items] == [second.comment_id, first.comment_id]
+
+
+@pytest.mark.anyio
+async def test_get_replies_for_depth_two_comment_returns_empty_page(service_bundle: ServiceBundle) -> None:
+    content = service_bundle.repository.seed_content(author=service_bundle.author)
+    root = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.author,
+        body_text="root",
+        created_at=dt(0),
+    )
+    depth_one = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="depth1",
+        created_at=dt(1),
+        parent_comment_id=root.comment_id,
+    )
+    depth_two = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.second_user,
+        body_text="depth2",
+        created_at=dt(2),
+        parent_comment_id=depth_one.comment_id,
+    )
+
+    page = await service_bundle.service.get_replies(
+        comment_id=depth_two.comment_id,
+        offset=0,
+        limit=20,
+        user=service_bundle.author,
+    )
+
+    assert page.items == []
+    assert page.has_more is False
+
+
+@pytest.mark.anyio
 async def test_replies_count_updates_correctly(service_bundle: ServiceBundle) -> None:
     content = service_bundle.repository.seed_content(author=service_bundle.author)
     root = service_bundle.repository.seed_comment(
@@ -906,6 +1050,41 @@ async def test_replies_count_updates_correctly(service_bundle: ServiceBundle) ->
         user=service_bundle.stranger,
     )
     assert service_bundle.repository.comments[root.comment_id].replies_count == 0
+
+
+@pytest.mark.anyio
+async def test_depth_two_reply_increments_display_parent_replies_count(service_bundle: ServiceBundle) -> None:
+    content = service_bundle.repository.seed_content(author=service_bundle.author)
+    root = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.author,
+        body_text="root",
+        created_at=dt(0),
+    )
+    depth_one = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="depth1",
+        created_at=dt(1),
+        parent_comment_id=root.comment_id,
+    )
+    depth_two = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.second_user,
+        body_text="depth2",
+        created_at=dt(2),
+        parent_comment_id=depth_one.comment_id,
+    )
+
+    reply = await service_bundle.service.create_reply(
+        comment_id=depth_two.comment_id,
+        user=service_bundle.author,
+        data=CommentCreate(body_text="second depth2"),
+    )
+
+    assert service_bundle.repository.comments[depth_one.comment_id].replies_count == 2
+    assert service_bundle.repository.comments[depth_two.comment_id].replies_count == 0
+    assert service_bundle.repository.comments[reply.comment_id].replies_count == 0
 
 
 @pytest.mark.anyio
@@ -1170,6 +1349,55 @@ async def test_get_replies_returns_my_reaction_correctly(service_bundle: Service
     )
 
     assert page.items[0].my_reaction == ReactionTypeEnum.DISLIKE
+
+
+@pytest.mark.anyio
+async def test_depth_two_reply_returns_reply_to_metadata(service_bundle: ServiceBundle) -> None:
+    content = service_bundle.repository.seed_content(author=service_bundle.author)
+    root = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.author,
+        body_text="root",
+        created_at=dt(0),
+    )
+    depth_one = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.stranger,
+        body_text="depth1",
+        created_at=dt(1),
+        parent_comment_id=root.comment_id,
+    )
+    depth_two = service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.second_user,
+        body_text="depth2",
+        created_at=dt(2),
+        parent_comment_id=depth_one.comment_id,
+    )
+    service_bundle.repository.seed_comment(
+        content_id=content.content_id,
+        author=service_bundle.author,
+        body_text="reply to depth2",
+        created_at=dt(3),
+        parent_comment_id=depth_one.comment_id,
+        root_comment_id=root.comment_id,
+        reply_to_comment_id=depth_two.comment_id,
+        depth=2,
+    )
+
+    page = await service_bundle.service.get_replies(
+        comment_id=depth_one.comment_id,
+        offset=0,
+        limit=20,
+        user=service_bundle.author,
+    )
+
+    reply = page.items[-1]
+    assert reply.reply_to_comment_id == depth_two.comment_id
+    assert reply.reply_to_comment_depth == 2
+    assert reply.reply_to_username == service_bundle.second_user.username
+    assert reply.reply_to_comment_ref is not None
+    assert reply.reply_to_comment_ref.comment_id == depth_two.comment_id
 
 
 @pytest.mark.anyio

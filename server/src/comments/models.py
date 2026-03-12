@@ -17,7 +17,7 @@ def _enum_values(enum_cls):  # type: ignore[no-untyped-def]
 class CommentModel(Base):
     __tablename__ = "comments"
     __table_args__ = (
-        CheckConstraint("depth >= 0", name="ck_comments_depth_non_negative"),
+        CheckConstraint("depth BETWEEN 0 AND 2", name="ck_comments_depth_range"),
         CheckConstraint(
             "char_length(body_text) <= 2048",
             name="ck_comments_body_text_max_length",
@@ -49,6 +49,10 @@ class CommentModel(Base):
         nullable=True,
     )
     root_comment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("comments.comment_id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    reply_to_comment_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("comments.comment_id", ondelete="CASCADE"),
         nullable=True,
     )
@@ -89,6 +93,16 @@ class CommentModel(Base):
     replies: Mapped[list["CommentModel"]] = relationship(
         back_populates="parent_comment",
         foreign_keys="CommentModel.parent_comment_id",
+        passive_deletes=True,
+    )
+    root_comment: Mapped["CommentModel | None"] = relationship(
+        foreign_keys=[root_comment_id],
+        remote_side=lambda: [CommentModel.comment_id],
+        passive_deletes=True,
+    )
+    reply_to_comment: Mapped["CommentModel | None"] = relationship(
+        foreign_keys=[reply_to_comment_id],
+        remote_side=lambda: [CommentModel.comment_id],
         passive_deletes=True,
     )
     reactions: Mapped[list["CommentReactionModel"]] = relationship(

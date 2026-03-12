@@ -30,6 +30,7 @@ class CommentState:
     author_id: uuid.UUID
     parent_comment_id: uuid.UUID | None
     root_comment_id: uuid.UUID | None
+    reply_to_comment_id: uuid.UUID | None
     depth: int
     body_text: str
     replies_count: int
@@ -47,7 +48,7 @@ class CommentAuthorRow:
 
 
 @dataclass(slots=True)
-class CommentParentRefRow:
+class CommentRefRow:
     comment_id: uuid.UUID
     is_deleted: bool
 
@@ -59,6 +60,7 @@ class CommentViewRow:
     author: CommentAuthorRow | None
     parent_comment_id: uuid.UUID | None
     root_comment_id: uuid.UUID | None
+    reply_to_comment_id: uuid.UUID | None
     depth: int
     body_text: str | None
     created_at: datetime.datetime
@@ -70,8 +72,9 @@ class CommentViewRow:
     my_reaction: ReactionTypeEnum | None
     is_owner: bool
     is_deleted: bool
+    reply_to_comment_depth: int | None
     reply_to_username: str | None
-    parent_comment_ref: CommentParentRefRow | None
+    reply_to_comment_ref: CommentRefRow | None
 
 
 @dataclass(slots=True)
@@ -132,6 +135,7 @@ class CommentRepository:
                 CommentModel.author_id,
                 CommentModel.parent_comment_id,
                 CommentModel.root_comment_id,
+                CommentModel.reply_to_comment_id,
                 CommentModel.depth,
                 CommentModel.body_text,
                 CommentModel.replies_count,
@@ -152,6 +156,7 @@ class CommentRepository:
             author_id=row.author_id,
             parent_comment_id=row.parent_comment_id,
             root_comment_id=row.root_comment_id,
+            reply_to_comment_id=row.reply_to_comment_id,
             depth=row.depth,
             body_text=row.body_text,
             replies_count=row.replies_count,
@@ -169,6 +174,7 @@ class CommentRepository:
         author_id: uuid.UUID,
         parent_comment_id: uuid.UUID | None,
         root_comment_id: uuid.UUID | None,
+        reply_to_comment_id: uuid.UUID | None,
         depth: int,
         body_text: str,
         created_at: datetime.datetime,
@@ -184,6 +190,7 @@ class CommentRepository:
                 author_id=author_id,
                 parent_comment_id=parent_comment_id,
                 root_comment_id=root_comment_id,
+                reply_to_comment_id=reply_to_comment_id,
                 depth=depth,
                 body_text=body_text,
                 created_at=created_at,
@@ -350,16 +357,20 @@ class CommentRepository:
         self,
         *,
         parent_comment_id: uuid.UUID,
+        root_comment_id: uuid.UUID | None,
         viewer_id: uuid.UUID | None,
         offset: int,
         limit: int,
     ) -> CommentPageResult:
+        where_clause = [CommentModel.parent_comment_id == parent_comment_id]
+        if root_comment_id is not None:
+            where_clause.append(CommentModel.root_comment_id == root_comment_id)
         return await self._list_comments(
             viewer_id=viewer_id,
             offset=offset,
             limit=limit,
             order_by=CommentModel.created_at.asc(),
-            where_clause=(CommentModel.parent_comment_id == parent_comment_id,),
+            where_clause=tuple(where_clause),
         )
 
     async def get_comment_rating(
@@ -502,8 +513,8 @@ class CommentRepository:
         viewer_id: uuid.UUID | None,
     ):
         comment_author = aliased(UserModel)
-        parent_comment = aliased(CommentModel)
-        parent_author = aliased(UserModel)
+        reply_to_comment = aliased(CommentModel)
+        reply_to_author = aliased(UserModel)
         reaction_subquery = self._reaction_subquery(viewer_id=viewer_id)
         my_reaction_column = (
             reaction_subquery.c.reaction_type if reaction_subquery is not None else literal(None)
@@ -515,6 +526,7 @@ class CommentRepository:
                 CommentModel.content_id,
                 CommentModel.parent_comment_id,
                 CommentModel.root_comment_id,
+                CommentModel.reply_to_comment_id,
                 CommentModel.depth,
                 CommentModel.body_text,
                 CommentModel.created_at,
@@ -526,14 +538,15 @@ class CommentRepository:
                 CommentModel.author_id.label("author_id"),
                 comment_author.username.label("author_username"),
                 my_reaction_column.label("my_reaction"),
-                parent_comment.comment_id.label("parent_ref_comment_id"),
-                parent_comment.deleted_at.label("parent_deleted_at"),
-                parent_author.username.label("reply_to_username"),
+                reply_to_comment.comment_id.label("reply_to_ref_comment_id"),
+                reply_to_comment.deleted_at.label("reply_to_deleted_at"),
+                reply_to_comment.depth.label("reply_to_comment_depth"),
+                reply_to_author.username.label("reply_to_username"),
             )
             .select_from(CommentModel)
             .outerjoin(comment_author, comment_author.user_id == CommentModel.author_id)
-            .outerjoin(parent_comment, parent_comment.comment_id == CommentModel.parent_comment_id)
-            .outerjoin(parent_author, parent_author.user_id == parent_comment.author_id)
+            .outerjoin(reply_to_comment, reply_to_comment.comment_id == CommentModel.reply_to_comment_id)
+            .outerjoin(reply_to_author, reply_to_author.user_id == reply_to_comment.author_id)
         )
         if reaction_subquery is not None:
             stmt = stmt.outerjoin(
@@ -557,15 +570,15 @@ class CommentRepository:
                 username=row.author_username,
             )
 
-        parent_comment_ref = None
-        if row.parent_ref_comment_id is not None:
-            parent_comment_ref = CommentParentRefRow(
-                comment_id=row.parent_ref_comment_id,
-                is_deleted=row.parent_deleted_at is not None,
+        reply_to_comment_ref = None
+        if row.reply_to_ref_comment_id is not None:
+            reply_to_comment_ref = CommentRefRow(
+                comment_id=row.reply_to_ref_comment_id,
+                is_deleted=row.reply_to_deleted_at is not None,
             )
 
         reply_to_username = None
-        if row.parent_ref_comment_id is not None and row.parent_deleted_at is None:
+        if row.reply_to_ref_comment_id is not None and row.reply_to_deleted_at is None:
             reply_to_username = row.reply_to_username
 
         return CommentViewRow(
@@ -574,6 +587,7 @@ class CommentRepository:
             author=author,
             parent_comment_id=row.parent_comment_id,
             root_comment_id=row.root_comment_id,
+            reply_to_comment_id=row.reply_to_comment_id,
             depth=row.depth,
             body_text=None if is_deleted else row.body_text,
             created_at=row.created_at,
@@ -585,8 +599,9 @@ class CommentRepository:
             my_reaction=row.my_reaction,
             is_owner=viewer_id is not None and row.author_id == viewer_id,
             is_deleted=is_deleted,
+            reply_to_comment_depth=row.reply_to_comment_depth,
             reply_to_username=reply_to_username,
-            parent_comment_ref=parent_comment_ref,
+            reply_to_comment_ref=reply_to_comment_ref,
         )
 
     def _visible_comment_clause(self):

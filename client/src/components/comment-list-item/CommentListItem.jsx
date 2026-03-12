@@ -7,11 +7,18 @@ import { StoreContext } from "../..";
 import CommentService from "../../service/CommentService";
 import CommentActionMenu from "../comment-action-menu/CommentActionMenu";
 import CommentComposer from "../comment-composer/CommentComposer";
+import DislikeIcon from "../icons/DislikeIcon";
+import LikeIcon from "../icons/LikeIcon";
+import ReplyIcon from "../icons/ReplyIcon";
 import CommentReplies from "../comment-replies/CommentReplies";
 import Modal from "../modal/Modal";
 
 
 const REPLIES_PAGE_SIZE = 10;
+
+function buildCommentAuthorPhotoSrc(userId) {
+    return `${process.env.REACT_APP_STORAGE_URL}PPs@${userId}?${performance.now()}`;
+}
 
 
 function CommentListItem({
@@ -19,10 +26,14 @@ function CommentListItem({
     onCommentsCountChange,
     onCommentChange,
     onCommentRemove,
+    onReplyCreated,
 }) {
     const { store } = useContext(StoreContext);
 
     const [comment, setComment] = useState(initialComment);
+    const [authorPhotoSrc, setAuthorPhotoSrc] = useState(
+        initialComment.author ? buildCommentAuthorPhotoSrc(initialComment.author.user_id) : ""
+    );
     const [isEditing, setIsEditing] = useState(false);
     const [isReplying, setIsReplying] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -39,6 +50,15 @@ function CommentListItem({
         setComment(initialComment);
     }, [initialComment]);
 
+    useEffect(() => {
+        if (!initialComment.author) {
+            setAuthorPhotoSrc("");
+            return;
+        }
+
+        setAuthorPhotoSrc(buildCommentAuthorPhotoSrc(initialComment.author.user_id));
+    }, [initialComment]);
+
     const visualDepthClassName = (() => {
         if (comment.depth <= 0) {
             return "depth-0";
@@ -52,6 +72,11 @@ function CommentListItem({
     const canReact = store.isAuthenticated && !comment.is_deleted;
     const canReply = store.isAuthenticated && !comment.is_deleted;
     const isEdited = new Date(comment.updated_at).getTime() > new Date(comment.created_at).getTime();
+    const shouldShowReplyContext = (
+        comment.depth === 2 &&
+        comment.reply_to_comment_depth === 2 &&
+        comment.reply_to_comment_ref
+    );
 
     const updateCurrentComment = (nextCommentOrUpdater) => {
         setComment((prevComment) => {
@@ -151,6 +176,23 @@ function CommentListItem({
         }
     };
 
+    const insertDisplayReply = async (createdReply) => {
+        updateCurrentComment((prevComment) => ({
+            ...prevComment,
+            replies_count: prevComment.replies_count + 1,
+        }));
+        setIsRepliesOpen(true);
+
+        if (repliesLoaded) {
+            setReplies((prevReplies) => [...prevReplies, createdReply]);
+            setRepliesOffset((prevOffset) => prevOffset + 1);
+            return;
+        }
+
+        await loadReplies({ reset: true });
+        setRepliesLoaded(true);
+    };
+
     const handleReplySubmit = async (bodyText) => {
         setIsBusy(true);
         setError("");
@@ -161,22 +203,13 @@ function CommentListItem({
             });
             const createdReply = res.data;
 
-            updateCurrentComment((prevComment) => ({
-                ...prevComment,
-                replies_count: prevComment.replies_count + 1,
-            }));
             onCommentsCountChange?.(1);
             setIsReplying(false);
 
-            if (isRepliesOpen || comment.replies_count === 0) {
-                setIsRepliesOpen(true);
-                if (repliesLoaded) {
-                    setReplies((prevReplies) => [...prevReplies, createdReply]);
-                    setRepliesOffset((prevOffset) => prevOffset + 1);
-                } else {
-                    await loadReplies({ reset: true });
-                }
-                setRepliesLoaded(true);
+            if (createdReply.parent_comment_id === comment.comment_id) {
+                await insertDisplayReply(createdReply);
+            } else {
+                onReplyCreated?.(createdReply);
             }
         } catch (saveError) {
             setError(saveError?.response?.data?.detail || "Failed to create reply.");
@@ -244,17 +277,32 @@ function CommentListItem({
         });
     };
 
-    const jumpToParentComment = () => {
-        if (!comment.parent_comment_ref) {
+    const handleNestedReplyCreated = async (createdReply) => {
+        if (createdReply.parent_comment_id === comment.comment_id) {
+            await insertDisplayReply(createdReply);
             return;
         }
 
-        const parentElement = document.getElementById(`comment-${comment.parent_comment_ref.comment_id}`);
+        onReplyCreated?.(createdReply);
+    };
+
+    const jumpToReplyTarget = () => {
+        if (!comment.reply_to_comment_ref) {
+            return;
+        }
+
+        const parentElement = document.getElementById(`comment-${comment.reply_to_comment_ref.comment_id}`);
         if (parentElement) {
+            parentElement.classList.remove("reply-target-highlight");
+            void parentElement.offsetWidth;
+            parentElement.classList.add("reply-target-highlight");
             parentElement.scrollIntoView({
                 behavior: "smooth",
                 block: "center",
             });
+            window.setTimeout(() => {
+                parentElement.classList.remove("reply-target-highlight");
+            }, 1000);
         }
     };
 
@@ -273,7 +321,12 @@ function CommentListItem({
                                     : (
                                         <>
                                             <Link to={`/people/@${comment.author.username}`} className="comment-author">
-                                                @{comment.author.username}
+                                                <img
+                                                    src={authorPhotoSrc}
+                                                    onError={() => { setAuthorPhotoSrc("../../../assets/profile.svg"); }}
+                                                    alt={`${comment.author.username} avatar`}
+                                                />
+                                                {comment.author.username}
                                             </Link>
                                             <span className="comment-date">
                                                 {new Date(comment.created_at).toLocaleString()}
@@ -298,22 +351,25 @@ function CommentListItem({
                     </header>
 
                     {
-                        comment.depth >= 3 && comment.parent_comment_ref &&
+                        shouldShowReplyContext &&
                         <div className="comment-parent-line">
-                            <span>
-                                {
-                                    comment.reply_to_username
-                                        ? `Reply to @${comment.reply_to_username}`
-                                        : "Reply to deleted comment"
-                                }
-                            </span>
-                            <button
-                                type="button"
-                                className="comment-parent-link"
-                                onClick={jumpToParentComment}
-                            >
-                                View parent
-                            </button>
+                            {
+                                comment.reply_to_username
+                                    ? (
+                                        <button
+                                            type="button"
+                                            className="comment-parent-link"
+                                            onClick={jumpToReplyTarget}
+                                        >
+                                            {`Reply to @${comment.reply_to_username}`}
+                                        </button>
+                                    )
+                                    : (
+                                        <span className="comment-parent-text">
+                                            Reply to deleted comment
+                                        </span>
+                                    )
+                            }
                         </div>
                     }
 
@@ -344,29 +400,34 @@ function CommentListItem({
                             <div className="comment-reaction-group">
                                 <button
                                     type="button"
-                                    className={comment.my_reaction === "like" ? "active" : ""}
+                                    className={`comment-action-button like ${comment.my_reaction === "like" ? "active" : ""}`}
                                     onClick={() => { void handleLike(); }}
                                     disabled={!canReact}
+                                    aria-label={comment.my_reaction === "like" ? "Remove like" : "Like comment"}
                                 >
-                                    Like {comment.likes_count}
+                                    <LikeIcon />
+                                    <span className="comment-action-count">{comment.likes_count}</span>
                                 </button>
                                 <button
                                     type="button"
-                                    className={comment.my_reaction === "dislike" ? "active" : ""}
+                                    className={`comment-action-button dislike ${comment.my_reaction === "dislike" ? "active" : ""}`}
                                     onClick={() => { void handleDislike(); }}
                                     disabled={!canReact}
+                                    aria-label={comment.my_reaction === "dislike" ? "Remove dislike" : "Dislike comment"}
                                 >
-                                    Dislike {comment.dislikes_count}
+                                    <DislikeIcon />
+                                    <span className="comment-action-count">{comment.dislikes_count}</span>
                                 </button>
                             </div>
                             {
                                 canReply &&
                                 <button
                                     type="button"
-                                    className="comment-reply-trigger"
+                                    className={`comment-action-button reply ${isReplying ? "active" : ""}`}
                                     onClick={() => setIsReplying((prev) => !prev)}
+                                    aria-label={isReplying ? "Cancel reply" : "Reply to comment"}
                                 >
-                                    Reply
+                                    <ReplyIcon />
                                 </button>
                             }
                         </div>
@@ -408,6 +469,7 @@ function CommentListItem({
                     onCommentsCountChange={onCommentsCountChange}
                     onCommentChange={handleNestedCommentChange}
                     onCommentRemove={handleNestedCommentRemove}
+                    onReplyCreated={(createdReply) => { void handleNestedReplyCreated(createdReply); }}
                 />
             </article>
 

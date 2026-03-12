@@ -13,6 +13,7 @@ function CommentReplies({
     onCommentsCountChange,
     onCommentChange,
     onCommentRemove,
+    onReplyCreated,
 }) {
     if (comment.replies_count === 0) {
         return null;
@@ -45,6 +46,7 @@ function CommentReplies({
                                 onCommentsCountChange={onCommentsCountChange}
                                 onCommentChange={onCommentChange}
                                 onCommentRemove={onCommentRemove}
+                                onReplyCreated={onReplyCreated}
                             />
                             {
                                 hasMoreReplies &&

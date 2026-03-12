@@ -30,6 +30,11 @@
     color: #a8a8a8;
 }
 
+#post-details .post-details-comments {
+    border-top: 1px solid #2a2a2a;
+    padding-top: 1rem;
+}
+
 @media (max-width: 900px) {
     #post-details {
         width: 100%;

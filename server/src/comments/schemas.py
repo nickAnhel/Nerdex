@@ -19,7 +19,7 @@ class CommentAuthorGet(BaseSchema):
     username: Username
 
 
-class CommentParentRefGet(BaseSchema):
+class CommentRefGet(BaseSchema):
     comment_id: uuid.UUID
     is_deleted: bool
 
@@ -38,7 +38,8 @@ class CommentGet(BaseSchema):
     author: CommentAuthorGet | None = None
     parent_comment_id: uuid.UUID | None = None
     root_comment_id: uuid.UUID | None = None
-    depth: int = Field(ge=0)
+    reply_to_comment_id: uuid.UUID | None = None
+    depth: int = Field(ge=0, le=2)
     body_text: str | None = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
@@ -49,8 +50,9 @@ class CommentGet(BaseSchema):
     my_reaction: ReactionTypeEnum | None = None
     is_owner: bool
     is_deleted: bool
+    reply_to_comment_depth: int | None = Field(default=None, ge=0, le=2)
     reply_to_username: str | None = None
-    parent_comment_ref: CommentParentRefGet | None = None
+    reply_to_comment_ref: CommentRefGet | None = None
 
 
 class CommentReactionGet(BaseSchema):

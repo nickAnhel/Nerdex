@@ -14,6 +14,12 @@ from src.comments.schemas import (
     CommentsPageGet,
     RepliesPageGet,
 )
+from src.comments.threading import (
+    CommentThreadNode,
+    MAX_COMMENT_DEPTH,
+    build_reply_placement,
+    build_root_comment_placement,
+)
 from src.common.exceptions import PermissionDenied
 from src.content.access import can_access_comments, can_view_content
 from src.content.enums import ReactionTypeEnum
@@ -53,13 +59,15 @@ class CommentService:
         await self._get_commentable_content(content_id=content_id, viewer_id=user.user_id)
         body_text = self._normalize_body_text(data.body_text)
         now = self._now()
+        placement = build_root_comment_placement()
 
         comment = await self._repository.create_comment(
             content_id=content_id,
             author_id=user.user_id,
-            parent_comment_id=None,
-            root_comment_id=None,
-            depth=0,
+            parent_comment_id=placement.parent_comment_id,
+            root_comment_id=placement.root_comment_id,
+            reply_to_comment_id=placement.reply_to_comment_id,
+            depth=placement.depth,
             body_text=body_text,
             created_at=now,
             updated_at=now,
@@ -86,9 +94,21 @@ class CommentService:
             content_id=parent_comment.content_id,
             viewer_id=viewer_id,
         )
+        if parent_comment.depth == MAX_COMMENT_DEPTH:
+            return RepliesPageGet(
+                items=[],
+                offset=offset,
+                limit=limit,
+                has_more=False,
+            )
 
         page = await self._repository.list_replies(
             parent_comment_id=comment_id,
+            root_comment_id=(
+                comment_id
+                if parent_comment.depth == 0
+                else parent_comment.root_comment_id
+            ),
             viewer_id=viewer_id,
             offset=offset,
             limit=limit,
@@ -117,13 +137,25 @@ class CommentService:
         )
         body_text = self._normalize_body_text(data.body_text)
         now = self._now()
+        try:
+            placement = build_reply_placement(
+                CommentThreadNode(
+                    comment_id=parent_comment.comment_id,
+                    parent_comment_id=parent_comment.parent_comment_id,
+                    root_comment_id=parent_comment.root_comment_id,
+                    depth=parent_comment.depth,
+                )
+            )
+        except ValueError as exc:
+            raise InvalidComment(str(exc)) from exc
 
         comment = await self._repository.create_comment(
             content_id=parent_comment.content_id,
             author_id=user.user_id,
-            parent_comment_id=parent_comment.comment_id,
-            root_comment_id=parent_comment.root_comment_id or parent_comment.comment_id,
-            depth=parent_comment.depth + 1,
+            parent_comment_id=placement.parent_comment_id,
+            root_comment_id=placement.root_comment_id,
+            reply_to_comment_id=placement.reply_to_comment_id,
+            depth=placement.depth,
             body_text=body_text,
             created_at=now,
             updated_at=now,

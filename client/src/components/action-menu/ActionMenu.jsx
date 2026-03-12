@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import "./ActionMenu.css";
 
+import OptionsIcon from "../icons/OptionsIcon";
+
 
 function ActionMenu({ actions }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -34,7 +36,7 @@ function ActionMenu({ actions }) {
                 aria-expanded={isOpen}
                 aria-label="Open actions"
             >
-                <img src="/assets/options.svg" alt="" />
+                <OptionsIcon />
             </button>
             {
                 isOpen &&

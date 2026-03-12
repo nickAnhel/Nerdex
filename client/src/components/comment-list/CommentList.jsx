@@ -1,3 +1,5 @@
+import "./CommentList.css";
+
 import CommentListItem from "../comment-list-item/CommentListItem";
 
 
@@ -6,6 +8,7 @@ function CommentList({
     onCommentsCountChange,
     onCommentChange,
     onCommentRemove,
+    onReplyCreated,
 }) {
     return (
         <div className="comment-list">
@@ -17,6 +20,7 @@ function CommentList({
                         onCommentsCountChange={onCommentsCountChange}
                         onCommentChange={onCommentChange}
                         onCommentRemove={onCommentRemove}
+                        onReplyCreated={onReplyCreated}
                     />
                 ))
             }

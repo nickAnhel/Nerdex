@@ -100,11 +100,13 @@ function PostDetails() {
                         showDetailLink={false}
                         onDelete={closePostDetails}
                     />
-                    <CommentSection
-                        contentId={post.post_id}
-                        isEnabled={post.status === "published"}
-                        onCommentsCountChange={handleCommentsCountChange}
-                    />
+                    <div className="post-details-comments">
+                        <CommentSection
+                            contentId={post.post_id}
+                            isEnabled={post.status === "published"}
+                            onCommentsCountChange={handleCommentsCountChange}
+                        />
+                    </div>
                 </div>
             </Modal>
         );

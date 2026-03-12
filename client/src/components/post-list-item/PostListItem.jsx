@@ -14,6 +14,9 @@ import Modal from "../modal/Modal";
 import Loader from "../loader/Loader";
 import PostModal from "../post-modal/PostModal"
 import TagChip from "../tag-chip/TagChip";
+import CommentIcon from "../icons/CommentIcon";
+import DislikeIcon from "../icons/DislikeIcon";
+import LikeIcon from "../icons/LikeIcon";
 
 
 const PostListItem = forwardRef((props, ref) => {
@@ -205,14 +208,7 @@ const PostListItem = forwardRef((props, ref) => {
                     }}
                 >
                     <span className="comment-count-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path
-                                d="M7 18.5H4.5C3.95 18.5 3.5 18.05 3.5 17.5V6.5C3.5 5.95 3.95 5.5 4.5 5.5H19.5C20.05 5.5 20.5 5.95 20.5 6.5V17.5C20.5 18.05 20.05 18.5 19.5 18.5H10.5L7 21V18.5Z"
-                                stroke="currentColor"
-                                strokeWidth="1.6"
-                                strokeLinejoin="round"
-                            />
-                        </svg>
+                        <CommentIcon />
                     </span>
                     <span>{post.comments_count}</span>
                 </button>
@@ -220,15 +216,19 @@ const PostListItem = forwardRef((props, ref) => {
                     className={isLiked ? "active" : ""}
                     onClick={handleLike}
                     disabled={!canReact}
+                    aria-label={isLiked ? "Remove like" : "Like post"}
                 >
-                    🖒 {post.likes_count}
+                    <LikeIcon />
+                    <span>{post.likes_count}</span>
                 </button>
                 <button
                     className={isDisliked ? "active" : ""}
                     onClick={handleDislike}
                     disabled={!canReact}
+                    aria-label={isDisliked ? "Remove dislike" : "Dislike post"}
                 >
-                    🖓 {post.dislikes_count}
+                    <DislikeIcon />
+                    <span>{post.dislikes_count}</span>
                 </button>
             </div>
 

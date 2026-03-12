@@ -124,7 +124,6 @@ function CommentSection({ contentId, isEnabled, onCommentsCountChange }) {
         <section className="comment-section">
             <div className="comment-section-header">
                 <h3>Comments</h3>
-                <p>Compact text comments now, replaceable editor later.</p>
             </div>
 
             {
