@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from aiobotocore.session import get_session
+from botocore.config import Config
 
 from src.config import settings
 
@@ -11,12 +12,21 @@ class S3Client:
         access_key: str,
         secret_key: str,
         bucket_name: str,
-        storage_url: str,
+        endpoint_url: str,
+        region: str,
+        use_ssl: bool,
+        addressing_style: str,
     ) -> None:
         self._config = {
             "aws_access_key_id": access_key,
             "aws_secret_access_key": secret_key,
-            "endpoint_url": storage_url,
+            "endpoint_url": endpoint_url,
+            "region_name": region,
+            "use_ssl": use_ssl,
+            "config": Config(
+                signature_version="s3v4",
+                s3={"addressing_style": addressing_style},
+            ),
         }
         self._bucket_name = bucket_name
         self._session = get_session()
@@ -54,6 +64,9 @@ class S3Client:
 s3_client = S3Client(
     access_key=settings.storage.access_key,
     secret_key=settings.storage.secret_key,
-    bucket_name=settings.storage.bucket_name,
-    storage_url=settings.storage.bucket_url,
+    bucket_name=settings.storage.private_bucket,
+    endpoint_url=settings.storage.endpoint_url,
+    region=settings.storage.region,
+    use_ssl=settings.storage.use_ssl,
+    addressing_style=settings.storage.addressing_style,
 )
