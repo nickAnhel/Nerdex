@@ -105,6 +105,11 @@ class ContentModel(Base):
         order_by="TagModel.slug",
         overlaps="content_tags,tag,content",
     )
+    asset_links: Mapped[list["ContentAssetModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     @property
     def post_id(self) -> uuid.UUID:

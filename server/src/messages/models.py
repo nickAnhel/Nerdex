@@ -22,6 +22,11 @@ class MessageModel(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
     user: Mapped["UserModel"] = relationship(back_populates="messages")
+    asset_links: Mapped[list["MessageAssetModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="message",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     @property
     def content_ellipsis(self) -> str:

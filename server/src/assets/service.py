@@ -1,0 +1,426 @@
+from __future__ import annotations
+
+import datetime
+import io
+import mimetypes
+import typing as tp
+import uuid
+from dataclasses import dataclass
+
+from PIL import Image, UnidentifiedImageError
+
+from src.assets.enums import (
+    AssetAccessTypeEnum,
+    AssetStatusEnum,
+    AssetTypeEnum,
+    AssetVariantStatusEnum,
+    AssetVariantTypeEnum,
+)
+from src.assets.exceptions import AssetNotFound, AssetUploadNotReady, InvalidAsset
+from src.assets.models import AssetModel
+from src.assets.repository import AssetRepository
+from src.assets.schemas import AssetFinalizeUploadResponse, AssetGet, AssetInitUploadRequest, AssetInitUploadResponse, AssetVariantGet
+from src.assets.storage import AssetStorage, build_asset_storage_key, detect_extension, guess_mime_type
+from src.config import AssetsSettings
+
+
+IMAGE_VARIANTS: dict[AssetVariantTypeEnum, tuple[int, int]] = {
+    AssetVariantTypeEnum.IMAGE_MEDIUM: (1280, 1280),
+    AssetVariantTypeEnum.IMAGE_SMALL: (640, 640),
+    AssetVariantTypeEnum.AVATAR_MEDIUM: (256, 256),
+    AssetVariantTypeEnum.AVATAR_SMALL: (96, 96),
+}
+
+IMAGE_FORMAT_TO_MIME = {
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "WEBP": "image/webp",
+    "GIF": "image/gif",
+}
+
+
+@dataclass(slots=True)
+class TaskDispatcher:
+    enqueue_image_processing: tp.Callable[[uuid.UUID], None]
+    enqueue_video_processing: tp.Callable[[uuid.UUID], None]
+
+
+@dataclass(slots=True)
+class RenderedImageVariant:
+    payload: bytes
+    width: int
+    height: int
+
+
+class AssetService:
+    def __init__(
+        self,
+        repository: AssetRepository,
+        storage: AssetStorage,
+        settings: AssetsSettings,
+        task_dispatcher: TaskDispatcher | None = None,
+    ) -> None:
+        self._repository = repository
+        self._storage = storage
+        self._settings = settings
+        self._task_dispatcher = task_dispatcher
+
+    async def init_upload(
+        self,
+        *,
+        owner_id: uuid.UUID,
+        data: AssetInitUploadRequest,
+    ) -> AssetInitUploadResponse:
+        self._validate_upload_request(data)
+        now = self._now()
+        extension = detect_extension(data.filename)
+        original_mime_type = guess_mime_type(data.filename, data.declared_mime_type) or "application/octet-stream"
+        asset_id = uuid.uuid4()
+        storage_key = build_asset_storage_key(
+            asset_id=asset_id,
+            variant_type=AssetVariantTypeEnum.ORIGINAL,
+            extension=extension or self._default_extension(data.asset_type, original_mime_type),
+        )
+        upload = await self._storage.generate_presigned_put(
+            bucket=self._storage.private_bucket,
+            key=storage_key,
+            mime_type=original_mime_type,
+        )
+        metadata = {"usage_context": data.usage_context} if data.usage_context else {}
+        asset = await self._repository.create_upload(
+            asset_id=asset_id,
+            owner_id=owner_id,
+            asset_type=data.asset_type,
+            original_filename=data.filename,
+            original_extension=extension,
+            declared_mime_type=data.declared_mime_type,
+            access_type=AssetAccessTypeEnum.PRIVATE,
+            asset_metadata=metadata,
+            storage_bucket=upload.bucket,
+            storage_key=upload.key,
+            original_mime_type=original_mime_type,
+            now=now,
+        )
+        return AssetInitUploadResponse(
+            asset=await self._build_asset_get(asset),
+            upload_url=upload.url,
+            upload_headers=upload.headers,
+            expires_in_seconds=upload.expires_in_seconds,
+        )
+
+    async def finalize_upload(
+        self,
+        *,
+        owner_id: uuid.UUID,
+        asset_id: uuid.UUID,
+    ) -> AssetFinalizeUploadResponse:
+        asset = await self._require_owned_asset(asset_id=asset_id, owner_id=owner_id)
+        if asset.status != AssetStatusEnum.PENDING_UPLOAD:
+            raise AssetUploadNotReady(f"Asset {asset_id} is already finalized")
+
+        original_variant = next(
+            (variant for variant in asset.variants if variant.asset_variant_type == AssetVariantTypeEnum.ORIGINAL),
+            None,
+        )
+        if original_variant is None:
+            raise AssetUploadNotReady(f"Asset {asset_id} has no original variant")
+
+        object_head = await self._storage.head_object(
+            bucket=original_variant.storage_bucket,
+            key=original_variant.storage_key,
+        )
+        if object_head is None:
+            raise AssetUploadNotReady(f"Uploaded object for asset {asset_id} was not found")
+
+        next_status = AssetStatusEnum.READY if asset.asset_type == AssetTypeEnum.FILE else AssetStatusEnum.UPLOADED
+        asset = await self._repository.update_after_finalize(
+            asset_id=asset_id,
+            size_bytes=object_head.size_bytes,
+            original_mime_type=object_head.mime_type or original_variant.mime_type,
+            status=next_status,
+            now=self._now(),
+        )
+
+        if asset.asset_type == AssetTypeEnum.IMAGE:
+            await self._repository.set_asset_processing(asset_id=asset_id, now=self._now())
+            self._dispatch_image_processing(asset_id)
+            asset = await self._require_owned_asset(asset_id=asset_id, owner_id=owner_id)
+        elif asset.asset_type == AssetTypeEnum.VIDEO:
+            await self._repository.set_asset_processing(asset_id=asset_id, now=self._now())
+            self._dispatch_video_processing(asset_id)
+            asset = await self._require_owned_asset(asset_id=asset_id, owner_id=owner_id)
+        else:
+            await self._repository.set_asset_ready(
+                asset_id=asset_id,
+                detected_mime_type=object_head.mime_type,
+                now=self._now(),
+            )
+            asset = await self._require_owned_asset(asset_id=asset_id, owner_id=owner_id)
+
+        return AssetFinalizeUploadResponse(asset=await self._build_asset_get(asset))
+
+    async def get_asset(
+        self,
+        *,
+        asset_id: uuid.UUID,
+        owner_id: uuid.UUID,
+    ) -> AssetGet:
+        asset = await self._require_owned_asset(asset_id=asset_id, owner_id=owner_id)
+        return await self._build_asset_get(asset)
+
+    async def process_image_asset(
+        self,
+        *,
+        asset_id: uuid.UUID,
+    ) -> None:
+        asset = await self._repository.get_asset(asset_id=asset_id)
+        if asset is None:
+            raise AssetNotFound(f"Asset {asset_id} not found")
+
+        original_variant = next(
+            variant for variant in asset.variants if variant.asset_variant_type == AssetVariantTypeEnum.ORIGINAL
+        )
+        try:
+            payload = await self._storage.get_object_bytes(
+                bucket=original_variant.storage_bucket,
+                key=original_variant.storage_key,
+            )
+            image = Image.open(io.BytesIO(payload))
+            image.load()
+            detected_mime_type = IMAGE_FORMAT_TO_MIME.get(image.format or "", original_variant.mime_type)
+
+            for variant_type, size in IMAGE_VARIANTS.items():
+                rendered = self._render_variant(image=image, size=size)
+                extension = "webp"
+                storage_key = build_asset_storage_key(
+                    asset_id=asset.asset_id,
+                    variant_type=variant_type,
+                    extension=extension,
+                )
+                stored = await self._storage.upload_bytes(
+                    bucket=self._storage.private_bucket,
+                    key=storage_key,
+                    payload=rendered.payload,
+                    mime_type="image/webp",
+                )
+                await self._repository.upsert_variant(
+                    asset_id=asset.asset_id,
+                    asset_variant_type=variant_type,
+                    storage_bucket=self._storage.private_bucket,
+                    storage_key=storage_key,
+                    mime_type=stored.mime_type,
+                    size_bytes=stored.size_bytes,
+                    width=rendered.width,
+                    height=rendered.height,
+                    duration_ms=None,
+                    bitrate=None,
+                    checksum_sha256=stored.checksum_sha256,
+                    is_primary=False,
+                    status=AssetVariantStatusEnum.READY,
+                )
+
+            await self._repository.set_asset_ready(
+                asset_id=asset.asset_id,
+                detected_mime_type=detected_mime_type,
+                now=self._now(),
+            )
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            await self._repository.set_asset_failed(
+                asset_id=asset.asset_id,
+                error_message=str(exc),
+                now=self._now(),
+            )
+            raise
+
+    async def process_video_asset(
+        self,
+        *,
+        asset_id: uuid.UUID,
+    ) -> None:
+        asset = await self._repository.get_asset(asset_id=asset_id)
+        if asset is None:
+            raise AssetNotFound(f"Asset {asset_id} not found")
+
+        original_variant = next(
+            variant for variant in asset.variants if variant.asset_variant_type == AssetVariantTypeEnum.ORIGINAL
+        )
+        detected_mime_type = asset.detected_mime_type or original_variant.mime_type or mimetypes.guess_type(
+            asset.original_filename or ""
+        )[0]
+        await self._repository.set_asset_ready(
+            asset_id=asset.asset_id,
+            detected_mime_type=detected_mime_type,
+            now=self._now(),
+        )
+
+    async def cleanup_stale_uploads(self) -> list[uuid.UUID]:
+        cutoff = self._now() - datetime.timedelta(hours=self._settings.stale_upload_grace_hours)
+        assets = await self._repository.get_stale_pending_uploads(created_before=cutoff)
+        deleted: list[uuid.UUID] = []
+        for asset in assets:
+            await self._delete_asset_objects(asset)
+            deleted.append(asset.asset_id)
+        return deleted
+
+    async def cleanup_orphaned_assets(self) -> list[uuid.UUID]:
+        cutoff = self._now() - datetime.timedelta(hours=self._settings.orphan_grace_hours)
+        assets = await self._repository.get_orphaned_assets(orphaned_before=cutoff)
+        deleted: list[uuid.UUID] = []
+        for asset in assets:
+            if await self._repository.asset_has_active_links(asset_id=asset.asset_id):
+                continue
+            await self._delete_asset_objects(asset)
+            deleted.append(asset.asset_id)
+        return deleted
+
+    async def reconcile_failed_assets(self) -> list[uuid.UUID]:
+        cutoff = self._now() - datetime.timedelta(hours=self._settings.stale_upload_grace_hours)
+        assets = await self._repository.get_failed_assets(updated_before=cutoff)
+        deleted: list[uuid.UUID] = []
+        for asset in assets:
+            if await self._repository.asset_has_active_links(asset_id=asset.asset_id):
+                continue
+            await self._delete_asset_objects(asset)
+            deleted.append(asset.asset_id)
+        return deleted
+
+    async def mark_asset_orphaned_if_unreferenced(
+        self,
+        *,
+        asset_id: uuid.UUID,
+    ) -> bool:
+        if await self._repository.asset_has_active_links(asset_id=asset_id):
+            return False
+        await self._repository.mark_orphaned(
+            asset_id=asset_id,
+            orphaned_at=self._now().isoformat(),
+            now=self._now(),
+        )
+        return True
+
+    async def _build_asset_get(
+        self,
+        asset: AssetModel,
+    ) -> AssetGet:
+        variants: list[AssetVariantGet] = []
+        for variant in sorted(asset.variants, key=lambda item: item.created_at):
+            url = None
+            if variant.status == AssetVariantStatusEnum.READY:
+                url = await self._storage.generate_presigned_get(
+                    bucket=variant.storage_bucket,
+                    key=variant.storage_key,
+                )
+            variants.append(
+                AssetVariantGet(
+                    asset_variant_type=variant.asset_variant_type,
+                    mime_type=variant.mime_type,
+                    size_bytes=variant.size_bytes,
+                    width=variant.width,
+                    height=variant.height,
+                    duration_ms=variant.duration_ms,
+                    status=variant.status,
+                    url=url,
+                )
+            )
+
+        return AssetGet(
+            asset_id=asset.asset_id,
+            asset_type=asset.asset_type,
+            status=asset.status,
+            original_filename=asset.original_filename,
+            size_bytes=asset.size_bytes,
+            access_type=asset.access_type,
+            variants=variants,
+            created_at=asset.created_at,
+            updated_at=asset.updated_at,
+        )
+
+    def _validate_upload_request(self, data: AssetInitUploadRequest) -> None:
+        declared_mime_type = (data.declared_mime_type or "").lower()
+        extension = detect_extension(data.filename)
+
+        if data.asset_type == AssetTypeEnum.IMAGE:
+            if not self._is_declared_image(extension=extension, declared_mime_type=declared_mime_type):
+                raise InvalidAsset("Asset type image requires an image mime type or extension")
+            max_size = self._settings.max_image_size_mb * 1024 * 1024
+        elif data.asset_type == AssetTypeEnum.VIDEO:
+            if declared_mime_type and not declared_mime_type.startswith("video/"):
+                raise InvalidAsset("Asset type video requires a video mime type")
+            max_size = self._settings.max_video_size_mb * 1024 * 1024
+        else:
+            max_size = self._settings.max_file_size_mb * 1024 * 1024
+
+        if data.size_bytes > max_size:
+            raise InvalidAsset(f"Asset size exceeds limit for {data.asset_type.value}")
+
+    async def _require_owned_asset(
+        self,
+        *,
+        asset_id: uuid.UUID,
+        owner_id: uuid.UUID,
+    ) -> AssetModel:
+        asset = await self._repository.get_asset(asset_id=asset_id, owner_id=owner_id)
+        if asset is None:
+            raise AssetNotFound(f"Asset {asset_id} not found")
+        return asset
+
+    async def _delete_asset_objects(self, asset: AssetModel) -> None:
+        for variant in asset.variants:
+            if variant.status == AssetVariantStatusEnum.DELETED:
+                continue
+            await self._storage.delete_object(
+                bucket=variant.storage_bucket,
+                key=variant.storage_key,
+            )
+        await self._repository.mark_asset_deleted(asset_id=asset.asset_id, now=self._now())
+
+    def _dispatch_image_processing(self, asset_id: uuid.UUID) -> None:
+        if self._task_dispatcher is None:
+            return
+        self._task_dispatcher.enqueue_image_processing(asset_id)
+
+    def _dispatch_video_processing(self, asset_id: uuid.UUID) -> None:
+        if self._task_dispatcher is None:
+            return
+        self._task_dispatcher.enqueue_video_processing(asset_id)
+
+    def _render_variant(
+        self,
+        *,
+        image: Image.Image,
+        size: tuple[int, int],
+    ) -> RenderedImageVariant:
+        variant = image.copy()
+        if variant.mode not in ("RGB", "RGBA"):
+            variant = variant.convert("RGBA")
+        variant.thumbnail(size)
+        buffer = io.BytesIO()
+        variant.save(buffer, format="WEBP", quality=90)
+        return RenderedImageVariant(
+            payload=buffer.getvalue(),
+            width=variant.width,
+            height=variant.height,
+        )
+
+    def _default_extension(self, asset_type: AssetTypeEnum, mime_type: str | None) -> str:
+        guessed_extension = mimetypes.guess_extension(mime_type or "")
+        if guessed_extension:
+            return guessed_extension.lstrip(".")
+        if asset_type == AssetTypeEnum.IMAGE:
+            return "img"
+        if asset_type == AssetTypeEnum.VIDEO:
+            return "mp4"
+        return "bin"
+
+    def _is_declared_image(
+        self,
+        *,
+        extension: str | None,
+        declared_mime_type: str,
+    ) -> bool:
+        if declared_mime_type.startswith("image/"):
+            return True
+        return extension in {"jpg", "jpeg", "png", "gif", "webp"}
+
+    def _now(self) -> datetime.datetime:
+        return datetime.datetime.now(datetime.timezone.utc)

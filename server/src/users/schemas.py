@@ -15,6 +15,7 @@ class UserCreate(BaseSchema):
 
 class UserGet(BaseSchema):
     user_id: uuid.UUID
+    avatar_asset_id: uuid.UUID | None = None
     username: Username
     is_admin: bool
     subscribers_count: int

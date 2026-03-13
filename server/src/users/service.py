@@ -26,6 +26,9 @@ from src.users.schemas import (
 from src.users.utils import get_password_hash
 
 BASE_DIR = Path(__file__).parent.parent.parent
+LEGACY_PROFILE_PHOTO_SMALL_PREFIX = "PPs@"
+LEGACY_PROFILE_PHOTO_MEDIUM_PREFIX = "PPm@"
+LEGACY_PROFILE_PHOTO_LARGE_PREFIX = "PPl@"
 
 
 class UserService:
@@ -69,6 +72,7 @@ class UserService:
 
         return UserGet(
             user_id=user.user_id,
+            avatar_asset_id=user.avatar_asset_id,
             username=user.username,
             subscribers_count=user.subscribers_count,
             is_admin=user.is_admin,
@@ -98,6 +102,7 @@ class UserService:
         return [
             UserGet(
                 user_id=user.user_id,
+                avatar_asset_id=user.avatar_asset_id,
                 username=user.username,
                 subscribers_count=user.subscribers_count,
                 is_admin=user.is_admin,
@@ -127,6 +132,7 @@ class UserService:
         return [
             UserGet(
                 user_id=user.user_id,
+                avatar_asset_id=user.avatar_asset_id,
                 username=user.username,
                 subscribers_count=user.subscribers_count,
                 is_admin=user.is_admin,
@@ -225,6 +231,7 @@ class UserService:
         return [
             UserGet(
                 user_id=user.user_id,
+                avatar_asset_id=user.avatar_asset_id,
                 username=user.username,
                 subscribers_count=user.subscribers_count,
                 is_admin=user.is_admin,
@@ -244,9 +251,9 @@ class UserService:
 
         return await delete_files(
             filenames=[
-                settings.file_prefixes.profile_photo_small + str(user_id),
-                settings.file_prefixes.profile_photo_medium + str(user_id),
-                settings.file_prefixes.profile_photo_large + str(user_id),
+                LEGACY_PROFILE_PHOTO_SMALL_PREFIX + str(user_id),
+                LEGACY_PROFILE_PHOTO_MEDIUM_PREFIX + str(user_id),
+                LEGACY_PROFILE_PHOTO_LARGE_PREFIX + str(user_id),
             ],
         )
 
@@ -283,15 +290,15 @@ class UserService:
         if not (
             await upload_file(
                 file=img_small_bytes,
-                filename=settings.file_prefixes.profile_photo_small + str(user_id),
+                filename=LEGACY_PROFILE_PHOTO_SMALL_PREFIX + str(user_id),
             )
             and await upload_file(
                 file=img_medium_bytes,
-                filename=settings.file_prefixes.profile_photo_medium + str(user_id),
+                filename=LEGACY_PROFILE_PHOTO_MEDIUM_PREFIX + str(user_id),
             )
             and await upload_file(
                 file=img_large_bytes,
-                filename=settings.file_prefixes.profile_photo_large + str(user_id),
+                filename=LEGACY_PROFILE_PHOTO_LARGE_PREFIX + str(user_id),
             )
         ):
             await self._delete_all_files_from_storage(user_id)

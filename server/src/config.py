@@ -63,19 +63,48 @@ class WebsocketSettings(ConfigBase):
 
 
 class StorageSettings(ConfigBase):
+    endpoint_url: str
+    region: str
     access_key: str
     secret_key: str
-    bucket_name: str
-    bucket_url: str
-    storage_url: str
+    private_bucket: str
+    use_ssl: bool = True
+    addressing_style: Literal["virtual", "path"] = "virtual"
+    presigned_upload_ttl_seconds: int = 900
+    presigned_download_ttl_seconds: int = 900
 
     model_config = SettingsConfigDict(env_prefix="storage_")
 
 
-class FilePrefixesSettings(ConfigBase):
-    profile_photo_small: str = "PPs@"
-    profile_photo_medium: str = "PPm@"
-    profile_photo_large: str = "PPl@"
+class AssetsSettings(ConfigBase):
+    max_image_size_mb: int = 20
+    max_video_size_mb: int = 250
+    max_file_size_mb: int = 50
+    orphan_grace_hours: int = 24
+    stale_upload_grace_hours: int = 24
+    multipart_part_size_mb: int = 10
+
+    model_config = SettingsConfigDict(env_prefix="assets_")
+
+
+class RedisSettings(ConfigBase):
+    host: str
+    port: int
+    db: int = 0
+
+    model_config = SettingsConfigDict(env_prefix="redis_")
+
+    @property
+    def url(self) -> str:
+        return f"redis://{self.host}:{self.port}/{self.db}"
+
+
+class CelerySettings(ConfigBase):
+    broker_url: str
+    result_backend: str
+    media_queue_name: str = "media"
+
+    model_config = SettingsConfigDict(env_prefix="celery_")
 
 
 class Settings(BaseSettings):
@@ -86,7 +115,9 @@ class Settings(BaseSettings):
     admin: AdminSettings = Field(default_factory=AdminSettings)  # type: ignore
     ws: WebsocketSettings = Field(default_factory=WebsocketSettings)  # type: ignore
     storage: StorageSettings = Field(default_factory=StorageSettings)  # type: ignore
-    file_prefixes: FilePrefixesSettings = Field(default_factory=FilePrefixesSettings)  # type: ignore
+    assets: AssetsSettings = Field(default_factory=AssetsSettings)  # type: ignore
+    redis: RedisSettings = Field(default_factory=RedisSettings)  # type: ignore
+    celery: CelerySettings = Field(default_factory=CelerySettings)  # type: ignore
 
 
 settings = Settings()
