@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design S3 Media Flow"
+  short_description: "Design private S3 media flows for Nerdex"
+  default_prompt: "Use $design-s3-media-flow to design a private S3-compatible media flow for Nerdex."

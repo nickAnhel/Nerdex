@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add React Feature"
+  short_description: "Build React frontend features for Nerdex"
+  default_prompt: "Use $add-react-feature to implement a frontend feature in Nerdex `client/src/`."

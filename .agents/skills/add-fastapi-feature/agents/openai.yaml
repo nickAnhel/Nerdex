@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add FastAPI Feature"
+  short_description: "Build FastAPI backend features for Nerdex"
+  default_prompt: "Use $add-fastapi-feature to implement a backend feature in Nerdex `server/src/`."

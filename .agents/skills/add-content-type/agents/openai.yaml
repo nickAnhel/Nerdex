@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add Content Type"
+  short_description: "Add unified content types to Nerdex"
+  default_prompt: "Use $add-content-type to design and implement a new publishable content type for Nerdex."

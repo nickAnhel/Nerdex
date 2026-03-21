@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Architecture Change"
+  short_description: "Review architecture changes in Nerdex"
+  default_prompt: "Use $review-architecture-change to review a non-trivial architecture proposal for Nerdex."
