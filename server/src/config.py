@@ -1,6 +1,7 @@
+from urllib.parse import urlsplit, urlunsplit
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,11 +70,32 @@ class StorageSettings(ConfigBase):
     secret_key: str
     private_bucket: str
     use_ssl: bool = True
+    verify_ssl: bool = True
     addressing_style: Literal["virtual", "path"] = "virtual"
     presigned_upload_ttl_seconds: int = 900
     presigned_download_ttl_seconds: int = 900
 
     model_config = SettingsConfigDict(env_prefix="storage_")
+
+    @property
+    def resolved_endpoint_url(self) -> str:
+        normalized_endpoint_url = self.endpoint_url.rstrip("/")
+        parsed = urlsplit(normalized_endpoint_url)
+        hostname = parsed.hostname or ""
+
+        if hostname == "s3.storage.selcloud.ru":
+            resolved_hostname = f"s3.{self.region}.storage.selcloud.ru"
+            return urlunsplit(
+                (
+                    parsed.scheme,
+                    resolved_hostname,
+                    parsed.path,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
+
+        return normalized_endpoint_url
 
 
 class AssetsSettings(ConfigBase):

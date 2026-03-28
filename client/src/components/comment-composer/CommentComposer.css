@@ -52,18 +52,6 @@
     padding: 0.55rem 0.9rem;
 }
 
-.comment-composer-actions button.secondary {
-    background: transparent;
-    border: 1px solid #4b4b4b;
-    color: #c9c9c9;
-}
-
-.comment-composer-actions button.secondary:hover {
-    background: transparent;
-    border-color: #747474;
-    color: #ffffff;
-}
-
 .comment-composer-error {
     margin: 0;
     color: #ff9ba7;

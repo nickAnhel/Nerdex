@@ -22,16 +22,12 @@ export default class UserService {
         return api.delete("/users/");
     }
 
-    static async updateProfilePhoto(formData) {
-        return api.put("/users/photo/", formData, {
-            headers: {
-                "Content-Type": "multipart/form-data",
-            }
-        });
+    static async updateAvatar(data) {
+        return api.put("/users/me/avatar", data);
     }
 
-    static async deleteProfilePhoto() {
-        return api.delete("/users/photo/")
+    static async deleteAvatar() {
+        return api.delete("/users/me/avatar");
     }
 
     static async getUsers(params) {

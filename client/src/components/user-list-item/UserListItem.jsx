@@ -1,9 +1,10 @@
-import { useState, useContext, forwardRef } from "react";
+import { useContext, useEffect, useState, forwardRef } from "react";
 import { Link } from "react-router-dom";
 import "./UserListItem.css"
 
 import { StoreContext } from "../..";
 import UserService from "../../service/UserService";
+import { getAvatarUrl } from "../../utils/avatar";
 
 import Loader from "../loader/Loader";
 
@@ -11,11 +12,17 @@ import Loader from "../loader/Loader";
 const UserListItem = forwardRef((props, ref) => {
     const { store } = useContext(StoreContext);
 
-    const [imgSrc, setImgSrc] = useState(`${process.env.REACT_APP_STORAGE_URL}PPm@${props.user.user_id}?${performance.now()}`);
+    const [imgSrc, setImgSrc] = useState(getAvatarUrl(props.user, "small"));
 
     const [isLoadingSubscribe, setIsLoadingSubscribe] = useState(false);
     const [isSubscribed, setIsSubsctribed] = useState(props.user.is_subscribed);
     const [subsCount, setSubsCount] = useState(props.user.subscribers_count);
+
+    useEffect(() => {
+        setImgSrc(getAvatarUrl(props.user, "small"));
+        setIsSubsctribed(props.user.is_subscribed);
+        setSubsCount(props.user.subscribers_count);
+    }, [props.user]);
 
     const handleSubscribe = async () => {
         setIsLoadingSubscribe(true);
@@ -74,7 +81,7 @@ const UserListItem = forwardRef((props, ref) => {
                 <img
                     className="user-profile-photo"
                     src={imgSrc}
-                    onError={() => { setImgSrc("../../../assets/profile.svg") }}
+                    onError={() => { setImgSrc("/assets/profile.svg") }}
                     alt={`${props.user.username} profile photo`}
                 />
                 <div className="info">
@@ -87,7 +94,7 @@ const UserListItem = forwardRef((props, ref) => {
 
                     isSubscribed ?
                         <button
-                            className="btn unsubscribe"
+                            className="btn btn-outline-primary unsubscribe"
                             onClick={(e) => {
                                 e.preventDefault();
                                 handleUnsubscribe();
@@ -98,7 +105,7 @@ const UserListItem = forwardRef((props, ref) => {
                         </button>
                         :
                         <button
-                            className="btn"
+                            className="btn btn-primary"
                             onClick={(e) => {
                                 e.preventDefault();
                                 handleSubscribe();

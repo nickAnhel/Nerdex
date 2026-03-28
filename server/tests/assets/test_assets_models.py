@@ -36,6 +36,7 @@ def test_asset_variant_model_has_expected_unique_constraints() -> None:
 
 def test_user_model_has_avatar_asset_column_and_relationship() -> None:
     assert "avatar_asset_id" in UserModel.__table__.c
+    assert "avatar_crop" in UserModel.__table__.c
     assert UserModel.avatar_asset.property.mapper.class_ is AssetModel
 
 

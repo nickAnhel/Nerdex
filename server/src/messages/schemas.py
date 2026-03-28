@@ -16,6 +16,7 @@ class MessageGetWS(MessageCreateWS):
     message_id: uuid.UUID
     username: str
     user_id: uuid.UUID
+    avatar_small_url: str | None = None
 
 
 class MessageCreate(BaseSchema):

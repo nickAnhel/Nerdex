@@ -1,14 +1,12 @@
-import io
 import uuid
-from pathlib import Path
 
-from PIL import Image
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
-from src.config import settings
-from src.s3.exceptions import CantDeleteFileFromStorage, CantUploadFileToStorage
-from src.s3.utils import delete_files, upload_file
+from src.assets.service import AssetService
+from src.assets.storage import AssetStorage
+from src.s3.exceptions import CantDeleteFileFromStorage
 from src.users.enums import UserOrder
+from src.users.presentation import build_user_get, build_user_get_many
 from src.users.exceptions import (
     CantSubscribeToUser,
     CantUnsubscribeFromUser,
@@ -21,19 +19,26 @@ from src.users.schemas import (
     UserCreate,
     UserGet,
     UserGetWithPassword,
+    UserAvatarUpdate,
     UserUpdate,
 )
 from src.users.utils import get_password_hash
 
-BASE_DIR = Path(__file__).parent.parent.parent
 LEGACY_PROFILE_PHOTO_SMALL_PREFIX = "PPs@"
 LEGACY_PROFILE_PHOTO_MEDIUM_PREFIX = "PPm@"
 LEGACY_PROFILE_PHOTO_LARGE_PREFIX = "PPl@"
 
 
 class UserService:
-    def __init__(self, repository: UserRepository) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        asset_service: AssetService,
+        avatar_storage: AssetStorage,
+    ) -> None:
         self._repository: UserRepository = repository
+        self._asset_service = asset_service
+        self._avatar_storage = avatar_storage
 
     async def create_user(
         self,
@@ -47,7 +52,7 @@ class UserService:
 
         try:
             user = await self._repository.create(user_data)
-            return UserGet.model_validate(user)
+            return await build_user_get(user, storage=self._avatar_storage)
         except IntegrityError as exc:
             raise UsernameAlreadyExists(
                 f"Username {data.username!r} already exists"
@@ -70,16 +75,10 @@ class UserService:
         if include_password:
             return UserGetWithPassword.model_validate(user)
 
-        return UserGet(
-            user_id=user.user_id,
-            avatar_asset_id=user.avatar_asset_id,
-            username=user.username,
-            subscribers_count=user.subscribers_count,
-            is_admin=user.is_admin,
-            is_subscribed=(
-                curr_user
-                and (curr_user.user_id in [u.user_id for u in user.subscribers])
-            ),
+        return await build_user_get(
+            user,
+            viewer_id=curr_user.user_id if curr_user else None,
+            storage=self._avatar_storage,
         )
 
     async def get_users(
@@ -99,20 +98,11 @@ class UserService:
             limit=limit,
         )
 
-        return [
-            UserGet(
-                user_id=user.user_id,
-                avatar_asset_id=user.avatar_asset_id,
-                username=user.username,
-                subscribers_count=user.subscribers_count,
-                is_admin=user.is_admin,
-                is_subscribed=(
-                    curr_user
-                    and (curr_user.user_id in [u.user_id for u in user.subscribers])
-                ),
-            )
-            for user in users
-        ]
+        return await build_user_get_many(
+            users,
+            viewer_id=curr_user.user_id if curr_user else None,
+            storage=self._avatar_storage,
+        )
 
     async def search_users(
         self,
@@ -129,20 +119,11 @@ class UserService:
             limit=limit,
         )
 
-        return [
-            UserGet(
-                user_id=user.user_id,
-                avatar_asset_id=user.avatar_asset_id,
-                username=user.username,
-                subscribers_count=user.subscribers_count,
-                is_admin=user.is_admin,
-                is_subscribed=(
-                    curr_user
-                    and (curr_user.user_id in [u.user_id for u in user.subscribers])
-                ),
-            )
-            for user in users
-        ]
+        return await build_user_get_many(
+            users,
+            viewer_id=curr_user.user_id if curr_user else None,
+            storage=self._avatar_storage,
+        )
 
     async def update_user(
         self,
@@ -153,10 +134,10 @@ class UserService:
 
         try:
             user = await self._repository.update(
-                data=data.model_dump(),
+                data=data.model_dump(exclude_none=True),
                 user_id=user_id,
             )
-            return UserGet.model_validate(user)
+            return await build_user_get(user, storage=self._avatar_storage)
 
         except IntegrityError as exc:
             raise UsernameAlreadyExists(
@@ -228,26 +209,19 @@ class UserService:
             raise UserNotFound(f"User with id {user_id} not found") from exc
 
         users = users[offset : offset + limit]
-        return [
-            UserGet(
-                user_id=user.user_id,
-                avatar_asset_id=user.avatar_asset_id,
-                username=user.username,
-                subscribers_count=user.subscribers_count,
-                is_admin=user.is_admin,
-                is_subscribed=(
-                    curr_user
-                    and (curr_user.user_id in [u.user_id for u in user.subscribers])
-                ),
-            )
-            for user in users
-        ]
+        return await build_user_get_many(
+            users,
+            viewer_id=curr_user.user_id if curr_user else None,
+            storage=self._avatar_storage,
+        )
 
     async def _delete_all_files_from_storage(
         self,
         user_id: uuid.UUID,
     ) -> bool:
         """Delete all user files from storage."""
+
+        from src.s3.utils import delete_files
 
         return await delete_files(
             filenames=[
@@ -257,62 +231,48 @@ class UserService:
             ],
         )
 
-    async def update_profile_photo(
+    async def update_avatar(
         self,
         user_id: uuid.UUID,
-        photo: bytes,
-    ) -> bool:
-        """Update user profile photo."""
+        data: UserAvatarUpdate,
+    ) -> UserGet:
+        """Update user avatar from an uploaded image asset."""
 
-        img_small = Image.open(photo)
-        img_medium = Image.open(photo)
-        img_large = Image.open(photo)
+        current_user = await self._repository.get_single(user_id=user_id)
+        previous_avatar_asset_id = current_user.avatar_asset_id
 
-        img_small.thumbnail((80, 80))
-        img_medium.thumbnail((160, 160))
-        img_large.thumbnail((240, 240))
+        await self._asset_service.generate_avatar_variants(
+            asset_id=data.asset_id,
+            owner_id=user_id,
+            crop=data.crop.model_dump(),
+        )
 
-        img_small_bytes = io.BytesIO()
-        img_medium_bytes = io.BytesIO()
-        img_large_bytes = io.BytesIO()
+        user = await self._repository.set_avatar(
+            user_id=user_id,
+            avatar_asset_id=data.asset_id,
+            avatar_crop=data.crop.model_dump(),
+        )
 
-        img_small.save(img_small_bytes, "PNG")
-        img_small_bytes = img_small_bytes.getvalue()
-
-        img_medium.save(img_medium_bytes, "PNG")
-        img_medium_bytes = img_medium_bytes.getvalue()
-
-        img_large.save(img_large_bytes, "PNG")
-        img_large_bytes = img_large_bytes.getvalue()
-
-        await self._delete_all_files_from_storage(user_id)
-
-        if not (
-            await upload_file(
-                file=img_small_bytes,
-                filename=LEGACY_PROFILE_PHOTO_SMALL_PREFIX + str(user_id),
+        if previous_avatar_asset_id is not None and previous_avatar_asset_id != data.asset_id:
+            await self._asset_service.mark_asset_orphaned_if_unreferenced(
+                asset_id=previous_avatar_asset_id,
             )
-            and await upload_file(
-                file=img_medium_bytes,
-                filename=LEGACY_PROFILE_PHOTO_MEDIUM_PREFIX + str(user_id),
-            )
-            and await upload_file(
-                file=img_large_bytes,
-                filename=LEGACY_PROFILE_PHOTO_LARGE_PREFIX + str(user_id),
-            )
-        ):
-            await self._delete_all_files_from_storage(user_id)
-            raise CantUploadFileToStorage()
 
-        return True
+        return await build_user_get(user, storage=self._avatar_storage)
 
-    async def delete_profile_photo(
+    async def delete_avatar(
         self,
         user_id: uuid.UUID,
-    ) -> bool:
-        """Delete user profile photo."""
+    ) -> UserGet:
+        """Remove the current avatar selection."""
 
-        if not await self._delete_all_files_from_storage(user_id):
-            raise CantDeleteFileFromStorage()
+        current_user = await self._repository.get_single(user_id=user_id)
+        previous_avatar_asset_id = current_user.avatar_asset_id
+        user = await self._repository.clear_avatar(user_id=user_id)
 
-        return True
+        if previous_avatar_asset_id is not None:
+            await self._asset_service.mark_asset_orphaned_if_unreferenced(
+                asset_id=previous_avatar_asset_id,
+            )
+
+        return await build_user_get(user, storage=self._avatar_storage)

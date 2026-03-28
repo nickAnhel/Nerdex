@@ -206,6 +206,7 @@ function PostModal({
                 }
 
                 <button
+                    className="btn btn-primary btn-block"
                     disabled={postContent.trim().length < 1}
                     onClick={(e) => { handleSavePost(e); }}
                 >

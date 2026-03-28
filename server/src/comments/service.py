@@ -23,12 +23,19 @@ from src.comments.threading import (
 from src.common.exceptions import PermissionDenied
 from src.content.access import can_access_comments, can_view_content
 from src.content.enums import ReactionTypeEnum
+from src.users.presentation import build_user_get
+from src.users.repository import UserRepository
 from src.users.schemas import UserGet
 
 
 class CommentService:
-    def __init__(self, repository: CommentRepository) -> None:
+    def __init__(
+        self,
+        repository: CommentRepository,
+        user_repository: UserRepository,
+    ) -> None:
         self._repository = repository
+        self._user_repository = user_repository
 
     async def get_root_comments(
         self,
@@ -47,7 +54,7 @@ class CommentService:
             offset=offset,
             limit=limit,
         )
-        return self._build_comments_page(page)
+        return await self._build_comments_page(page, viewer_id=viewer_id)
 
     async def create_root_comment(
         self,
@@ -114,7 +121,7 @@ class CommentService:
             limit=limit,
         )
         return RepliesPageGet(
-            items=[CommentGet.model_validate(item) for item in page.items],
+            items=await self._build_comment_get_many(page.items, viewer_id=viewer_id),
             offset=page.offset,
             limit=page.limit,
             has_more=page.has_more,
@@ -349,7 +356,7 @@ class CommentService:
         if comment is None:
             raise CommentNotFound(f"Comment with id {comment_id!s} not found")
 
-        return CommentGet.model_validate(comment)
+        return await self._build_comment_get(comment, viewer_id=viewer_id)
 
     async def _get_comment_state_or_raise(
         self,
@@ -428,15 +435,85 @@ class CommentService:
                 return
             current_parent_id = parent_comment.parent_comment_id
 
-    def _build_comments_page(
+    async def _build_comments_page(
         self,
         page: CommentPageResult,
+        *,
+        viewer_id: uuid.UUID | None,
     ) -> CommentsPageGet:
         return CommentsPageGet(
-            items=[CommentGet.model_validate(item) for item in page.items],
+            items=await self._build_comment_get_many(page.items, viewer_id=viewer_id),
             offset=page.offset,
             limit=page.limit,
             has_more=page.has_more,
+        )
+
+    async def _build_comment_get_many(
+        self,
+        comments,
+        *,
+        viewer_id: uuid.UUID | None,
+    ) -> list[CommentGet]:
+        author_ids = sorted(
+            {
+                comment.author.user_id
+                for comment in comments
+                if comment.author is not None
+            }
+        )
+        authors = await self._user_repository.get_many_by_ids(user_ids=author_ids)
+        authors_by_id = {author.user_id: author for author in authors}
+
+        return [
+            await self._build_comment_get(comment, viewer_id=viewer_id, authors_by_id=authors_by_id)
+            for comment in comments
+        ]
+
+    async def _build_comment_get(
+        self,
+        comment,
+        *,
+        viewer_id: uuid.UUID | None,
+        authors_by_id: dict[uuid.UUID, object] | None = None,
+    ) -> CommentGet:
+        author = None
+        if comment.author is not None:
+            full_author = (authors_by_id or {}).get(comment.author.user_id)
+            if full_author is not None:
+                serialized_author = await build_user_get(full_author, viewer_id=viewer_id)
+                author = {
+                    "user_id": serialized_author.user_id,
+                    "username": serialized_author.username,
+                    "avatar": serialized_author.avatar,
+                }
+            else:
+                author = {
+                    "user_id": comment.author.user_id,
+                    "username": comment.author.username,
+                    "avatar": None,
+                }
+
+        return CommentGet(
+            comment_id=comment.comment_id,
+            content_id=comment.content_id,
+            author=author,
+            parent_comment_id=comment.parent_comment_id,
+            root_comment_id=comment.root_comment_id,
+            reply_to_comment_id=comment.reply_to_comment_id,
+            depth=comment.depth,
+            body_text=comment.body_text,
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+            deleted_at=comment.deleted_at,
+            replies_count=comment.replies_count,
+            likes_count=comment.likes_count,
+            dislikes_count=comment.dislikes_count,
+            my_reaction=comment.my_reaction,
+            is_owner=comment.is_owner,
+            is_deleted=comment.is_deleted,
+            reply_to_comment_depth=comment.reply_to_comment_depth,
+            reply_to_username=comment.reply_to_username,
+            reply_to_comment_ref=comment.reply_to_comment_ref,
         )
 
     def _normalize_body_text(self, body_text: str) -> str:

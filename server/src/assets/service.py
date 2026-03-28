@@ -7,7 +7,7 @@ import typing as tp
 import uuid
 from dataclasses import dataclass
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from src.assets.enums import (
     AssetAccessTypeEnum,
@@ -24,12 +24,21 @@ from src.assets.storage import AssetStorage, build_asset_storage_key, detect_ext
 from src.config import AssetsSettings
 
 
-IMAGE_VARIANTS: dict[AssetVariantTypeEnum, tuple[int, int]] = {
+GENERIC_IMAGE_VARIANTS: dict[AssetVariantTypeEnum, tuple[int, int]] = {
     AssetVariantTypeEnum.IMAGE_MEDIUM: (1280, 1280),
     AssetVariantTypeEnum.IMAGE_SMALL: (640, 640),
+}
+
+AVATAR_VARIANTS: dict[AssetVariantTypeEnum, tuple[int, int]] = {
     AssetVariantTypeEnum.AVATAR_MEDIUM: (256, 256),
     AssetVariantTypeEnum.AVATAR_SMALL: (96, 96),
 }
+AVATAR_ALLOWED_ASSET_STATUSES = {
+    AssetStatusEnum.UPLOADED,
+    AssetStatusEnum.PROCESSING,
+    AssetStatusEnum.READY,
+}
+MIN_AVATAR_CROP_SIZE_PX = 96
 
 IMAGE_FORMAT_TO_MIME = {
     "JPEG": "image/jpeg",
@@ -50,6 +59,13 @@ class RenderedImageVariant:
     payload: bytes
     width: int
     height: int
+
+
+@dataclass(slots=True)
+class AvatarCropSpec:
+    x: float
+    y: float
+    size: float
 
 
 class AssetService:
@@ -185,11 +201,10 @@ class AssetService:
                 bucket=original_variant.storage_bucket,
                 key=original_variant.storage_key,
             )
-            image = Image.open(io.BytesIO(payload))
-            image.load()
+            image = self._load_image(payload)
             detected_mime_type = IMAGE_FORMAT_TO_MIME.get(image.format or "", original_variant.mime_type)
 
-            for variant_type, size in IMAGE_VARIANTS.items():
+            for variant_type, size in GENERIC_IMAGE_VARIANTS.items():
                 rendered = self._render_variant(image=image, size=size)
                 extension = "webp"
                 storage_key = build_asset_storage_key(
@@ -231,6 +246,52 @@ class AssetService:
                 now=self._now(),
             )
             raise
+
+    async def generate_avatar_variants(
+        self,
+        *,
+        asset_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        crop: dict[str, tp.Any],
+    ) -> None:
+        asset = await self._require_owned_asset(asset_id=asset_id, owner_id=owner_id)
+        original_variant = self._require_avatar_source_asset(asset)
+        crop_spec = AvatarCropSpec(**crop)
+
+        payload = await self._storage.get_object_bytes(
+            bucket=original_variant.storage_bucket,
+            key=original_variant.storage_key,
+        )
+        rendered_variants = self._render_avatar_variants(payload, crop_spec)
+
+        for variant_type, rendered in rendered_variants.items():
+            storage_key = build_asset_storage_key(
+                asset_id=asset.asset_id,
+                variant_type=variant_type,
+                extension="webp",
+            )
+            stored = await self._storage.upload_bytes(
+                bucket=self._storage.private_bucket,
+                key=storage_key,
+                payload=rendered.payload,
+                mime_type="image/webp",
+            )
+            await self._repository.upsert_variant(
+                asset_id=asset.asset_id,
+                asset_variant_type=variant_type,
+                storage_bucket=self._storage.private_bucket,
+                storage_key=storage_key,
+                mime_type=stored.mime_type,
+                size_bytes=stored.size_bytes,
+                width=rendered.width,
+                height=rendered.height,
+                duration_ms=None,
+                bitrate=None,
+                checksum_sha256=stored.checksum_sha256,
+                is_primary=False,
+                status=AssetVariantStatusEnum.READY,
+                variant_metadata={"crop": crop},
+            )
 
     async def process_video_asset(
         self,
@@ -384,6 +445,25 @@ class AssetService:
             return
         self._task_dispatcher.enqueue_video_processing(asset_id)
 
+    def _require_avatar_source_asset(self, asset: AssetModel):
+        if asset.asset_type != AssetTypeEnum.IMAGE:
+            raise InvalidAsset("Avatar asset must be an image")
+        if asset.status not in AVATAR_ALLOWED_ASSET_STATUSES:
+            raise InvalidAsset(f"Asset {asset.asset_id} is not ready for avatar generation")
+
+        original_variant = next(
+            (
+                variant
+                for variant in asset.variants
+                if variant.asset_variant_type == AssetVariantTypeEnum.ORIGINAL
+            ),
+            None,
+        )
+        if original_variant is None or original_variant.status != AssetVariantStatusEnum.READY:
+            raise InvalidAsset(f"Asset {asset.asset_id} original image is not available")
+
+        return original_variant
+
     def _render_variant(
         self,
         *,
@@ -401,6 +481,74 @@ class AssetService:
             width=variant.width,
             height=variant.height,
         )
+
+    def _render_avatar_variants(
+        self,
+        payload: bytes,
+        crop: AvatarCropSpec,
+    ) -> dict[AssetVariantTypeEnum, RenderedImageVariant]:
+        image = self._load_image(payload)
+        crop_box = self._build_avatar_crop_box(
+            image_width=image.width,
+            image_height=image.height,
+            crop=crop,
+        )
+        cropped = image.crop(crop_box)
+
+        return {
+            variant_type: self._render_avatar_variant(cropped=cropped, size=size)
+            for variant_type, size in AVATAR_VARIANTS.items()
+        }
+
+    def _render_avatar_variant(
+        self,
+        *,
+        cropped: Image.Image,
+        size: tuple[int, int],
+    ) -> RenderedImageVariant:
+        variant = cropped.copy()
+        if variant.mode not in ("RGB", "RGBA"):
+            variant = variant.convert("RGBA")
+        variant = variant.resize(size, Image.Resampling.LANCZOS)
+        buffer = io.BytesIO()
+        variant.save(buffer, format="WEBP", quality=92)
+        return RenderedImageVariant(
+            payload=buffer.getvalue(),
+            width=variant.width,
+            height=variant.height,
+        )
+
+    def _build_avatar_crop_box(
+        self,
+        *,
+        image_width: int,
+        image_height: int,
+        crop: AvatarCropSpec,
+    ) -> tuple[int, int, int, int]:
+        min_dimension = min(image_width, image_height)
+        crop_size_px = int(round(crop.size * min_dimension))
+        if crop_size_px < MIN_AVATAR_CROP_SIZE_PX:
+            raise InvalidAsset(
+                f"Avatar crop is too small; minimum square size is {MIN_AVATAR_CROP_SIZE_PX}px"
+            )
+
+        left = int(round(crop.x * image_width))
+        top = int(round(crop.y * image_height))
+        right = left + crop_size_px
+        bottom = top + crop_size_px
+
+        if left < 0 or top < 0 or right > image_width or bottom > image_height:
+            raise InvalidAsset("Avatar crop must stay within the source image bounds")
+
+        return left, top, right, bottom
+
+    def _load_image(self, payload: bytes) -> Image.Image:
+        image = Image.open(io.BytesIO(payload))
+        image.load()
+        normalized = ImageOps.exif_transpose(image)
+        normalized.load()
+        normalized.format = image.format
+        return normalized
 
     def _default_extension(self, asset_type: AssetTypeEnum, mime_type: str | None) -> str:
         guessed_extension = mimetypes.guess_extension(mime_type or "")

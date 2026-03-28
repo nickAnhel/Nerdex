@@ -6,12 +6,16 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-from aiobotocore.session import get_session
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from src.assets.enums import AssetVariantTypeEnum
 from src.config import StorageSettings
+
+try:
+    from aiobotocore.session import get_session
+except ModuleNotFoundError:  # pragma: no cover - exercised in lightweight unit-test envs
+    get_session = None
 
 
 IMAGE_EXTENSION_TO_MIME = {
@@ -55,11 +59,12 @@ class StoredObject:
 class AssetStorage:
     def __init__(self, settings: StorageSettings) -> None:
         self._settings = settings
-        self._session = get_session()
+        self._session = None if get_session is None else get_session()
+        endpoint_url = settings.resolved_endpoint_url
         self._client_config = {
             "aws_access_key_id": settings.access_key,
             "aws_secret_access_key": settings.secret_key,
-            "endpoint_url": settings.endpoint_url,
+            "endpoint_url": endpoint_url,
             "region_name": settings.region,
             "use_ssl": settings.use_ssl,
             "config": Config(
@@ -74,7 +79,13 @@ class AssetStorage:
 
     @asynccontextmanager
     async def _client(self):  # type: ignore[no-untyped-def]
-        async with self._session.create_client("s3", **self._client_config) as client:
+        if self._session is None:
+            raise RuntimeError("aiobotocore is required to use AssetStorage")
+        async with self._session.create_client(
+            "s3",
+            **self._client_config,
+            verify=self._settings.verify_ssl,
+        ) as client:
             yield client
 
     async def generate_presigned_put(
@@ -91,7 +102,7 @@ class AssetStorage:
             headers["Content-Type"] = mime_type
 
         async with self._client() as client:
-            url = client.generate_presigned_url(
+            url = await client.generate_presigned_url(
                 "put_object",
                 Params=params,
                 ExpiresIn=self._settings.presigned_upload_ttl_seconds,
@@ -112,7 +123,7 @@ class AssetStorage:
         key: str,
     ) -> str:
         async with self._client() as client:
-            return client.generate_presigned_url(
+            return await client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": key},
                 ExpiresIn=self._settings.presigned_download_ttl_seconds,

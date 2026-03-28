@@ -5,7 +5,9 @@ from sqlalchemy import delete, desc, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.assets.models import AssetModel
 from src.messages.models import MessageModel
+from src.users.models import UserModel
 
 
 class MessageRepository:
@@ -20,7 +22,12 @@ class MessageRepository:
             insert(MessageModel)
             .values(**data)
             .returning(MessageModel)
-            .options(selectinload(MessageModel.user))
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+            )
         )
         result = await self._session.execute(stmt)
         await self._session.commit()
@@ -33,7 +40,12 @@ class MessageRepository:
         query = (
             select(MessageModel)
             .filter_by(**filters)
-            .options(selectinload(MessageModel.user))
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+            )
         )
 
         result = await self._session.execute(query)
@@ -53,7 +65,12 @@ class MessageRepository:
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
-            .options(selectinload(MessageModel.user))
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+            )
         )
 
         result = await self._session.execute(query)
@@ -110,7 +127,12 @@ class MessageRepository:
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
-            .options(selectinload(MessageModel.user))
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+            )
         )
 
         result = await self._session.execute(query)

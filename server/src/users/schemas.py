@@ -13,9 +13,27 @@ class UserCreate(BaseSchema):
     password: str = Field(min_length=8, max_length=50)
 
 
+class UserAvatarCrop(BaseSchema):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    size: float = Field(gt=0, le=1)
+
+
+class UserAvatarGet(BaseSchema):
+    small_url: str | None = None
+    medium_url: str | None = None
+    crop: UserAvatarCrop
+
+
+class UserAvatarUpdate(BaseSchema):
+    asset_id: uuid.UUID
+    crop: UserAvatarCrop
+
+
 class UserGet(BaseSchema):
     user_id: uuid.UUID
     avatar_asset_id: uuid.UUID | None = None
+    avatar: UserAvatarGet | None = None
     username: Username
     is_admin: bool
     subscribers_count: int

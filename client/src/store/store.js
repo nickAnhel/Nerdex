@@ -1,4 +1,4 @@
-import { makeAutoObservable, set } from "mobx";
+import { makeAutoObservable } from "mobx";
 import axios from "axios";
 
 import { APIUrl } from "../http";
@@ -11,7 +11,6 @@ export default class Store {
     isAuthenticated = false
     isLoading = false
 
-    isChangedProfilePhoto = false
     isRefreshPosts = false
 
     constructor() {
@@ -28,10 +27,6 @@ export default class Store {
 
     setLoading(value) {
         this.isLoading = value;
-    }
-
-    changedProfilePhoto() {
-        this.isChangedProfilePhoto = !this.isChangedProfilePhoto;
     }
 
     refreshPosts() {

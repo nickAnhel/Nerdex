@@ -17,6 +17,7 @@ import TagChip from "../tag-chip/TagChip";
 import CommentIcon from "../icons/CommentIcon";
 import DislikeIcon from "../icons/DislikeIcon";
 import LikeIcon from "../icons/LikeIcon";
+import { getAvatarUrl } from "../../utils/avatar";
 
 
 const PostListItem = forwardRef((props, ref) => {
@@ -25,7 +26,7 @@ const PostListItem = forwardRef((props, ref) => {
     const location = useLocation();
 
     const [userProfilePhotoSrc, setUserProfilePhotoSrc] = useState(
-        `${process.env.REACT_APP_STORAGE_URL}PPs@${props.post.user.user_id}?${performance.now()}`
+        getAvatarUrl(props.post.user, "small")
     );
 
     const [post, setPost] = useState(props.post)
@@ -39,7 +40,7 @@ const PostListItem = forwardRef((props, ref) => {
         setPost(props.post);
         setMyReaction(props.post.my_reaction);
         setUserProfilePhotoSrc(
-            `${process.env.REACT_APP_STORAGE_URL}PPs@${props.post.user.user_id}?${performance.now()}`
+            getAvatarUrl(props.post.user, "small")
         );
     }, [props.post]);
 
@@ -119,7 +120,7 @@ const PostListItem = forwardRef((props, ref) => {
                     <Link to={`/people/@${post.user.username}`} className="author">
                         <img
                             src={userProfilePhotoSrc}
-                            onError={() => { setUserProfilePhotoSrc("../../../assets/profile.svg") }}
+                            onError={() => { setUserProfilePhotoSrc("/assets/profile.svg") }}
                             alt={`${post.user.username} profile photo`}
                         />
                         <p>
@@ -261,7 +262,7 @@ const PostListItem = forwardRef((props, ref) => {
                     <div className="delete-post-modal-actions">
                         <button
                             type="button"
-                            className="secondary"
+                            className="btn btn-secondary"
                             onClick={() => setIsDeletePostModalActive(false)}
                             disabled={isDeletingPost}
                         >
@@ -269,7 +270,7 @@ const PostListItem = forwardRef((props, ref) => {
                         </button>
                         <button
                             type="button"
-                            className="danger"
+                            className="btn btn-danger"
                             onClick={handleDeletePost}
                             disabled={isDeletingPost}
                         >

@@ -89,7 +89,7 @@ function CommentComposer({
                         onCancel &&
                         <button
                             type="button"
-                            className="secondary"
+                            className="btn btn-secondary"
                             onClick={onCancel}
                             disabled={isSubmitting}
                         >
@@ -98,6 +98,7 @@ function CommentComposer({
                     }
                     <button
                         type="button"
+                        className="btn btn-primary"
                         onClick={() => { void handleSubmit(); }}
                         disabled={isSubmitting}
                     >

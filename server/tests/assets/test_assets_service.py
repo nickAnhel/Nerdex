@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from src.assets.enums import AssetAccessTypeEnum, AssetStatusEnum, AssetTypeEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
-from src.assets.exceptions import InvalidAsset
+from src.assets.exceptions import AssetNotFound, InvalidAsset
 from src.assets.service import AssetService, TaskDispatcher
 from src.assets.storage import StoredObject, UploadInstruction, build_asset_storage_key
 from src.assets.schemas import AssetInitUploadRequest
@@ -299,8 +299,8 @@ def build_service() -> tuple[AssetService, FakeAssetRepository, FakeStorage, lis
     return service, repository, storage, image_queue, video_queue
 
 
-def make_png_bytes() -> bytes:
-    image = Image.new("RGB", (1024, 768), color="red")
+def make_png_bytes(size: tuple[int, int] = (1024, 768)) -> bytes:
+    image = Image.new("RGB", size, color="red")
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
@@ -454,10 +454,154 @@ async def test_process_image_asset_creates_expected_variants() -> None:
         AssetVariantTypeEnum.ORIGINAL,
         AssetVariantTypeEnum.IMAGE_MEDIUM,
         AssetVariantTypeEnum.IMAGE_SMALL,
-        AssetVariantTypeEnum.AVATAR_MEDIUM,
-        AssetVariantTypeEnum.AVATAR_SMALL,
     } == variant_types
     assert repository.assets[asset.asset_id].status == AssetStatusEnum.READY
+
+
+@pytest.mark.anyio
+async def test_generate_avatar_variants_creates_expected_square_variants() -> None:
+    service, repository, storage, _, _ = build_service()
+    owner_id = uuid.uuid4()
+    init_response = await service.init_upload(
+        owner_id=owner_id,
+        data=AssetInitUploadRequest(
+            filename="photo.png",
+            size_bytes=1024,
+            declared_mime_type="image/png",
+            asset_type=AssetTypeEnum.IMAGE,
+            usage_context="avatar",
+        ),
+    )
+    asset = repository.assets[init_response.asset.asset_id]
+    asset.status = AssetStatusEnum.READY
+    asset.variants[0].status = AssetVariantStatusEnum.READY
+    original_variant = asset.variants[0]
+    storage.object_payloads[(original_variant.storage_bucket, original_variant.storage_key)] = make_png_bytes()
+
+    await service.generate_avatar_variants(
+        asset_id=asset.asset_id,
+        owner_id=owner_id,
+        crop={"x": 0.1, "y": 0.05, "size": 0.6},
+    )
+
+    variant_types = {variant.asset_variant_type for variant in repository.assets[asset.asset_id].variants}
+    assert AssetVariantTypeEnum.AVATAR_MEDIUM in variant_types
+    assert AssetVariantTypeEnum.AVATAR_SMALL in variant_types
+
+
+@pytest.mark.anyio
+async def test_generate_avatar_variants_rejects_foreign_asset() -> None:
+    service, repository, storage, _, _ = build_service()
+    owner_id = uuid.uuid4()
+    other_user_id = uuid.uuid4()
+    init_response = await service.init_upload(
+        owner_id=owner_id,
+        data=AssetInitUploadRequest(
+            filename="photo.png",
+            size_bytes=1024,
+            declared_mime_type="image/png",
+            asset_type=AssetTypeEnum.IMAGE,
+            usage_context="avatar",
+        ),
+    )
+    asset = repository.assets[init_response.asset.asset_id]
+    asset.status = AssetStatusEnum.READY
+    asset.variants[0].status = AssetVariantStatusEnum.READY
+    original_variant = asset.variants[0]
+    storage.object_payloads[(original_variant.storage_bucket, original_variant.storage_key)] = make_png_bytes()
+
+    with pytest.raises(AssetNotFound):
+        await service.generate_avatar_variants(
+            asset_id=asset.asset_id,
+            owner_id=other_user_id,
+            crop={"x": 0.1, "y": 0.1, "size": 0.7},
+        )
+
+
+@pytest.mark.anyio
+async def test_generate_avatar_variants_rejects_non_image_asset() -> None:
+    service, repository, storage, _, _ = build_service()
+    owner_id = uuid.uuid4()
+    init_response = await service.init_upload(
+        owner_id=owner_id,
+        data=AssetInitUploadRequest(
+            filename="document.pdf",
+            size_bytes=1024,
+            declared_mime_type="application/pdf",
+            asset_type=AssetTypeEnum.FILE,
+            usage_context="avatar",
+        ),
+    )
+    asset = repository.assets[init_response.asset.asset_id]
+    asset.status = AssetStatusEnum.READY
+    asset.variants[0].status = AssetVariantStatusEnum.READY
+    original_variant = asset.variants[0]
+    storage.object_payloads[(original_variant.storage_bucket, original_variant.storage_key)] = b"pdf"
+
+    with pytest.raises(InvalidAsset):
+        await service.generate_avatar_variants(
+            asset_id=asset.asset_id,
+            owner_id=owner_id,
+            crop={"x": 0.1, "y": 0.1, "size": 0.7},
+        )
+
+
+@pytest.mark.anyio
+async def test_generate_avatar_variants_rejects_invalid_crop() -> None:
+    service, repository, storage, _, _ = build_service()
+    owner_id = uuid.uuid4()
+    init_response = await service.init_upload(
+        owner_id=owner_id,
+        data=AssetInitUploadRequest(
+            filename="photo.png",
+            size_bytes=1024,
+            declared_mime_type="image/png",
+            asset_type=AssetTypeEnum.IMAGE,
+            usage_context="avatar",
+        ),
+    )
+    asset = repository.assets[init_response.asset.asset_id]
+    asset.status = AssetStatusEnum.READY
+    asset.variants[0].status = AssetVariantStatusEnum.READY
+    original_variant = asset.variants[0]
+    storage.object_payloads[(original_variant.storage_bucket, original_variant.storage_key)] = make_png_bytes()
+
+    with pytest.raises(InvalidAsset):
+        await service.generate_avatar_variants(
+            asset_id=asset.asset_id,
+            owner_id=owner_id,
+            crop={"x": 0.7, "y": 0.7, "size": 0.6},
+        )
+
+
+@pytest.mark.anyio
+async def test_generate_avatar_variants_rejects_tiny_crop() -> None:
+    service, repository, storage, _, _ = build_service()
+    owner_id = uuid.uuid4()
+    init_response = await service.init_upload(
+        owner_id=owner_id,
+        data=AssetInitUploadRequest(
+            filename="photo.png",
+            size_bytes=1024,
+            declared_mime_type="image/png",
+            asset_type=AssetTypeEnum.IMAGE,
+            usage_context="avatar",
+        ),
+    )
+    asset = repository.assets[init_response.asset.asset_id]
+    asset.status = AssetStatusEnum.READY
+    asset.variants[0].status = AssetVariantStatusEnum.READY
+    original_variant = asset.variants[0]
+    storage.object_payloads[(original_variant.storage_bucket, original_variant.storage_key)] = make_png_bytes(
+        size=(240, 240),
+    )
+
+    with pytest.raises(InvalidAsset):
+        await service.generate_avatar_variants(
+            asset_id=asset.asset_id,
+            owner_id=owner_id,
+            crop={"x": 0.2, "y": 0.2, "size": 0.3},
+        )
 
 
 @pytest.mark.anyio

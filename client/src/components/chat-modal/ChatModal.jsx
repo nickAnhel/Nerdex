@@ -75,6 +75,7 @@ function ChatModal({
                 </div>
 
                 <button
+                    className="btn btn-primary btn-block"
                     disabled={chatTitle.trim().length < 1}
                     onClick={(e) => { handleSaveChat(e); }}
                 >

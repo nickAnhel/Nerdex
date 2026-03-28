@@ -7,12 +7,13 @@ from sqlalchemy import delete, desc, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.assets.models import AssetModel
 import src.tags.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel, ContentReactionModel
 from src.posts.enums import PostOrder, PostProfileFilter
 from src.posts.models import PostDetailsModel
-from src.users.models import SubscriptionModel
+from src.users.models import SubscriptionModel, UserModel
 
 
 class PostRepository:
@@ -322,7 +323,10 @@ class PostRepository:
                 select(ContentModel)
                 .where(ContentModel.content_type == ContentTypeEnum.POST)
                 .options(
-                    selectinload(ContentModel.author),
+                    selectinload(ContentModel.author).selectinload(UserModel.subscribers),
+                    selectinload(ContentModel.author)
+                    .selectinload(UserModel.avatar_asset)
+                    .selectinload(AssetModel.variants),
                     selectinload(ContentModel.post_details),
                     selectinload(ContentModel.tags),
                 )
@@ -339,7 +343,10 @@ class PostRepository:
             )
             .where(ContentModel.content_type == ContentTypeEnum.POST)
             .options(
-                selectinload(ContentModel.author),
+                selectinload(ContentModel.author).selectinload(UserModel.subscribers),
+                selectinload(ContentModel.author)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
                 selectinload(ContentModel.post_details),
                 selectinload(ContentModel.tags),
             )

@@ -7,7 +7,7 @@ from pydantic import Field
 
 from src.common.schemas import BaseSchema
 from src.content.enums import ReactionTypeEnum
-from src.users.schemas import Username
+from src.users.schemas import UserAvatarGet, Username
 
 COMMENT_BODY_MAX_LENGTH = 2048
 DEFAULT_COMMENTS_LIMIT = 20
@@ -17,6 +17,7 @@ MAX_COMMENTS_LIMIT = 100
 class CommentAuthorGet(BaseSchema):
     user_id: uuid.UUID
     username: Username
+    avatar: UserAvatarGet | None = None
 
 
 class CommentRefGet(BaseSchema):

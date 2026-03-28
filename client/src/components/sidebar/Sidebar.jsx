@@ -1,20 +1,17 @@
-import { useContext, useState, useEffect } from "react";
+import { useContext } from "react";
 import { Link, NavLink } from "react-router-dom"
 import { observer } from "mobx-react-lite";
 
 import "./Sidebar.css"
 
 import { StoreContext } from "../..";
+import { getAvatarRenderKey, getAvatarUrl } from "../../utils/avatar";
 
 
 function Sidebar() {
     const { store } = useContext(StoreContext);
-
-    const [imgSrc, setImgSrc] = useState(null);
-
-    useEffect(() => {
-        setImgSrc(`${process.env.REACT_APP_STORAGE_URL}PPs@${store.user.user_id}?${performance.now()}`);
-    }, [store.user?.user_id, store.isChangedProfilePhoto])
+    const avatarSrc = getAvatarUrl(store.user, "small");
+    const avatarRenderKey = getAvatarRenderKey(store.user, "small");
 
     return (
         <div id="sidebar">
@@ -55,9 +52,10 @@ function Sidebar() {
                         ?
                         <Link to="/profile" className="sidebar-item">
                             <img
+                                key={avatarRenderKey}
                                 className="profile"
-                                src={imgSrc}
-                                onError={() => { setImgSrc("../../../assets/profile.svg") }}
+                                src={avatarSrc}
+                                onError={(e) => { e.currentTarget.src = "/assets/profile.svg"; }}
                                 alt="Profile"
                             />
                         </Link>

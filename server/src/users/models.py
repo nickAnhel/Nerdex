@@ -1,6 +1,8 @@
+import typing as tp
 import uuid
 
-from sqlalchemy import ForeignKey, Index
+from sqlalchemy import JSON, ForeignKey, Index, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.models import Base
@@ -34,6 +36,12 @@ class UserModel(Base):
     avatar_asset_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("assets.asset_id", ondelete="SET NULL"),
         nullable=True,
+    )
+    avatar_crop: Mapped[dict[str, tp.Any] | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=True,
+        default=None,
+        server_default=text("NULL"),
     )
 
     username: Mapped[str] = mapped_column(unique=True)

@@ -284,25 +284,6 @@
     min-width: 6.5rem;
 }
 
-.delete-comment-modal-actions button.secondary {
-    background: transparent;
-    border: 1px solid #545454;
-    color: #d0d0d0;
-}
-
-.delete-comment-modal-actions button.secondary:hover,
-.delete-comment-modal-actions button.secondary:focus {
-    background: transparent;
-    border-color: #767676;
-    color: #ffffff;
-    box-shadow: none;
-}
-
-.delete-comment-modal-actions button.danger {
-    background: #c94b63;
-    color: #ffffff;
-}
-
 @keyframes reply-target-flash {
     0% {
         border-color: rgba(157, 80, 255, 0.62);
