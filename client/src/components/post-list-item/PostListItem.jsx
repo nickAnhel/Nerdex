@@ -12,7 +12,10 @@ import PostService from "../../service/PostService";
 
 import Modal from "../modal/Modal";
 import Loader from "../loader/Loader";
-import PostModal from "../post-modal/PostModal"
+import PostModal from "../post-modal/PostModal";
+import PostFileBlock from "../post-file-block/PostFileBlock";
+import PostGalleryViewer from "../post-gallery-viewer/PostGalleryViewer";
+import PostMediaBlock from "../post-media-block/PostMediaBlock";
 import TagChip from "../tag-chip/TagChip";
 import CommentIcon from "../icons/CommentIcon";
 import DislikeIcon from "../icons/DislikeIcon";
@@ -35,6 +38,7 @@ const PostListItem = forwardRef((props, ref) => {
     const [isEditPostModalActive, setIsEditPostModalActive] = useState(false);
     const [isDeletePostModalActive, setIsDeletePostModalActive] = useState(false);
     const [isDeletingPost, setIsDeletingPost] = useState(false);
+    const [galleryIndex, setGalleryIndex] = useState(null);
 
     useEffect(() => {
         setPost(props.post);
@@ -43,6 +47,14 @@ const PostListItem = forwardRef((props, ref) => {
             getAvatarUrl(props.post.user, "small")
         );
     }, [props.post]);
+
+    useEffect(() => {
+        if (typeof props.initialGalleryIndex === "number" && props.initialGalleryIndex >= 0) {
+            setGalleryIndex(props.initialGalleryIndex);
+            return;
+        }
+        setGalleryIndex(null);
+    }, [props.initialGalleryIndex, post.post_id]);
 
     const formatCreatedAt = (createdAt) => {
         const date = new Date(createdAt);
@@ -102,10 +114,16 @@ const PostListItem = forwardRef((props, ref) => {
     const canReact = store.isAuthenticated && post.status === "published";
     const isLiked = myReaction === "like";
     const isDisliked = myReaction === "dislike";
+    const isDetailView = props.showDetailLink === false;
 
-    const buildPostQueryLocation = (postId) => {
+    const buildPostQueryLocation = (postId, mediaIndex = null) => {
         const nextSearchParams = new URLSearchParams(location.search);
         nextSearchParams.set("p", postId);
+        if (typeof mediaIndex === "number" && mediaIndex >= 0) {
+            nextSearchParams.set("media", String(mediaIndex));
+        } else {
+            nextSearchParams.delete("media");
+        }
 
         return {
             pathname: location.pathname,
@@ -142,33 +160,56 @@ const PostListItem = forwardRef((props, ref) => {
                     {formatCreatedAt(post.published_at || post.created_at)}
                 </span>
             </div>
-            <div className="content">
-                <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                        code({ node, inline, className, children, ...props }) {
-                            const match = /language-(\w+)/.exec(className || "");
-                            return !inline && match ? (
-                                <SyntaxHighlighter
-                                    style={oneDark}
-                                    language={match[1]}
-                                    PreTag="div"
-                                    customStyle={{ margin: 0 }}
-                                    {...props}
-                                >
-                                    {String(children).replace(/\n$/, "")}
-                                </SyntaxHighlighter>
-                            ) : (
-                                <code className={className} {...props}>
-                                    {children}
-                                </code>
-                            );
-                        },
-                    }}
-                >
-                    {post.content}
-                </ReactMarkdown>
-            </div>
+            <PostMediaBlock
+                attachments={post.media_attachments || []}
+                variant="feed"
+                onMediaClick={(index) => {
+                    if (index < 0) {
+                        return;
+                    }
+                    if (isDetailView) {
+                        setGalleryIndex(index);
+                        props.onGalleryIndexChange?.(index);
+                        return;
+                    }
+                    navigate(buildPostQueryLocation(post.post_id, index));
+                }}
+            />
+            <PostFileBlock
+                attachments={post.file_attachments || []}
+                variant={isDetailView ? "detail" : "feed"}
+            />
+            {
+                post.content?.trim() && (
+                    <div className="content">
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                                code({ node, inline, className, children, ...props }) {
+                                    const match = /language-(\w+)/.exec(className || "");
+                                    return !inline && match ? (
+                                        <SyntaxHighlighter
+                                            style={oneDark}
+                                            language={match[1]}
+                                            PreTag="div"
+                                            customStyle={{ margin: 0 }}
+                                            {...props}
+                                        >
+                                            {String(children).replace(/\n$/, "")}
+                                        </SyntaxHighlighter>
+                                    ) : (
+                                        <code className={className} {...props}>
+                                            {children}
+                                        </code>
+                                    );
+                                },
+                            }}
+                        >
+                            {post.content}
+                        </ReactMarkdown>
+                    </div>
+                )
+            }
             {
                 post.tags?.length > 0 &&
                 <div className="post-tags">
@@ -240,6 +281,8 @@ const PostListItem = forwardRef((props, ref) => {
                 status={post.status}
                 visibility={post.visibility}
                 tags={post.tags}
+                mediaAttachments={post.media_attachments}
+                fileAttachments={post.file_attachments}
                 onSaved={setPost}
                 savePostFunc={PostService.updatePost}
                 navigateTo={(savedPost) => buildPostQueryLocation(savedPost.post_id)}
@@ -279,6 +322,19 @@ const PostListItem = forwardRef((props, ref) => {
                     </div>
                 </div>
             </Modal>
+
+            <PostGalleryViewer
+                attachments={post.media_attachments || []}
+                activeIndex={galleryIndex}
+                onClose={() => {
+                    setGalleryIndex(null);
+                    props.onGalleryClose?.();
+                }}
+                onChange={(index) => {
+                    setGalleryIndex(index);
+                    props.onGalleryIndexChange?.(index);
+                }}
+            />
         </div>
     );
 });

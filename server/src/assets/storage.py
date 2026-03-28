@@ -5,6 +5,7 @@ import mimetypes
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -121,11 +122,23 @@ class AssetStorage:
         *,
         bucket: str,
         key: str,
+        download_filename: str | None = None,
+        inline: bool = True,
+        response_content_type: str | None = None,
     ) -> str:
+        params: dict[str, str] = {"Bucket": bucket, "Key": key}
+        if download_filename:
+            disposition = "inline" if inline else "attachment"
+            params["ResponseContentDisposition"] = (
+                f"{disposition}; filename*=UTF-8''{quote(download_filename)}"
+            )
+        if response_content_type:
+            params["ResponseContentType"] = response_content_type
+
         async with self._client() as client:
             return await client.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": bucket, "Key": key},
+                Params=params,
                 ExpiresIn=self._settings.presigned_download_ttl_seconds,
             )
 

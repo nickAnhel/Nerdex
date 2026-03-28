@@ -14,7 +14,17 @@ from src.users.models import UserModel
 def test_content_asset_model_uses_composite_primary_key() -> None:
     primary_key_columns = {column.name for column in ContentAssetModel.__table__.primary_key.columns}
 
-    assert primary_key_columns == {"content_id", "asset_id", "content_asset_type"}
+    assert primary_key_columns == {"content_id", "asset_id", "attachment_type"}
+
+
+def test_content_asset_model_has_local_position_constraint() -> None:
+    constraints = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in ContentAssetModel.__table__.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    }
+
+    assert ("content_id", "attachment_type", "position") in constraints
 
 
 def test_message_asset_model_uses_composite_primary_key() -> None:

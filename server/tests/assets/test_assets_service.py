@@ -243,7 +243,15 @@ class FakeStorage:
             expires_in_seconds=900,
         )
 
-    async def generate_presigned_get(self, *, bucket: str, key: str) -> str:
+    async def generate_presigned_get(
+        self,
+        *,
+        bucket: str,
+        key: str,
+        download_filename: str | None = None,
+        inline: bool = True,
+        response_content_type: str | None = None,
+    ) -> str:
         self.get_requests.append((bucket, key))
         return f"https://download.test/{bucket}/{key}"
 

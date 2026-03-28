@@ -4,10 +4,18 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from src.assets.enums import (
+    AttachmentTypeEnum,
+    AssetAccessTypeEnum,
+    AssetStatusEnum,
+    AssetTypeEnum,
+    AssetVariantStatusEnum,
+    AssetVariantTypeEnum,
+)
 from src.content.enums import ContentStatusEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.posts.enums import PostOrder, PostProfileFilter
-from src.posts.exceptions import PostNotFound
-from src.posts.schemas import PostCreate, PostUpdate
+from src.posts.exceptions import InvalidPost, PostNotFound
+from src.posts.schemas import PostAttachmentWrite, PostCreate, PostUpdate
 from src.posts.service import PostService
 from src.tags.service import TagService
 from src.users.schemas import UserGet
@@ -22,6 +30,47 @@ class FakePostDetails:
 class FakeTag:
     tag_id: uuid.UUID
     slug: str
+
+
+@dataclass
+class FakeVariant:
+    asset_variant_type: AssetVariantTypeEnum
+    storage_bucket: str
+    storage_key: str
+    mime_type: str
+    size_bytes: int
+    width: int | None = None
+    height: int | None = None
+    duration_ms: int | None = None
+    bitrate: int | None = None
+    status: AssetVariantStatusEnum = AssetVariantStatusEnum.READY
+    created_at: datetime.datetime = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+
+
+@dataclass
+class FakeAsset:
+    asset_id: uuid.UUID
+    owner_id: uuid.UUID
+    asset_type: AssetTypeEnum
+    original_filename: str
+    status: AssetStatusEnum
+    access_type: AssetAccessTypeEnum = AssetAccessTypeEnum.PRIVATE
+    detected_mime_type: str | None = None
+    size_bytes: int | None = None
+    asset_metadata: dict[str, object] = field(default_factory=dict)
+    variants: list[FakeVariant] = field(default_factory=list)
+
+
+@dataclass
+class FakeContentAsset:
+    content_id: uuid.UUID
+    asset_id: uuid.UUID
+    attachment_type: AttachmentTypeEnum
+    position: int
+    asset: FakeAsset
+    deleted_at: datetime.datetime | None = None
 
 
 @dataclass
@@ -42,6 +91,7 @@ class FakePost:
     my_reaction: ReactionTypeEnum | None = None
     is_owner: bool = False
     tags: list[FakeTag] = field(default_factory=list)
+    asset_links: list[FakeContentAsset] = field(default_factory=list)
 
     @property
     def post_id(self) -> uuid.UUID:
@@ -61,8 +111,9 @@ class FakePost:
 
 
 class FakePostRepository:
-    def __init__(self, users: dict[uuid.UUID, UserGet]) -> None:
+    def __init__(self, users: dict[uuid.UUID, UserGet], assets: dict[uuid.UUID, FakeAsset]) -> None:
         self.users = users
+        self.assets = assets
         self.posts: dict[uuid.UUID, FakePost] = {}
         self.reactions: dict[tuple[uuid.UUID, uuid.UUID], ReactionTypeEnum] = {}
         self.subscriptions: set[tuple[uuid.UUID, uuid.UUID]] = set()
@@ -232,12 +283,43 @@ class FakePostRepository:
     async def commit(self) -> None:
         return None
 
+    async def get_attachment_asset_ids(
+        self,
+        *,
+        content_id: uuid.UUID,
+    ) -> set[uuid.UUID]:
+        post = self.posts[content_id]
+        return {link.asset_id for link in post.asset_links}
+
+    async def replace_attachments(
+        self,
+        *,
+        content_id: uuid.UUID,
+        attachments: list[dict[str, object]],
+        commit: bool = True,
+    ) -> None:
+        post = self.posts[content_id]
+        post.asset_links = [
+            FakeContentAsset(
+                content_id=content_id,
+                asset_id=attachment["asset_id"],  # type: ignore[index]
+                attachment_type=attachment["attachment_type"],  # type: ignore[index]
+                position=attachment["position"],  # type: ignore[index]
+                asset=self.assets[attachment["asset_id"]],  # type: ignore[index]
+            )
+            for attachment in sorted(
+                attachments,
+                key=lambda item: (item["attachment_type"].value, item["position"]),  # type: ignore[index]
+            )
+        ]
+
     async def soft_delete_post(
         self,
         *,
         content_id: uuid.UUID,
         updated_at: datetime.datetime,
         deleted_at: datetime.datetime,
+        commit: bool = True,
     ) -> FakePost:
         post = self.posts[content_id]
         post.status = ContentStatusEnum.DELETED
@@ -348,6 +430,52 @@ class FakePostRepository:
         return post
 
 
+class FakeAssetRepository:
+    def __init__(self, assets: dict[uuid.UUID, FakeAsset]) -> None:
+        self.assets = assets
+
+    async def get_assets(
+        self,
+        *,
+        asset_ids: list[uuid.UUID],
+        owner_id: uuid.UUID | None = None,
+    ) -> list[FakeAsset]:
+        resolved_assets: list[FakeAsset] = []
+        for asset_id in asset_ids:
+            asset = self.assets.get(asset_id)
+            if asset is None:
+                continue
+            if owner_id is not None and asset.owner_id != owner_id:
+                continue
+            resolved_assets.append(asset)
+        return resolved_assets
+
+
+class FakeAssetService:
+    def __init__(self) -> None:
+        self.orphaned_asset_ids: list[uuid.UUID] = []
+
+    async def mark_asset_orphaned_if_unreferenced(self, *, asset_id: uuid.UUID) -> bool:
+        self.orphaned_asset_ids.append(asset_id)
+        return True
+
+
+class FakeAssetStorage:
+    async def generate_presigned_get(
+        self,
+        *,
+        bucket: str,
+        key: str,
+        download_filename: str | None = None,
+        inline: bool = True,
+        response_content_type: str | None = None,
+    ) -> str:
+        suffix = ""
+        if download_filename:
+            suffix = f"?download={download_filename}&inline={str(inline).lower()}"
+        return f"https://download.test/{bucket}/{key}{suffix}"
+
+
 class FakeTagRepository:
     def __init__(self, post_repository: FakePostRepository) -> None:
         self.post_repository = post_repository
@@ -424,9 +552,58 @@ class ServiceBundle:
     service: PostService
     repository: FakePostRepository
     tag_repository: FakeTagRepository
+    asset_repository: FakeAssetRepository
+    asset_service: FakeAssetService
     author: UserGet
     stranger: UserGet
     follower: UserGet
+
+
+def build_asset(
+    *,
+    owner_id: uuid.UUID,
+    asset_type: AssetTypeEnum,
+    filename: str,
+    mime_type: str,
+    usage_context: str | None,
+    duration_ms: int | None = None,
+) -> FakeAsset:
+    asset_id = uuid.uuid4()
+    variants = [
+        FakeVariant(
+            asset_variant_type=AssetVariantTypeEnum.ORIGINAL,
+            storage_bucket="bucket",
+            storage_key=f"{asset_id}/original",
+            mime_type=mime_type,
+            size_bytes=2048,
+            width=1600 if asset_type == AssetTypeEnum.IMAGE else None,
+            height=900 if asset_type == AssetTypeEnum.IMAGE else None,
+            duration_ms=duration_ms,
+        )
+    ]
+    if asset_type == AssetTypeEnum.IMAGE:
+        variants.append(
+            FakeVariant(
+                asset_variant_type=AssetVariantTypeEnum.IMAGE_SMALL,
+                storage_bucket="bucket",
+                storage_key=f"{asset_id}/image_small.webp",
+                mime_type="image/webp",
+                size_bytes=512,
+                width=640,
+                height=640,
+            )
+        )
+    return FakeAsset(
+        asset_id=asset_id,
+        owner_id=owner_id,
+        asset_type=asset_type,
+        original_filename=filename,
+        status=AssetStatusEnum.READY,
+        detected_mime_type=mime_type,
+        size_bytes=2048,
+        asset_metadata={"usage_context": usage_context} if usage_context else {},
+        variants=variants,
+    )
 
 
 @pytest.fixture
@@ -449,22 +626,94 @@ def service_bundle() -> ServiceBundle:
         is_admin=False,
         subscribers_count=0,
     )
+    image_media = build_asset(
+        owner_id=author.user_id,
+        asset_type=AssetTypeEnum.IMAGE,
+        filename="photo.png",
+        mime_type="image/png",
+        usage_context="post_media",
+    )
+    video_media = build_asset(
+        owner_id=author.user_id,
+        asset_type=AssetTypeEnum.VIDEO,
+        filename="clip.mp4",
+        mime_type="video/mp4",
+        usage_context="post_media",
+        duration_ms=42000,
+    )
+    file_asset = build_asset(
+        owner_id=author.user_id,
+        asset_type=AssetTypeEnum.FILE,
+        filename="report.pdf",
+        mime_type="application/pdf",
+        usage_context="post_file",
+    )
+    audio_asset = build_asset(
+        owner_id=author.user_id,
+        asset_type=AssetTypeEnum.FILE,
+        filename="voice.mp3",
+        mime_type="audio/mpeg",
+        usage_context="post_file",
+        duration_ms=9000,
+    )
+    image_file_asset = build_asset(
+        owner_id=author.user_id,
+        asset_type=AssetTypeEnum.IMAGE,
+        filename="scan.jpg",
+        mime_type="image/jpeg",
+        usage_context="post_file",
+    )
+    stranger_asset = build_asset(
+        owner_id=stranger.user_id,
+        asset_type=AssetTypeEnum.FILE,
+        filename="secret.pdf",
+        mime_type="application/pdf",
+        usage_context="post_file",
+    )
+    avatar_asset = build_asset(
+        owner_id=author.user_id,
+        asset_type=AssetTypeEnum.IMAGE,
+        filename="avatar.png",
+        mime_type="image/png",
+        usage_context="avatar",
+    )
+    assets = {
+        asset.asset_id: asset
+        for asset in [
+            image_media,
+            video_media,
+            file_asset,
+            audio_asset,
+            image_file_asset,
+            stranger_asset,
+            avatar_asset,
+        ]
+    }
+
     repository = FakePostRepository(
         users={
             author.user_id: author,
             stranger.user_id: stranger,
             follower.user_id: follower,
-        }
+        },
+        assets=assets,
     )
     tag_repository = FakeTagRepository(post_repository=repository)
+    asset_repository = FakeAssetRepository(assets)
+    asset_service = FakeAssetService()
     repository.subscriptions.add((follower.user_id, author.user_id))
     return ServiceBundle(
         service=PostService(
             repository=repository,
             tag_service=TagService(repository=tag_repository),
+            asset_repository=asset_repository,  # type: ignore[arg-type]
+            asset_service=asset_service,  # type: ignore[arg-type]
+            asset_storage=FakeAssetStorage(),  # type: ignore[arg-type]
         ),
         repository=repository,
         tag_repository=tag_repository,
+        asset_repository=asset_repository,
+        asset_service=asset_service,
         author=author,
         stranger=stranger,
         follower=follower,
@@ -478,6 +727,25 @@ def anyio_backend() -> str:
 
 def dt(minutes: int) -> datetime.datetime:
     return datetime.datetime(2026, 3, 9, 12, 0, tzinfo=datetime.timezone.utc) + datetime.timedelta(minutes=minutes)
+
+
+def attachment_payload(
+    asset_id: uuid.UUID,
+    attachment_type: AttachmentTypeEnum,
+    position: int,
+) -> PostAttachmentWrite:
+    return PostAttachmentWrite(
+        asset_id=asset_id,
+        attachment_type=attachment_type,
+        position=position,
+    )
+
+
+def find_asset_id(service_bundle: ServiceBundle, filename: str) -> uuid.UUID:
+    for asset_id, asset in service_bundle.asset_repository.assets.items():
+        if asset.original_filename == filename:
+            return asset_id
+    raise AssertionError(f"Asset with filename {filename} not found")
 
 
 @pytest.mark.anyio
@@ -494,6 +762,133 @@ async def test_create_post_creates_content_and_post_details(service_bundle: Serv
     assert post.visibility == ContentVisibilityEnum.PUBLIC
     assert stored.post_details.body_text == "public body"
     assert post.tags == []
+
+
+@pytest.mark.anyio
+async def test_create_post_with_media_only(service_bundle: ServiceBundle) -> None:
+    image_asset_id = find_asset_id(service_bundle, "photo.png")
+    video_asset_id = find_asset_id(service_bundle, "clip.mp4")
+
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            attachments=[
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(video_asset_id, AttachmentTypeEnum.MEDIA, 1),
+            ],
+        ),
+    )
+
+    assert post.content == ""
+    assert [attachment.asset_id for attachment in post.media_attachments] == [image_asset_id, video_asset_id]
+    assert post.file_attachments == []
+
+
+@pytest.mark.anyio
+async def test_create_post_with_files_only(service_bundle: ServiceBundle) -> None:
+    file_asset_id = find_asset_id(service_bundle, "report.pdf")
+    audio_asset_id = find_asset_id(service_bundle, "voice.mp3")
+
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            attachments=[
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 0),
+                attachment_payload(audio_asset_id, AttachmentTypeEnum.FILE, 1),
+            ],
+        ),
+    )
+
+    assert post.content == ""
+    assert [attachment.asset_id for attachment in post.file_attachments] == [file_asset_id, audio_asset_id]
+    assert post.media_attachments == []
+    assert post.file_attachments[1].is_audio is True
+
+
+@pytest.mark.anyio
+async def test_create_post_with_text_media_files_and_tags(service_bundle: ServiceBundle) -> None:
+    image_asset_id = find_asset_id(service_bundle, "photo.png")
+    file_asset_id = find_asset_id(service_bundle, "report.pdf")
+
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            content="full post",
+            tags=["python", "backend"],
+            attachments=[
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 0),
+            ],
+        ),
+    )
+
+    assert post.content == "full post"
+    assert [tag.slug for tag in post.tags] == ["backend", "python"]
+    assert [attachment.asset_id for attachment in post.media_attachments] == [image_asset_id]
+    assert [attachment.asset_id for attachment in post.file_attachments] == [file_asset_id]
+
+
+@pytest.mark.anyio
+async def test_create_post_rejects_tags_only_payload(service_bundle: ServiceBundle) -> None:
+    with pytest.raises(InvalidPost):
+        await service_bundle.service.create_post(
+            service_bundle.author,
+            PostCreate(content="", tags=["python"]),
+        )
+
+
+@pytest.mark.anyio
+async def test_create_post_rejects_more_than_thirty_media_attachments(service_bundle: ServiceBundle) -> None:
+    asset_ids: list[uuid.UUID] = []
+    for index in range(31):
+        asset = build_asset(
+            owner_id=service_bundle.author.user_id,
+            asset_type=AssetTypeEnum.IMAGE,
+            filename=f"extra-{index}.png",
+            mime_type="image/png",
+            usage_context="post_media",
+        )
+        service_bundle.asset_repository.assets[asset.asset_id] = asset
+        service_bundle.repository.assets[asset.asset_id] = asset
+        asset_ids.append(asset.asset_id)
+
+    with pytest.raises(InvalidPost):
+        await service_bundle.service.create_post(
+            service_bundle.author,
+            PostCreate(
+                attachments=[
+                    attachment_payload(asset_ids[position], AttachmentTypeEnum.MEDIA, position)
+                    for position in range(len(asset_ids))
+                ],
+            ),
+        )
+
+
+@pytest.mark.anyio
+async def test_create_post_rejects_more_than_ten_file_attachments(service_bundle: ServiceBundle) -> None:
+    asset_ids: list[uuid.UUID] = []
+    for index in range(11):
+        asset = build_asset(
+            owner_id=service_bundle.author.user_id,
+            asset_type=AssetTypeEnum.FILE,
+            filename=f"extra-{index}.pdf",
+            mime_type="application/pdf",
+            usage_context="post_file",
+        )
+        service_bundle.asset_repository.assets[asset.asset_id] = asset
+        service_bundle.repository.assets[asset.asset_id] = asset
+        asset_ids.append(asset.asset_id)
+
+    with pytest.raises(InvalidPost):
+        await service_bundle.service.create_post(
+            service_bundle.author,
+            PostCreate(
+                attachments=[
+                    attachment_payload(asset_ids[position], AttachmentTypeEnum.FILE, position)
+                    for position in range(len(asset_ids))
+                ],
+            ),
+        )
 
 
 @pytest.mark.anyio
@@ -660,6 +1055,173 @@ async def test_update_post_updates_body_text_and_updated_at(service_bundle: Serv
 
 
 @pytest.mark.anyio
+async def test_update_post_can_reorder_media_attachments(service_bundle: ServiceBundle) -> None:
+    image_asset_id = find_asset_id(service_bundle, "photo.png")
+    video_asset_id = find_asset_id(service_bundle, "clip.mp4")
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            attachments=[
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(video_asset_id, AttachmentTypeEnum.MEDIA, 1),
+            ],
+        ),
+    )
+
+    updated = await service_bundle.service.update_post(
+        service_bundle.author,
+        post.post_id,
+        PostUpdate(
+            attachments=[
+                attachment_payload(video_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 1),
+            ],
+        ),
+    )
+
+    assert [attachment.asset_id for attachment in updated.media_attachments] == [video_asset_id, image_asset_id]
+
+
+@pytest.mark.anyio
+async def test_update_post_can_reorder_file_attachments(service_bundle: ServiceBundle) -> None:
+    file_asset_id = find_asset_id(service_bundle, "report.pdf")
+    audio_asset_id = find_asset_id(service_bundle, "voice.mp3")
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            attachments=[
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 0),
+                attachment_payload(audio_asset_id, AttachmentTypeEnum.FILE, 1),
+            ],
+        ),
+    )
+
+    updated = await service_bundle.service.update_post(
+        service_bundle.author,
+        post.post_id,
+        PostUpdate(
+            attachments=[
+                attachment_payload(audio_asset_id, AttachmentTypeEnum.FILE, 0),
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 1),
+            ],
+        ),
+    )
+
+    assert [attachment.asset_id for attachment in updated.file_attachments] == [audio_asset_id, file_asset_id]
+
+
+@pytest.mark.anyio
+async def test_image_added_via_file_block_remains_file_attachment(service_bundle: ServiceBundle) -> None:
+    image_file_asset_id = find_asset_id(service_bundle, "scan.jpg")
+
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            attachments=[
+                attachment_payload(image_file_asset_id, AttachmentTypeEnum.FILE, 0),
+            ],
+        ),
+    )
+
+    assert post.media_attachments == []
+    assert len(post.file_attachments) == 1
+    assert post.file_attachments[0].attachment_type == AttachmentTypeEnum.FILE
+    assert post.file_attachments[0].asset_type == AssetTypeEnum.IMAGE
+
+
+@pytest.mark.anyio
+async def test_get_post_returns_structured_attachment_response_with_download_links(service_bundle: ServiceBundle) -> None:
+    image_asset_id = find_asset_id(service_bundle, "photo.png")
+    file_asset_id = find_asset_id(service_bundle, "report.pdf")
+    audio_asset_id = find_asset_id(service_bundle, "voice.mp3")
+    created = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            content="attachments",
+            attachments=[
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 0),
+                attachment_payload(audio_asset_id, AttachmentTypeEnum.FILE, 1),
+            ],
+        ),
+    )
+
+    post = await service_bundle.service.get_post(created.post_id, user=service_bundle.author)
+
+    assert len(post.media_attachments) == 1
+    assert len(post.file_attachments) == 2
+    assert post.media_attachments[0].preview_url is not None
+    assert post.media_attachments[0].original_url is not None
+    assert post.file_attachments[0].download_url is not None
+    assert "download=report.pdf" in post.file_attachments[0].download_url
+    assert post.file_attachments[1].stream_url is not None
+    assert post.file_attachments[1].is_audio is True
+
+
+@pytest.mark.anyio
+async def test_create_post_rejects_attachment_from_another_owner(service_bundle: ServiceBundle) -> None:
+    stranger_asset_id = find_asset_id(service_bundle, "secret.pdf")
+
+    with pytest.raises(InvalidPost):
+        await service_bundle.service.create_post(
+            service_bundle.author,
+            PostCreate(
+                attachments=[
+                    attachment_payload(stranger_asset_id, AttachmentTypeEnum.FILE, 0),
+                ],
+            ),
+        )
+
+
+@pytest.mark.anyio
+async def test_create_post_rejects_avatar_usage_context(service_bundle: ServiceBundle) -> None:
+    avatar_asset_id = find_asset_id(service_bundle, "avatar.png")
+
+    with pytest.raises(InvalidPost):
+        await service_bundle.service.create_post(
+            service_bundle.author,
+            PostCreate(
+                attachments=[
+                    attachment_payload(avatar_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                ],
+            ),
+        )
+
+
+@pytest.mark.anyio
+async def test_update_post_replaces_attachment_set_and_marks_removed_assets_orphaned(service_bundle: ServiceBundle) -> None:
+    image_asset_id = find_asset_id(service_bundle, "photo.png")
+    video_asset_id = find_asset_id(service_bundle, "clip.mp4")
+    file_asset_id = find_asset_id(service_bundle, "report.pdf")
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            content="before",
+            attachments=[
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 0),
+            ],
+        ),
+    )
+
+    updated = await service_bundle.service.update_post(
+        service_bundle.author,
+        post.post_id,
+        PostUpdate(
+            content="after",
+            attachments=[
+                attachment_payload(video_asset_id, AttachmentTypeEnum.MEDIA, 0),
+            ],
+        ),
+    )
+
+    assert updated.content == "after"
+    assert [attachment.asset_id for attachment in updated.media_attachments] == [video_asset_id]
+    assert updated.file_attachments == []
+    assert set(service_bundle.asset_service.orphaned_asset_ids) == {image_asset_id, file_asset_id}
+
+
+@pytest.mark.anyio
 async def test_update_post_replaces_tags_set(service_bundle: ServiceBundle) -> None:
     post = service_bundle.repository.seed_post(
         author=service_bundle.author,
@@ -780,6 +1342,27 @@ async def test_delete_post_soft_deletes_post(service_bundle: ServiceBundle) -> N
     stored = service_bundle.repository.posts[post.content_id]
     assert stored.status == ContentStatusEnum.DELETED
     assert stored.deleted_at is not None
+
+
+@pytest.mark.anyio
+async def test_delete_post_marks_removed_attachments_orphaned(service_bundle: ServiceBundle) -> None:
+    image_asset_id = find_asset_id(service_bundle, "photo.png")
+    file_asset_id = find_asset_id(service_bundle, "report.pdf")
+    post = await service_bundle.service.create_post(
+        service_bundle.author,
+        PostCreate(
+            content="delete me",
+            attachments=[
+                attachment_payload(image_asset_id, AttachmentTypeEnum.MEDIA, 0),
+                attachment_payload(file_asset_id, AttachmentTypeEnum.FILE, 0),
+            ],
+        ),
+    )
+
+    await service_bundle.service.delete_post(service_bundle.author, post.post_id)
+
+    assert set(service_bundle.asset_service.orphaned_asset_ids) >= {image_asset_id, file_asset_id}
+    assert service_bundle.repository.posts[post.post_id].asset_links == []
 
 
 @pytest.mark.anyio
