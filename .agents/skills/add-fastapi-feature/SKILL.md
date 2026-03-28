@@ -1,4 +1,9 @@
-# Skill: Add FastAPI feature in Nerdex backend
+---
+name: add-fastapi-feature
+description: Implement or substantially change a FastAPI backend feature in Nerdex `server/src/`. Use when adding endpoints, services, repositories, DTOs, permissions, migrations, or async backend flows, especially if the change can affect content rules, visibility, ownership, counters, or S3 and media behavior.
+---
+
+# Add a FastAPI Feature in Nerdex Backend
 
 Используй этот skill, когда задача добавляет или существенно меняет backend feature в `server/src/`.
 

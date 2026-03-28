@@ -1,4 +1,9 @@
-# Skill: Design S3/media flow for Nerdex
+---
+name: design-s3-media-flow
+description: Design or refactor S3-compatible media flows in Nerdex. Use when working on uploads, downloads, avatars, post media, article attachments, video files, thumbnails, previews, object keys, file metadata, backend-issued access, lifecycle states, or orphan cleanup in the project's private-bucket storage model.
+---
+
+# Design an S3 and Media Flow for Nerdex
 
 Используй этот skill, когда работа идет над avatars, post media, article attachments, video files, thumbnails, previews или любым object-storage-backed file flow.
 

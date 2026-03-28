@@ -1,4 +1,9 @@
-# Skill: Design PostgreSQL entity for Nerdex
+---
+name: design-postgres-entity
+description: Design or change PostgreSQL-backed entities, relations, constraints, indexes, and migrations for Nerdex. Use when introducing schema for content, comments, reactions, tags, chats, media metadata, or any query-sensitive data model that must be driven by write and read paths, ownership, visibility, and future extensibility.
+---
+
+# Design a PostgreSQL Entity for Nerdex
 
 Используй этот skill, когда задача вводит или меняет PostgreSQL-backed entity, relation или query-sensitive schema.
 

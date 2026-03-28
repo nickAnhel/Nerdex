@@ -1,4 +1,9 @@
-# Skill: Add a new content type to the unified content system
+---
+name: add-content-type
+description: Extend the Nerdex unified content model with a new publishable content type such as posts, articles, videos, or courses. Use when designing or implementing a new content type, or when refactoring an existing type to fit shared content semantics for feed, profile, search, permissions, reactions, comments, tags, and media lifecycle.
+---
+
+# Add a New Content Type to the Unified Content System
 
 Используй этот skill, когда вводится или развивается новый publishable content type: posts, articles, videos, courses и т.д.
 
