@@ -1,9 +1,32 @@
 services:
+  migrate:
+    container_name: migrate
+    restart: "no"
+    command: bash -c "alembic upgrade head"
+    build:
+      context: ./server
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./server/src:/app/src
+      - ./server/alembic:/app/alembic
+      - ./server/tests:/app/tests
+      - ./server/pyproject.toml:/app/pyproject.toml
+      - ./server/uv.lock:/app/uv.lock
+      - ./server/alembic.ini:/app/alembic.ini
+      - ./server/.env:/app/.env
+    env_file:
+      - ./server/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   server:
     container_name: server
     restart: on-failure
-    command: bash -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
-    # command: bash -c "alembic upgrade head && gunicorn -b 0.0.0.0:8000 -w 5 -k uvicorn.workers.UvicornWorker src.main:app"
+    command: bash -c "uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+    # command: bash -c "gunicorn -b 0.0.0.0:8000 -w 5 -k uvicorn.workers.UvicornWorker src.main:app"
     build:
       context: ./server
       dockerfile: ./Dockerfile
@@ -20,7 +43,55 @@ services:
     env_file:
       - ./server/.env
     depends_on:
-      - db
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  celery_worker:
+    container_name: celery_worker
+    restart: on-failure
+    command: bash -c "celery -A src.assets.celery_app:celery_app worker --loglevel=INFO -Q media"
+    build:
+      context: ./server
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./server/src:/app/src
+      - ./server/alembic:/app/alembic
+      - ./server/tests:/app/tests
+      - ./server/pyproject.toml:/app/pyproject.toml
+      - ./server/uv.lock:/app/uv.lock
+      - ./server/alembic.ini:/app/alembic.ini
+      - ./server/.env:/app/.env
+    env_file:
+      - ./server/.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  celery_beat:
+    container_name: celery_beat
+    restart: on-failure
+    command: bash -c "celery -A src.assets.celery_app:celery_app beat --loglevel=INFO"
+    build:
+      context: ./server
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./server/src:/app/src
+      - ./server/alembic:/app/alembic
+      - ./server/tests:/app/tests
+      - ./server/pyproject.toml:/app/pyproject.toml
+      - ./server/uv.lock:/app/uv.lock
+      - ./server/alembic.ini:/app/alembic.ini
+      - ./server/.env:/app/.env
+    env_file:
+      - ./server/.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   db:
     container_name: db
@@ -32,6 +103,23 @@ services:
       - ./.postgres-env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    restart: on-failure
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   pgadmin:
     container_name: pgadmin
@@ -41,7 +129,8 @@ services:
     env_file:
       - ./.postgres-env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   client:
     container_name: client
@@ -58,7 +147,8 @@ services:
       - ./client/:/project/
       - node_modules:/project/node_modules
     depends_on:
-      - server
+      server:
+        condition: service_healthy
 
 volumes:
   postgres_data:

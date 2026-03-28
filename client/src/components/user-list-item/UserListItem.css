@@ -53,9 +53,3 @@
     box-sizing: border-box;
     transition: all .2s;
 }
-
-.user-list-item .unsubscribe {
-    border: 1px solid #9d50ff;
-    color: #9d50ff;
-    background: transparent;
-}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design PostgreSQL Entity"
+  short_description: "Design PostgreSQL schema for Nerdex"
+  default_prompt: "Use $design-postgres-entity to design a PostgreSQL schema change for Nerdex."

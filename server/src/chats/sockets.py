@@ -6,6 +6,7 @@ from src.config import settings
 from src.common.database import async_session_maker
 from src.messages.dependencies import get_message_service
 from src.messages.schemas import MessageCreate, MessageCreateWS, MessageGetWS
+from src.users.presentation import build_user_avatar_get
 
 sio = socketio.AsyncServer(
     async_mode="asgi",
@@ -50,6 +51,7 @@ async def on_message(
                 created_at=msg.created_at.replace(tzinfo=None),
             )
         )
+    avatar = await build_user_avatar_get(message.user)
 
     await sio.emit(
         "message",
@@ -57,6 +59,7 @@ async def on_message(
             message_id=message.message_id,
             username=message.user.username,
             user_id=message.user_id,
+            avatar_small_url=avatar.small_url if avatar is not None else None,
             content=message.content,
             created_at=message.created_at,
         ).model_dump_json(),

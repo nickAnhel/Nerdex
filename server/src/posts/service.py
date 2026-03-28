@@ -11,6 +11,7 @@ from src.posts.exceptions import PostNotFound
 from src.posts.repository import PostRepository
 from src.posts.schemas import PostCreate, PostGet, PostRating, PostUpdate
 from src.tags.service import TagService
+from src.users.presentation import build_user_get
 from src.users.schemas import UserGet
 
 
@@ -55,7 +56,7 @@ class PostService:
         if post is None:
             raise PostNotFound("Created post is unavailable")
         post.is_owner = True
-        return PostGet.model_validate(post)
+        return await self._build_post_get(post, viewer_id=user.user_id)
 
     async def get_post(
         self,
@@ -67,7 +68,7 @@ class PostService:
         if post is None or not self._can_view_post(post=post, viewer_id=viewer_id):
             raise PostNotFound(f"Post with id {post_id!s} not found")
 
-        return PostGet.model_validate(post)
+        return await self._build_post_get(post, viewer_id=viewer_id)
 
     async def get_posts(
         self,
@@ -100,7 +101,7 @@ class PostService:
                 limit=limit,
             )
 
-        return [PostGet.model_validate(post) for post in posts]
+        return [await self._build_post_get(post, viewer_id=viewer_id) for post in posts]
 
     async def update_post(
         self,
@@ -161,7 +162,7 @@ class PostService:
         updated_post = await self._repository.get_single(content_id=post_id, viewer_id=user.user_id)
         if updated_post is None:
             raise PostNotFound(f"Post with id {post_id!s} not found")
-        return PostGet.model_validate(updated_post)
+        return await self._build_post_get(updated_post, viewer_id=user.user_id)
 
     async def delete_post(
         self,
@@ -242,7 +243,7 @@ class PostService:
             offset=offset,
             limit=limit,
         )
-        return [PostGet.model_validate(post) for post in posts]
+        return [await self._build_post_get(post, viewer_id=user_id) for post in posts]
 
     async def _set_reaction(
         self,
@@ -318,6 +319,31 @@ class PostService:
 
     def _map_visibility(self, visibility: PostWriteVisibility) -> ContentVisibilityEnum:
         return ContentVisibilityEnum(visibility.value)
+
+    async def _build_post_get(
+        self,
+        post,
+        *,
+        viewer_id: uuid.UUID | None,
+    ) -> PostGet:
+        return PostGet(
+            post_id=post.content_id,
+            user_id=post.author_id,
+            content=post.post_details.body_text,
+            status=post.status,
+            visibility=post.visibility,
+            created_at=post.created_at,
+            updated_at=post.updated_at,
+            published_at=post.published_at,
+            deleted_at=post.deleted_at,
+            comments_count=post.comments_count,
+            likes_count=post.likes_count,
+            dislikes_count=post.dislikes_count,
+            user=await build_user_get(post.author, viewer_id=viewer_id),
+            tags=post.tags,
+            my_reaction=post.my_reaction,
+            is_owner=post.author_id == viewer_id,
+        )
 
     def _now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.timezone.utc)

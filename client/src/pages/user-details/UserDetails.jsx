@@ -14,6 +14,7 @@ import PostDetails from "../post-details/PostDetails";
 
 import PostList from "../../components/post-list/PostList";
 import UserList from "../../components/user-list/UserList";
+import { getAvatarUrl } from "../../utils/avatar";
 
 
 function UserDetails() {
@@ -45,7 +46,7 @@ function UserDetails() {
                 setUser(res.data);
                 setIsSubsctribed(res.data.is_subscribed);
                 setSubsCount(res.data.subscribers_count);
-                setUserProfilePhotoSrc(`${process.env.REACT_APP_STORAGE_URL}PPl@${res.data.user_id}?${performance.now()}`);
+                setUserProfilePhotoSrc(getAvatarUrl(res.data, "medium"));
                 setUserProfilePhotoStyle({});
                 setTab("posts");
                 setPostFilter("all");
@@ -128,7 +129,7 @@ function UserDetails() {
                     style={userProfilePhotoStyle}
                     alt={`${user.username} profile photo`}
                     onError={() => {
-                        setUserProfilePhotoSrc("../../../assets/profile.svg");
+                        setUserProfilePhotoSrc("/assets/profile.svg");
                         setUserProfilePhotoStyle({ padding: ".5rem", opacity: ".1", aspectRatio: "1/1", backgroundColor: "#0a0a0a", border: "5px solid #fff" });
                     }}
                 />
@@ -142,7 +143,7 @@ function UserDetails() {
                     store.user.user_id != user.user_id && (
                         isSubscribed ?
                             <button
-                                className="btn unsubscribe"
+                                className="btn btn-outline-primary unsubscribe"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     handleUnsubscribe();
@@ -153,7 +154,7 @@ function UserDetails() {
                             </button>
                             :
                             <button
-                                className="btn"
+                                className="btn btn-primary"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     handleSubscribe();
@@ -203,7 +204,7 @@ function UserDetails() {
 
                                 <button
                                     type="button"
-                                    className="create-post-button"
+                                    className="create-post-button btn btn-primary"
                                     onClick={() => setIsCreatePostModalActive(true)}
                                 >
                                     Create post

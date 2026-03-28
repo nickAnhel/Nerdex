@@ -256,28 +256,3 @@
     margin: 0;
     min-width: 7rem;
 }
-
-.delete-post-modal-actions button.secondary {
-    background: transparent;
-    border: 1px solid #5b5b5b;
-    color: #c8c8c8;
-}
-
-.delete-post-modal-actions button.secondary:hover,
-.delete-post-modal-actions button.secondary:focus {
-    background: transparent;
-    border-color: #7a7a7a;
-    color: #ffffff;
-    box-shadow: none;
-}
-
-.delete-post-modal-actions button.danger {
-    background: #c94b63;
-    color: #ffffff;
-}
-
-.delete-post-modal-actions button.danger:hover,
-.delete-post-modal-actions button.danger:focus {
-    background: #b53d54;
-    box-shadow: 0 0 20px rgba(201, 75, 99, 0.35);
-}

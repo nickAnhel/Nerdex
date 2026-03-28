@@ -15,6 +15,7 @@ from src.tags.router import router as tags_router
 from src.chats.router import router as chats_router
 from src.messages.router import router as messages_router
 from src.events.router import router as events_router
+from src.assets.router import router as assets_router
 
 # Exception handlers
 from src.common.exceptions import (
@@ -78,6 +79,16 @@ from src.s3.exceptions import (
     CantDeleteFileFromStorage,
     CantUploadFileToStorage,
 )
+from src.assets.exc_handlers import (
+    asset_not_found_handler,
+    asset_upload_not_ready_handler,
+    invalid_asset_handler,
+)
+from src.assets.exceptions import (
+    AssetNotFound,
+    AssetUploadNotReady,
+    InvalidAsset,
+)
 
 
 def register_routes(app: FastAPI) -> None:
@@ -89,6 +100,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(chats_router)
     app.include_router(messages_router)
     app.include_router(events_router)
+    app.include_router(assets_router)
 
     app.mount("/ws", ws_app)
 
@@ -121,6 +133,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(CantDeleteFileFromStorage, cant_delete_file_handler)  # type: ignore
     app.add_exception_handler(CantUploadFileToStorage, cant_upload_file_handler)  # type: ignore
+    app.add_exception_handler(AssetNotFound, asset_not_found_handler)  # type: ignore
+    app.add_exception_handler(InvalidAsset, invalid_asset_handler)  # type: ignore
+    app.add_exception_handler(AssetUploadNotReady, asset_upload_not_ready_handler)  # type: ignore
 
 
 def register_middleware(app: FastAPI) -> None:
@@ -128,8 +143,8 @@ def register_middleware(app: FastAPI) -> None:
         CORSMiddleware,
         allow_origins=settings.cors.allowed_hosts,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "Accept"],
     )
 
 

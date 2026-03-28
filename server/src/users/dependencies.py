@@ -1,3 +1,6 @@
+from src.assets.dependencies import get_asset_service, get_asset_storage
+from src.assets.service import AssetService
+from src.assets.storage import AssetStorage
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,5 +11,11 @@ from src.users.service import UserService
 
 async def get_user_service(
     async_session: AsyncSession = Depends(get_async_session),
+    asset_service: AssetService = Depends(get_asset_service),
+    avatar_storage: AssetStorage = Depends(get_asset_storage),
 ) -> UserService:
-    return UserService(repository=UserRepository(async_session))
+    return UserService(
+        repository=UserRepository(async_session),
+        asset_service=asset_service,
+        avatar_storage=avatar_storage,
+    )

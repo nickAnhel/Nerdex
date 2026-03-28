@@ -12,12 +12,13 @@ import LikeIcon from "../icons/LikeIcon";
 import ReplyIcon from "../icons/ReplyIcon";
 import CommentReplies from "../comment-replies/CommentReplies";
 import Modal from "../modal/Modal";
+import { getAvatarUrl } from "../../utils/avatar";
 
 
 const REPLIES_PAGE_SIZE = 10;
 
-function buildCommentAuthorPhotoSrc(userId) {
-    return `${process.env.REACT_APP_STORAGE_URL}PPs@${userId}?${performance.now()}`;
+function buildCommentAuthorPhotoSrc(author) {
+    return getAvatarUrl(author, "small");
 }
 
 
@@ -32,7 +33,7 @@ function CommentListItem({
 
     const [comment, setComment] = useState(initialComment);
     const [authorPhotoSrc, setAuthorPhotoSrc] = useState(
-        initialComment.author ? buildCommentAuthorPhotoSrc(initialComment.author.user_id) : ""
+        initialComment.author ? buildCommentAuthorPhotoSrc(initialComment.author) : ""
     );
     const [isEditing, setIsEditing] = useState(false);
     const [isReplying, setIsReplying] = useState(false);
@@ -56,7 +57,7 @@ function CommentListItem({
             return;
         }
 
-        setAuthorPhotoSrc(buildCommentAuthorPhotoSrc(initialComment.author.user_id));
+        setAuthorPhotoSrc(buildCommentAuthorPhotoSrc(initialComment.author));
     }, [initialComment]);
 
     const visualDepthClassName = (() => {
@@ -323,7 +324,7 @@ function CommentListItem({
                                             <Link to={`/people/@${comment.author.username}`} className="comment-author">
                                                 <img
                                                     src={authorPhotoSrc}
-                                                    onError={() => { setAuthorPhotoSrc("../../../assets/profile.svg"); }}
+                                                    onError={() => { setAuthorPhotoSrc("/assets/profile.svg"); }}
                                                     alt={`${comment.author.username} avatar`}
                                                 />
                                                 {comment.author.username}
@@ -493,7 +494,7 @@ function CommentListItem({
                     <div className="delete-comment-modal-actions">
                         <button
                             type="button"
-                            className="secondary"
+                            className="btn btn-secondary"
                             onClick={() => setIsDeleteModalOpen(false)}
                             disabled={isBusy}
                         >
@@ -501,7 +502,7 @@ function CommentListItem({
                         </button>
                         <button
                             type="button"
-                            className="danger"
+                            className="btn btn-danger"
                             onClick={() => { void handleDelete(); }}
                             disabled={isBusy}
                         >

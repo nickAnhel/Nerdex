@@ -11,6 +11,7 @@ from src.messages.schemas import (
     MessageGetWithUser,
     MessageUpdate,
 )
+from src.users.presentation import build_user_get
 
 
 class MessageService:
@@ -23,7 +24,7 @@ class MessageService:
     ) -> MessageGetWithUser:
         try:
             msg = await self._repository.create(data=message.model_dump())
-            return MessageGetWithUser.model_validate(msg)
+            return await self._build_message_with_user(msg)
         except IntegrityError as exc:
             raise ChatNotFound(f"Chat with id '{message.chat_id}' not found") from exc
 
@@ -43,7 +44,7 @@ class MessageService:
             limit=limit,
             chat_id=chat_id,
         )
-        return [MessageGetWithUser.model_validate(message) for message in messages]
+        return [await self._build_message_with_user(message) for message in messages]
 
     async def delete_message(
         self,
@@ -107,4 +108,17 @@ class MessageService:
             limit=limit,
             chat_id=chat_id,
         )
-        return [MessageGetWithUser.model_validate(message) for message in messages]
+        return [await self._build_message_with_user(message) for message in messages]
+
+    async def _build_message_with_user(
+        self,
+        message,
+    ) -> MessageGetWithUser:
+        return MessageGetWithUser(
+            message_id=message.message_id,
+            chat_id=message.chat_id,
+            content=message.content,
+            user_id=message.user_id,
+            created_at=message.created_at,
+            user=await build_user_get(message.user),
+        )

@@ -18,6 +18,7 @@ from src.admin.models import *
 from src.chats.models import *
 from src.messages.models import *
 from src.events.models import *
+from src.assets.models import *
 
 
 # this is the Alembic Config object, which provides

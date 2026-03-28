@@ -123,7 +123,13 @@ function ChatDetails() {
                     (item) => {
                         if (item.item_type == "message") {
                             let sender = item.user_id == store.user.user_id ? "You" : item.user.username;
-                            addMessageToChat(item.user_id, item.content, sender, item.created_at);
+                            addMessageToChat(
+                                item.user_id,
+                                item.content,
+                                sender,
+                                item.created_at,
+                                item.user?.avatar?.small_url || null,
+                            );
 
                         } else if (item.item_type == "event") {
                             switch (item.event_type) {
@@ -171,7 +177,13 @@ function ChatDetails() {
         socket.current.on("message", (data) => {
             let msgData = JSON.parse(data);
             let sender = msgData.user_id == store.user.user_id ? "You" : msgData.username;
-            addMessageToChat(msgData.user_id, msgData.content, sender, msgData.created_at);
+            addMessageToChat(
+                msgData.user_id,
+                msgData.content,
+                sender,
+                msgData.created_at,
+                msgData.avatar_small_url || null,
+            );
         })
 
         return () => {
@@ -203,13 +215,14 @@ function ChatDetails() {
         setChatItems([]);
     }
 
-    const addMessageToChat = (userId, msg, sender, createdAt) => {
+    const addMessageToChat = (userId, msg, sender, createdAt, avatarUrl = null) => {
         setChatItems(items => [...items, {
             type: "message",
             userId: userId,
             content: msg,
             username: sender,
-            createdAt: createdAt
+            createdAt: createdAt,
+            avatarUrl,
         }]);
     }
 
@@ -227,7 +240,7 @@ function ChatDetails() {
             document.getElementById("message-input").value = "";
 
             let now = new Date();
-            addMessageToChat(store.user.user_id, message.trim(), "You", now);
+            addMessageToChat(store.user.user_id, message.trim(), "You", now, store.user?.avatar?.small_url || null);
 
             let msgData = {
                 chat_id: chat.chat_id,
@@ -349,7 +362,14 @@ function ChatDetails() {
                     chatItems.map((item, index) => {
                         if (item.type == "message") {
                             return (
-                                <Message key={index} userId={item.userId} username={item.username} content={item.content} createdAt={item.createdAt} />
+                                <Message
+                                    key={index}
+                                    userId={item.userId}
+                                    username={item.username}
+                                    content={item.content}
+                                    createdAt={item.createdAt}
+                                    avatarUrl={item.avatarUrl}
+                                />
                             )
                         } else if (item.type == "event") {
                             return (
@@ -373,11 +393,11 @@ function ChatDetails() {
                     >
                     </textarea>
                 </div>
-                <button onClick={sendMessage}>
+                <button className="btn btn-primary" onClick={sendMessage}>
                     <img src="../../../assets/send-message.svg" alt="" />
                 </button>
             </div>
-            <button id="join-btn" className="hidden" onClick={handleChatJoin}>Join</button>
+            <button id="join-btn" className="btn btn-primary hidden" onClick={handleChatJoin}>Join</button>
 
             <ChatModal
                 key={"edit"}

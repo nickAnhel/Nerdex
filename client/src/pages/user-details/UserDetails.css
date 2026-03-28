@@ -43,14 +43,9 @@
 }
 
 #user-details .user-card button {
+    width: 100%;
     border-radius: .5rem;
     margin-top: 1rem;
-}
-
-#user-details .user-card button.unsubscribe {
-    border: 1px solid #9d50ff;
-    color: #9d50ff;
-    background: transparent;
 }
 
 #user-details .user-info {

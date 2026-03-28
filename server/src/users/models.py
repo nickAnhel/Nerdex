@@ -1,6 +1,8 @@
+import typing as tp
 import uuid
 
-from sqlalchemy import ForeignKey, Index
+from sqlalchemy import JSON, ForeignKey, Index, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.models import Base
@@ -31,6 +33,16 @@ class UserModel(Base):
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    avatar_asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("assets.asset_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    avatar_crop: Mapped[dict[str, tp.Any] | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=True,
+        default=None,
+        server_default=text("NULL"),
+    )
 
     username: Mapped[str] = mapped_column(unique=True)
     hashed_password: Mapped[str]
@@ -83,6 +95,17 @@ class UserModel(Base):
     messages: Mapped[list["MessageModel"]] = relationship(  # type: ignore
         back_populates="user",
         cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    owned_assets: Mapped[list["AssetModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="owner",
+        foreign_keys="AssetModel.owner_id",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    avatar_asset: Mapped["AssetModel | None"] = relationship(  # type: ignore[name-defined]
+        back_populates="avatar_for_users",
+        foreign_keys=[avatar_asset_id],
         passive_deletes=True,
     )
 

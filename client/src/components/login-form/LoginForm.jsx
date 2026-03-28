@@ -65,6 +65,7 @@ const LoginForm = () => {
                 />
 
                 <button
+                    className="btn btn-primary btn-block"
                     type="submit"
                     disabled={isLoading}
                 >

@@ -33,7 +33,7 @@ function FeedSidebar() {
                 <>
                     <hr />
 
-                    <button onClick={() => { setIsCreatePostModalActive(true); }}>
+                    <button className="btn btn-primary btn-block" onClick={() => { setIsCreatePostModalActive(true); }}>
                         Create Post
                     </button>
                 </>
