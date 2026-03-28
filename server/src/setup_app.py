@@ -40,8 +40,8 @@ from src.users.exceptions import (
     UserNotInSubscriptions,
 )
 
-from src.posts.exc_handlers import post_not_found_handler
-from src.posts.exceptions import PostNotFound
+from src.posts.exc_handlers import invalid_post_handler, post_not_found_handler
+from src.posts.exceptions import InvalidPost, PostNotFound
 from src.comments.exc_handlers import comment_not_found_handler, invalid_comment_handler
 from src.comments.exceptions import CommentNotFound, InvalidComment
 from src.tags.exc_handlers import invalid_tag_handler
@@ -118,6 +118,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UserNotInSubscriptions, user_not_in_subscriptions_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
+    app.add_exception_handler(InvalidPost, invalid_post_handler)  # type: ignore
     app.add_exception_handler(CommentNotFound, comment_not_found_handler)  # type: ignore
     app.add_exception_handler(InvalidComment, invalid_comment_handler)  # type: ignore
     app.add_exception_handler(InvalidTag, invalid_tag_handler)  # type: ignore

@@ -7,7 +7,8 @@ from sqlalchemy import delete, desc, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.assets.models import AssetModel
+from src.assets.enums import AttachmentTypeEnum
+from src.assets.models import AssetModel, ContentAssetModel
 import src.tags.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel, ContentReactionModel
@@ -203,12 +204,54 @@ class PostRepository:
     async def commit(self) -> None:
         await self._session.commit()
 
+    async def get_attachment_asset_ids(
+        self,
+        *,
+        content_id: uuid.UUID,
+    ) -> set[uuid.UUID]:
+        result = await self._session.execute(
+            select(ContentAssetModel.asset_id).where(
+                ContentAssetModel.content_id == content_id,
+                ContentAssetModel.attachment_type.in_(
+                    [AttachmentTypeEnum.MEDIA, AttachmentTypeEnum.FILE]
+                ),
+            )
+        )
+        return set(result.scalars().all())
+
+    async def replace_attachments(
+        self,
+        *,
+        content_id: uuid.UUID,
+        attachments: list[dict[str, object]],
+        commit: bool = True,
+    ) -> None:
+        await self._session.execute(
+            delete(ContentAssetModel).where(
+                ContentAssetModel.content_id == content_id,
+                ContentAssetModel.attachment_type.in_(
+                    [AttachmentTypeEnum.MEDIA, AttachmentTypeEnum.FILE]
+                ),
+            )
+        )
+        if attachments:
+            await self._session.execute(
+                insert(ContentAssetModel),
+                [{**attachment, "content_id": content_id} for attachment in attachments],
+            )
+
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
     async def soft_delete_post(
         self,
         *,
         content_id: uuid.UUID,
         updated_at: datetime.datetime,
         deleted_at: datetime.datetime,
+        commit: bool = True,
     ) -> ContentModel:
         await self._session.execute(
             update(ContentModel)
@@ -219,7 +262,10 @@ class PostRepository:
                 updated_at=updated_at,
             )
         )
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         return await self.get_single(content_id=content_id)
 
     async def set_reaction(
@@ -329,6 +375,9 @@ class PostRepository:
                     .selectinload(AssetModel.variants),
                     selectinload(ContentModel.post_details),
                     selectinload(ContentModel.tags),
+                    selectinload(ContentModel.asset_links)
+                    .selectinload(ContentAssetModel.asset)
+                    .selectinload(AssetModel.variants),
                 )
             )
 
@@ -349,6 +398,9 @@ class PostRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(ContentModel.post_details),
                 selectinload(ContentModel.tags),
+                selectinload(ContentModel.asset_links)
+                .selectinload(ContentAssetModel.asset)
+                .selectinload(AssetModel.variants),
             )
         )
 

@@ -79,7 +79,15 @@ class FakeAssetService:
 
 
 class FakeAvatarStorage:
-    async def generate_presigned_get(self, *, bucket: str, key: str) -> str:
+    async def generate_presigned_get(
+        self,
+        *,
+        bucket: str,
+        key: str,
+        download_filename: str | None = None,
+        inline: bool = True,
+        response_content_type: str | None = None,
+    ) -> str:
         return f"https://download.test/{bucket}/{key}"
 
 

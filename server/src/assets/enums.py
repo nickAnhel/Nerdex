@@ -42,8 +42,9 @@ class AssetVariantTypeEnum(str, Enum):
     VIDEO_1080P = "video_1080p"
 
 
-class ContentAssetTypeEnum(str, Enum):
-    ATTACHMENT = "attachment"
+class AttachmentTypeEnum(str, Enum):
+    MEDIA = "media"
+    FILE = "file"
     COVER = "cover"
     INLINE = "inline"
     VIDEO_SOURCE = "video_source"

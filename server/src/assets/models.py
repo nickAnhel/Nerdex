@@ -4,17 +4,30 @@ import datetime
 import typing as tp
 import uuid
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.assets.enums import (
+    AttachmentTypeEnum,
     AssetAccessTypeEnum,
     AssetStatusEnum,
     AssetTypeEnum,
     AssetVariantStatusEnum,
     AssetVariantTypeEnum,
-    ContentAssetTypeEnum,
 )
 from src.common.models import Base
 
@@ -142,7 +155,14 @@ class AssetVariantModel(Base):
 class ContentAssetModel(Base):
     __tablename__ = "content_asset"
     __table_args__ = (
-        Index("ix_content_asset_content_type_sort", "content_id", "content_asset_type", "sort_order"),
+        UniqueConstraint(
+            "content_id",
+            "attachment_type",
+            "position",
+            name="uq_content_asset_content_attachment_position",
+        ),
+        CheckConstraint("position >= 0", name="ck_content_asset_position_non_negative"),
+        Index("ix_content_asset_content_attachment_position", "content_id", "attachment_type", "position"),
         Index("ix_content_asset_asset_id", "asset_id"),
     )
 
@@ -154,11 +174,11 @@ class ContentAssetModel(Base):
         ForeignKey("assets.asset_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    content_asset_type: Mapped[ContentAssetTypeEnum] = mapped_column(
-        Enum(ContentAssetTypeEnum, name="content_asset_type_enum", values_callable=_enum_values),
+    attachment_type: Mapped[AttachmentTypeEnum] = mapped_column(
+        Enum(AttachmentTypeEnum, name="attachment_type_enum", values_callable=_enum_values),
         primary_key=True,
     )
-    sort_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     placement_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     link_metadata: Mapped[dict[str, tp.Any]] = mapped_column(
         "metadata",

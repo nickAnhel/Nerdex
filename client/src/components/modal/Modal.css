@@ -5,6 +5,7 @@
     position: fixed;
     top: 0;
     left: 0;
+    z-index: 2000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -19,6 +20,8 @@
 }
 
 .modal-content {
+    position: relative;
+    z-index: 2001;
     padding: 1rem;
     border-radius: 1rem;
     background-color: #1f1f1f;

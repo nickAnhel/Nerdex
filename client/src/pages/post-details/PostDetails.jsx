@@ -13,6 +13,8 @@ import PostService from "../../service/PostService";
 function PostDetails() {
     const [searchParams, setSearchParams] = useSearchParams();
     const postId = searchParams.get("p");
+    const mediaParam = searchParams.get("media");
+    const initialGalleryIndex = mediaParam === null ? null : Number.parseInt(mediaParam, 10);
 
     const [isLoading, setIsLoading] = useState(true);
     const [post, setPost] = useState(null);
@@ -34,6 +36,19 @@ function PostDetails() {
     const closePostDetails = () => {
         const nextSearchParams = new URLSearchParams(searchParams);
         nextSearchParams.delete("p");
+        nextSearchParams.delete("media");
+        setSearchParams(nextSearchParams);
+    };
+
+    const closeGallery = () => {
+        const nextSearchParams = new URLSearchParams(searchParams);
+        nextSearchParams.delete("media");
+        setSearchParams(nextSearchParams);
+    };
+
+    const updateGalleryIndex = (index) => {
+        const nextSearchParams = new URLSearchParams(searchParams);
+        nextSearchParams.set("media", String(index));
         setSearchParams(nextSearchParams);
     };
 
@@ -99,6 +114,9 @@ function PostDetails() {
                         post={post}
                         showDetailLink={false}
                         onDelete={closePostDetails}
+                        initialGalleryIndex={Number.isNaN(initialGalleryIndex) ? null : initialGalleryIndex}
+                        onGalleryClose={closeGallery}
+                        onGalleryIndexChange={updateGalleryIndex}
                     />
                     <div className="post-details-comments">
                         <CommentSection

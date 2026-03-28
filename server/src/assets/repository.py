@@ -16,6 +16,7 @@ from src.assets.enums import (
     AssetVariantTypeEnum,
 )
 from src.assets.models import AssetModel, AssetVariantModel, ContentAssetModel, MessageAssetModel
+from src.content.models import ContentModel
 from src.users.models import UserModel
 
 
@@ -84,6 +85,22 @@ class AssetRepository:
 
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_assets(
+        self,
+        *,
+        asset_ids: list[uuid.UUID],
+        owner_id: uuid.UUID | None = None,
+    ) -> list[AssetModel]:
+        if not asset_ids:
+            return []
+
+        stmt = self._asset_query().where(AssetModel.asset_id.in_(asset_ids))
+        if owner_id is not None:
+            stmt = stmt.where(AssetModel.owner_id == owner_id)
+
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_original_variant(
         self,
@@ -335,6 +352,8 @@ class AssetRepository:
                     and_(
                         ContentAssetModel.asset_id == asset_id,
                         ContentAssetModel.deleted_at.is_(None),
+                        ContentAssetModel.content_id == ContentModel.content_id,
+                        ContentModel.deleted_at.is_(None),
                     )
                 )
             )
