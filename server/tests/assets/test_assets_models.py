@@ -1,5 +1,6 @@
 import uuid
 
+import src.articles.models  # noqa: F401
 import src.chats.models  # noqa: F401
 import src.comments.models  # noqa: F401
 import src.content.models  # noqa: F401

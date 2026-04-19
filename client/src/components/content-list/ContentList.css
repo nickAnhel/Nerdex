@@ -1,0 +1,24 @@
+.content-list {
+    width: 100%;
+}
+
+.content-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.content-list-empty {
+    padding: 2rem;
+    border: 1px dashed #d0d5dd;
+    border-radius: 1.25rem;
+    text-align: center;
+    color: #667085;
+    background: #f8fafc;
+}
+
+.content-list-loader {
+    display: flex;
+    justify-content: center;
+    padding: 1.5rem 0;
+}

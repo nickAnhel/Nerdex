@@ -23,7 +23,7 @@ class PostAdminView(ModelView, model=ContentModel):
         "content_type",
         "status",
         "visibility",
-        "content_body_ellipsis",
+        "content_summary_ellipsis",
         "likes_count",
         "dislikes_count",
         "created_at",

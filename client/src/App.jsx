@@ -1,5 +1,5 @@
 import { useEffect, useContext } from "react";
-import { RouterProvider, createBrowserRouter } from "react-router-dom";
+import { Outlet, RouterProvider, createBrowserRouter } from "react-router-dom";
 import { observer } from "mobx-react-lite";
 
 import "./App.css";
@@ -19,6 +19,8 @@ import Feed from "./pages/feed/Feed";
 import People from "./pages/people/People";
 import Profile from "./pages/profile/Profile";
 import Articles from "./pages/articles/Articles";
+import ArticleDetails from "./pages/article-details/ArticleDetails";
+import ArticleEditor from "./pages/article-editor/ArticleEditor";
 import Videos from "./pages/videos/Videos";
 import Courses from "./pages/courses/Courses";
 
@@ -38,6 +40,10 @@ function Layout() {
             <Container />
         </>
     )
+}
+
+function ArticlesLayout() {
+    return <Outlet />;
 }
 
 const router = createBrowserRouter([
@@ -92,7 +98,25 @@ const router = createBrowserRouter([
             },
             {
                 path: "articles",
-                element: <Articles />,
+                element: <ArticlesLayout />,
+                children: [
+                    {
+                        path: "",
+                        element: <Articles />,
+                    },
+                    {
+                        path: "new",
+                        element: <ArticleEditor />,
+                    },
+                    {
+                        path: ":articleId/edit",
+                        element: <ArticleEditor />,
+                    },
+                    {
+                        path: ":articleId",
+                        element: <ArticleDetails />,
+                    },
+                ],
             },
             {
                 path: "videos",
@@ -117,7 +141,7 @@ function App() {
         if (localStorage.getItem('token')) {
             store.checkAuth();
         }
-    }, []);
+    }, [store]);
 
     if (store.isLoading) {
         return <Loader />

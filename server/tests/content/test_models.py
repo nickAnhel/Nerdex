@@ -1,5 +1,6 @@
 from sqlalchemy.dialects import postgresql
 
+import src.articles.models  # noqa: F401
 from src.content.enums import (
     ContentStatusEnum,
     ContentTypeEnum,

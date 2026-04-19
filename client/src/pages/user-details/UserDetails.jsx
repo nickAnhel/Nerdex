@@ -1,4 +1,5 @@
 import { useContext, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import "./UserDetails.css"
 
@@ -6,6 +7,7 @@ import { StoreContext } from "../..";
 
 import UserService from "../../service/UserService";
 import PostService from "../../service/PostService";
+import ArticleService from "../../service/ArticleService";
 
 import NotFound from "../../components/not-found/NotFound";
 import Loader from "../../components/loader/Loader";
@@ -13,16 +15,21 @@ import PostModal from "../../components/post-modal/PostModal";
 import PostDetails from "../post-details/PostDetails";
 
 import PostList from "../../components/post-list/PostList";
+import ContentList from "../../components/content-list/ContentList";
 import UserList from "../../components/user-list/UserList";
+import ArticleCard from "../../components/article-card/ArticleCard";
 import { getAvatarUrl } from "../../utils/avatar";
 
 
 function UserDetails() {
     const { store } = useContext(StoreContext);
     const ownerPostFilters = ["all", "public", "private", "drafts"];
+    const ownerArticleFilters = ["all", "public", "private", "drafts"];
+    const navigate = useNavigate();
 
     const [tab, setTab] = useState("posts");
     const [postFilter, setPostFilter] = useState("all");
+    const [articleFilter, setArticleFilter] = useState("all");
     const [isCreatePostModalActive, setIsCreatePostModalActive] = useState(false);
 
     const params = useParams();
@@ -50,6 +57,7 @@ function UserDetails() {
                 setUserProfilePhotoStyle({});
                 setTab("posts");
                 setPostFilter("all");
+                setArticleFilter("all");
 
             } catch (e) {
                 setUserNotFound(true);
@@ -58,7 +66,7 @@ function UserDetails() {
         }
 
         fetchUserData();
-    }, [params.username]);
+    }, [username]);
 
     const handleSubscribe = async () => {
         setIsLoadingSubscribe(true);
@@ -119,7 +127,7 @@ function UserDetails() {
         )
     }
 
-    const isOwner = store.user.user_id == user.user_id;
+    const isOwner = store.user.user_id === user.user_id;
 
     return (
         <div id="user-details">
@@ -127,7 +135,7 @@ function UserDetails() {
                 <img
                     src={userProfilePhotoSrc}
                     style={userProfilePhotoStyle}
-                    alt={`${user.username} profile photo`}
+                    alt={`${user.username} profile`}
                     onError={() => {
                         setUserProfilePhotoSrc("/assets/profile.svg");
                         setUserProfilePhotoStyle({ padding: ".5rem", opacity: ".1", aspectRatio: "1/1", backgroundColor: "#0a0a0a", border: "5px solid #fff" });
@@ -136,11 +144,11 @@ function UserDetails() {
 
                 <div className="user-data">
                     <div className="username">{user.username}</div>
-                    <div className="subs">{subsCount} subscriber{subsCount == 1 ? "" : "s"}</div>
+                    <div className="subs">{subsCount} subscriber{subsCount === 1 ? "" : "s"}</div>
                 </div>
 
                 {
-                    store.user.user_id != user.user_id && (
+                    store.user.user_id !== user.user_id && (
                         isSubscribed ?
                             <button
                                 className="btn btn-outline-primary unsubscribe"
@@ -159,7 +167,7 @@ function UserDetails() {
                                     e.preventDefault();
                                     handleSubscribe();
                                 }}
-                                disabled={!store.isAuthenticated || store.user.user_id == user.user_id}
+                                disabled={!store.isAuthenticated || store.user.user_id === user.user_id}
                             >
                                 {isLoadingSubscribe ? <Loader /> : "Subscribe"}
                             </button>
@@ -174,6 +182,12 @@ function UserDetails() {
                         onClick={() => setTab("posts")}
                     >
                         Posts
+                    </div>
+                    <div
+                        className={tab === "articles" ? "tab active" : "tab"}
+                        onClick={() => setTab("articles")}
+                    >
+                        Articles
                     </div>
                     <div
                         className={tab === "subscriptions" ? "tab active" : "tab"}
@@ -223,6 +237,63 @@ function UserDetails() {
                                     profile_filter: isOwner ? postFilter : "public",
                                 }}
                                 refresh={`${store.isRefreshPosts}-${user.user_id}-${postFilter}`}
+                            />
+                        }
+                    </>
+                }
+
+                {
+                    tab === "articles" &&
+                    <>
+                        {
+                            isOwner &&
+                            <div className="posts-toolbar">
+                                <div className="post-filter-tabs">
+                                    {ownerArticleFilters.map((filter) => (
+                                        <button
+                                            key={filter}
+                                            type="button"
+                                            className={articleFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
+                                            onClick={() => setArticleFilter(filter)}
+                                        >
+                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="create-post-button btn btn-primary"
+                                    onClick={() => navigate("/articles/new")}
+                                >
+                                    Write article
+                                </button>
+                            </div>
+                        }
+
+                        {
+                            user.user_id &&
+                            <ContentList
+                                fetchItems={ArticleService.getArticles}
+                                filters={{
+                                    desc: true,
+                                    order: "published_at",
+                                    user_id: user.user_id,
+                                    profile_filter: isOwner ? articleFilter : "public",
+                                }}
+                                refresh={`${store.isRefreshPosts}-articles-${user.user_id}-${articleFilter}`}
+                                emptyText="No articles"
+                                renderItem={({ item, removeItem, ref }) => (
+                                    <ArticleCard
+                                        key={item.article_id || item.content_id}
+                                        ref={ref}
+                                        article={{
+                                            ...item,
+                                            article_id: item.article_id || item.content_id,
+                                        }}
+                                        removeItem={removeItem}
+                                    />
+                                )}
                             />
                         }
                     </>
