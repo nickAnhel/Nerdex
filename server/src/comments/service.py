@@ -32,7 +32,7 @@ class CommentService:
     def __init__(
         self,
         repository: CommentRepository,
-        user_repository: UserRepository,
+        user_repository: UserRepository | None = None,
     ) -> None:
         self._repository = repository
         self._user_repository = user_repository
@@ -454,6 +454,12 @@ class CommentService:
         *,
         viewer_id: uuid.UUID | None,
     ) -> list[CommentGet]:
+        if self._user_repository is None:
+            return [
+                await self._build_comment_get(comment, viewer_id=viewer_id)
+                for comment in comments
+            ]
+
         author_ids = sorted(
             {
                 comment.author.user_id

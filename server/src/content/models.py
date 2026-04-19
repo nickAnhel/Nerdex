@@ -82,6 +82,12 @@ class ContentModel(Base):
         passive_deletes=True,
         uselist=False,
     )
+    article_details: Mapped["ArticleDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
     comments: Mapped[list["CommentModel"]] = relationship(  # type: ignore[name-defined]
         back_populates="content",
         cascade="all, delete-orphan",
@@ -125,15 +131,25 @@ class ContentModel(Base):
 
     @property
     def content(self) -> str:
-        return self.post_details.body_text
+        if self.content_type == ContentTypeEnum.POST and self.post_details is not None:
+            return self.post_details.body_text
+        if self.content_type == ContentTypeEnum.ARTICLE and self.article_details is not None:
+            return self.article_details.body_markdown
+        return ""
 
     @property
-    def content_body_ellipsis(self) -> str:
-        content = self.post_details.body_text
-        if len(content) < 100:
-            return content
+    def content_summary_ellipsis(self) -> str:
+        text = ""
+        if self.content_type == ContentTypeEnum.POST and self.post_details is not None:
+            text = self.post_details.body_text
+        elif self.content_type == ContentTypeEnum.ARTICLE and self.article_details is not None:
+            text = self.excerpt or self.article_details.body_markdown
 
-        return " ".join(content.split()[:5]) + "..."
+        text = text.strip()
+        if len(text) < 100:
+            return text
+
+        return " ".join(text.split()[:12]) + "..."
 
 
 class ContentReactionModel(Base):

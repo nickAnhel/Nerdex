@@ -36,6 +36,9 @@ function FeedSidebar() {
                     <button className="btn btn-primary btn-block" onClick={() => { setIsCreatePostModalActive(true); }}>
                         Create Post
                     </button>
+                    <NavLink to="/articles/new" className="btn btn-secondary btn-block">
+                        Write Article
+                    </NavLink>
                 </>
             }
 
