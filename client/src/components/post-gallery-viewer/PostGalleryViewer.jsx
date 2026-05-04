@@ -3,6 +3,23 @@ import "./PostGalleryViewer.css";
 import ChevronIcon from "../icons/ChevronIcon";
 import CloseIcon from "../icons/CloseIcon";
 import Modal from "../modal/Modal";
+import VideoPlayer from "../video-player";
+
+
+function buildVideoSources(attachment) {
+    const sourceUrl = attachment?.original_url || attachment?.stream_url || attachment?.preview_url;
+    if (!sourceUrl) {
+        return [];
+    }
+
+    return [{
+        id: "original",
+        label: "Original",
+        src: sourceUrl,
+        mimeType: attachment.mime_type || attachment.declared_mime_type || "",
+        isOriginal: true,
+    }];
+}
 
 
 function PostGalleryViewer({ attachments = [], activeIndex, onClose, onChange }) {
@@ -50,11 +67,11 @@ function PostGalleryViewer({ attachments = [], activeIndex, onClose, onChange })
 
                     <div className="post-gallery-media">
                         {attachment.asset_type === "video" ? (
-                            <video
-                                src={attachment.original_url || attachment.preview_url}
-                                poster={attachment.poster_url || undefined}
-                                controls
-                                playsInline
+                            <VideoPlayer
+                                skin="post"
+                                sources={buildVideoSources(attachment)}
+                                posterUrl={attachment.poster_url || undefined}
+                                title={attachment.original_filename || "Post video"}
                                 preload="metadata"
                             />
                         ) : (

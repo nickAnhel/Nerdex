@@ -126,7 +126,7 @@
 }
 
 .article-figure img,
-.article-video-block video {
+.article-video-block .video-player-frame {
     width: 100%;
     display: block;
     border-radius: 1.25rem;
