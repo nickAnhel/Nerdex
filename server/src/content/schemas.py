@@ -9,6 +9,8 @@ from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibil
 from src.posts.schemas import PostAttachmentGet
 from src.tags.schemas import TagGet
 from src.users.schemas import UserGet
+from src.videos.enums import VideoOrientationEnum, VideoProcessingStatusEnum
+from src.videos.schemas import VideoAssetGet
 
 
 class ContentListItemGet(BaseSchema):
@@ -37,4 +39,10 @@ class ContentListItemGet(BaseSchema):
     canonical_path: str | None = None
     reading_time_minutes: int | None = None
     word_count: int | None = None
-    cover: ArticleAssetGet | None = None
+    cover: ArticleAssetGet | VideoAssetGet | None = None
+
+    description: str | None = None
+    duration_seconds: int | None = None
+    orientation: VideoOrientationEnum | None = None
+    processing_status: VideoProcessingStatusEnum | None = None
+    processing_error: str | None = None

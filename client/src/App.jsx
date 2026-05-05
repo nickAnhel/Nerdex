@@ -22,6 +22,8 @@ import Articles from "./pages/articles/Articles";
 import ArticleDetails from "./pages/article-details/ArticleDetails";
 import ArticleEditor from "./pages/article-editor/ArticleEditor";
 import Videos from "./pages/videos/Videos";
+import VideoDetails from "./pages/video-details/VideoDetails";
+import VideoEditor from "./pages/video-editor/VideoEditor";
 import Courses from "./pages/courses/Courses";
 
 import GlobalFeed from "./pages/global-feed/GlobalFeed";
@@ -43,6 +45,10 @@ function Layout() {
 }
 
 function ArticlesLayout() {
+    return <Outlet />;
+}
+
+function VideosLayout() {
     return <Outlet />;
 }
 
@@ -120,7 +126,25 @@ const router = createBrowserRouter([
             },
             {
                 path: "videos",
-                element: <Videos />,
+                element: <VideosLayout />,
+                children: [
+                    {
+                        path: "",
+                        element: <Videos />,
+                    },
+                    {
+                        path: "new",
+                        element: <VideoEditor />,
+                    },
+                    {
+                        path: ":videoId/edit",
+                        element: <VideoEditor />,
+                    },
+                    {
+                        path: ":videoId",
+                        element: <VideoDetails />,
+                    },
+                ],
             },
             {
                 path: "courses",

@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.assets.models import AssetModel, ContentAssetModel
 import src.articles.models  # noqa: F401
 import src.tags.models  # noqa: F401
+import src.videos.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.enums_list import ContentOrder
 from src.content.models import ContentModel, ContentReactionModel
 from src.users.models import SubscriptionModel, UserModel
+from src.videos.enums import VideoProcessingStatusEnum
+from src.videos.models import VideoPlaybackDetailsModel
 class ContentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -28,10 +31,17 @@ class ContentRepository:
     ) -> list[ContentModel]:
         stmt = (
             self._build_content_query(viewer_id=viewer_id)
-            .where(ContentModel.content_type.in_([ContentTypeEnum.POST, ContentTypeEnum.ARTICLE]))
+            .outerjoin(VideoPlaybackDetailsModel)
+            .where(ContentModel.content_type.in_([ContentTypeEnum.POST, ContentTypeEnum.ARTICLE, ContentTypeEnum.VIDEO]))
             .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
             .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
             .where(ContentModel.deleted_at.is_(None))
+            .where(
+                or_(
+                    ContentModel.content_type != ContentTypeEnum.VIDEO,
+                    VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
+                )
+            )
             .order_by(self._order_by_clause(order=order, order_desc=order_desc))
             .offset(offset)
             .limit(limit)
@@ -56,11 +66,18 @@ class ContentRepository:
 
         stmt = (
             self._build_content_query(viewer_id=user_id)
-            .where(ContentModel.content_type.in_([ContentTypeEnum.POST, ContentTypeEnum.ARTICLE]))
+            .outerjoin(VideoPlaybackDetailsModel)
+            .where(ContentModel.content_type.in_([ContentTypeEnum.POST, ContentTypeEnum.ARTICLE, ContentTypeEnum.VIDEO]))
             .where(ContentModel.author_id.in_(select(subs_subquery.c.subscribed_id)))
             .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
             .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
             .where(ContentModel.deleted_at.is_(None))
+            .where(
+                or_(
+                    ContentModel.content_type != ContentTypeEnum.VIDEO,
+                    VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
+                )
+            )
             .order_by(self._order_by_clause(order=order, order_desc=order_desc))
             .offset(offset)
             .limit(limit)
@@ -77,6 +94,8 @@ class ContentRepository:
             .selectinload(AssetModel.variants),
             selectinload(ContentModel.post_details),
             selectinload(ContentModel.article_details),
+            selectinload(ContentModel.video_details),
+            selectinload(ContentModel.video_playback_details),
             selectinload(ContentModel.tags),
             selectinload(ContentModel.asset_links)
             .selectinload(ContentAssetModel.asset)

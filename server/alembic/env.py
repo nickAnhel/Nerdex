@@ -9,16 +9,10 @@ from alembic import context
 
 from src.config import settings
 from src.common.models import Base
-from src.content.models import *
-from src.comments.models import *
-from src.tags.models import *
-from src.users.models import *
-from src.posts.models import *
-from src.admin.models import *
-from src.chats.models import *
-from src.messages.models import *
-from src.events.models import *
-from src.assets.models import *
+from src.common.model_registry import import_all_models
+
+
+import_all_models()
 
 
 # this is the Alembic Config object, which provides

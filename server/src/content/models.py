@@ -88,6 +88,18 @@ class ContentModel(Base):
         passive_deletes=True,
         uselist=False,
     )
+    video_details: Mapped["VideoDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+    video_playback_details: Mapped["VideoPlaybackDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
     comments: Mapped[list["CommentModel"]] = relationship(  # type: ignore[name-defined]
         back_populates="content",
         cascade="all, delete-orphan",
@@ -135,6 +147,8 @@ class ContentModel(Base):
             return self.post_details.body_text
         if self.content_type == ContentTypeEnum.ARTICLE and self.article_details is not None:
             return self.article_details.body_markdown
+        if self.content_type == ContentTypeEnum.VIDEO and self.video_details is not None:
+            return self.video_details.description
         return ""
 
     @property
@@ -144,6 +158,8 @@ class ContentModel(Base):
             text = self.post_details.body_text
         elif self.content_type == ContentTypeEnum.ARTICLE and self.article_details is not None:
             text = self.excerpt or self.article_details.body_markdown
+        elif self.content_type == ContentTypeEnum.VIDEO and self.video_details is not None:
+            text = self.excerpt or self.video_details.description
 
         text = text.strip()
         if len(text) < 100:

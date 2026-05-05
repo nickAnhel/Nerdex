@@ -18,6 +18,7 @@ from src.chats.router import router as chats_router
 from src.messages.router import router as messages_router
 from src.events.router import router as events_router
 from src.assets.router import router as assets_router
+from src.videos.router import router as videos_router
 
 # Exception handlers
 from src.common.exceptions import (
@@ -93,6 +94,8 @@ from src.assets.exceptions import (
     AssetUploadNotReady,
     InvalidAsset,
 )
+from src.videos.exc_handlers import invalid_video_handler, video_not_found_handler
+from src.videos.exceptions import InvalidVideo, VideoNotFound
 
 
 def register_routes(app: FastAPI) -> None:
@@ -107,6 +110,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(messages_router)
     app.include_router(events_router)
     app.include_router(assets_router)
+    app.include_router(videos_router)
 
     app.mount("/ws", ws_app)
 
@@ -145,6 +149,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AssetNotFound, asset_not_found_handler)  # type: ignore
     app.add_exception_handler(InvalidAsset, invalid_asset_handler)  # type: ignore
     app.add_exception_handler(AssetUploadNotReady, asset_upload_not_ready_handler)  # type: ignore
+    app.add_exception_handler(VideoNotFound, video_not_found_handler)  # type: ignore
+    app.add_exception_handler(InvalidVideo, invalid_video_handler)  # type: ignore
 
 
 def register_middleware(app: FastAPI) -> None:

@@ -127,3 +127,24 @@ test("fires quality change event with previous and next quality ids", () => {
         currentTime: 12,
     }));
 });
+
+test("renders selected source and poster on video element", () => {
+    render(
+        <VideoPlayer
+            title="Poster player"
+            sources={singleSource}
+            posterUrl="https://example.com/poster.webp"
+        />
+    );
+
+    const video = document.querySelector("video");
+
+    expect(video.getAttribute("src")).toBe(singleSource[0].src);
+    expect(video.getAttribute("poster")).toBe("https://example.com/poster.webp");
+});
+
+test("renders unavailable state when sources are empty", () => {
+    render(<VideoPlayer title="Missing source player" sources={[]} />);
+
+    expect(screen.getByText("Video source is unavailable.")).not.toBeNull();
+});

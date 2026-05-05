@@ -6,6 +6,8 @@ import mimetypes
 import typing as tp
 import uuid
 from dataclasses import dataclass
+import tempfile
+from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -21,7 +23,9 @@ from src.assets.models import AssetModel
 from src.assets.repository import AssetRepository
 from src.assets.schemas import AssetFinalizeUploadResponse, AssetGet, AssetInitUploadRequest, AssetInitUploadResponse, AssetVariantGet
 from src.assets.storage import AssetStorage, build_asset_storage_key, detect_extension, guess_mime_type
+from src.assets.video_processing import VideoMetadata, VideoProcessingError, VideoProcessor
 from src.config import AssetsSettings
+from src.videos.enums import VideoOrientationEnum, VideoProcessingStatusEnum
 
 
 GENERIC_IMAGE_VARIANTS: dict[AssetVariantTypeEnum, tuple[int, int]] = {
@@ -55,6 +59,23 @@ class TaskDispatcher:
 
 
 @dataclass(slots=True)
+class AssetVideoProcessingUpdate:
+    asset_id: uuid.UUID
+    processing_status: VideoProcessingStatusEnum
+    duration_seconds: int | None = None
+    width: int | None = None
+    height: int | None = None
+    orientation: VideoOrientationEnum | None = None
+    available_quality_metadata: dict[str, object] | None = None
+    processing_error: str | None = None
+
+
+class VideoProcessingNotifier(tp.Protocol):
+    async def notify(self, update: AssetVideoProcessingUpdate) -> None:
+        ...
+
+
+@dataclass(slots=True)
 class RenderedImageVariant:
     payload: bytes
     width: int
@@ -75,11 +96,13 @@ class AssetService:
         storage: AssetStorage,
         settings: AssetsSettings,
         task_dispatcher: TaskDispatcher | None = None,
+        video_processing_notifier: VideoProcessingNotifier | None = None,
     ) -> None:
         self._repository = repository
         self._storage = storage
         self._settings = settings
         self._task_dispatcher = task_dispatcher
+        self._video_processing_notifier = video_processing_notifier
 
     async def init_upload(
         self,
@@ -305,14 +328,137 @@ class AssetService:
         original_variant = next(
             variant for variant in asset.variants if variant.asset_variant_type == AssetVariantTypeEnum.ORIGINAL
         )
-        detected_mime_type = asset.detected_mime_type or original_variant.mime_type or mimetypes.guess_type(
-            asset.original_filename or ""
-        )[0]
-        await self._repository.set_asset_ready(
-            asset_id=asset.asset_id,
-            detected_mime_type=detected_mime_type,
-            now=self._now(),
+        detected_mime_type = (
+            asset.detected_mime_type
+            or original_variant.mime_type
+            or mimetypes.guess_type(asset.original_filename or "")[0]
         )
+        processor = VideoProcessor()
+        metadata: VideoMetadata | None = None
+        quality_metadata: dict[str, object] = {}
+
+        try:
+            await self._set_video_processing_status(
+                asset=asset,
+                processing_status=VideoProcessingStatusEnum.UPLOADED,
+                detected_mime_type=detected_mime_type,
+            )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                extension = asset.original_extension or self._default_extension(AssetTypeEnum.VIDEO, detected_mime_type)
+                input_path = tmp_path / f"source.{extension}"
+                await self._storage.download_to_file(
+                    bucket=original_variant.storage_bucket,
+                    key=original_variant.storage_key,
+                    path=input_path,
+                )
+
+                await self._set_video_processing_status(
+                    asset=asset,
+                    processing_status=VideoProcessingStatusEnum.METADATA_EXTRACTING,
+                    detected_mime_type=detected_mime_type,
+                )
+                metadata = await processor.probe(input_path)
+                quality_metadata = self._quality_metadata_for_original(
+                    original_variant=original_variant,
+                    metadata=metadata,
+                )
+                await self._repository.upsert_variant(
+                    asset_id=asset.asset_id,
+                    asset_variant_type=AssetVariantTypeEnum.ORIGINAL,
+                    storage_bucket=original_variant.storage_bucket,
+                    storage_key=original_variant.storage_key,
+                    mime_type=detected_mime_type or original_variant.mime_type,
+                    size_bytes=original_variant.size_bytes,
+                    width=metadata.width,
+                    height=metadata.height,
+                    duration_ms=metadata.duration_seconds * 1000,
+                    bitrate=metadata.bitrate,
+                    checksum_sha256=original_variant.checksum_sha256,
+                    is_primary=True,
+                    status=AssetVariantStatusEnum.READY,
+                    variant_metadata={"quality": "original"},
+                )
+
+                await self._set_video_processing_status(
+                    asset=asset,
+                    processing_status=VideoProcessingStatusEnum.TRANSCODING,
+                    metadata=metadata,
+                    available_quality_metadata=quality_metadata,
+                    detected_mime_type=detected_mime_type,
+                )
+                rendered_variants = await processor.transcode_variants(
+                    input_path=input_path,
+                    output_dir=tmp_path,
+                    metadata=metadata,
+                )
+                for rendered in rendered_variants:
+                    storage_key = build_asset_storage_key(
+                        asset_id=asset.asset_id,
+                        variant_type=rendered.variant_type,
+                        extension="mp4",
+                    )
+                    stored = await self._storage.upload_file(
+                        bucket=self._storage.private_bucket,
+                        key=storage_key,
+                        path=rendered.path,
+                        mime_type="video/mp4",
+                    )
+                    await self._repository.upsert_variant(
+                        asset_id=asset.asset_id,
+                        asset_variant_type=rendered.variant_type,
+                        storage_bucket=self._storage.private_bucket,
+                        storage_key=storage_key,
+                        mime_type=stored.mime_type,
+                        size_bytes=stored.size_bytes,
+                        width=rendered.width,
+                        height=rendered.height,
+                        duration_ms=metadata.duration_seconds * 1000,
+                        bitrate=rendered.bitrate,
+                        checksum_sha256=stored.checksum_sha256,
+                        is_primary=False,
+                        status=AssetVariantStatusEnum.READY,
+                        variant_metadata={
+                            "quality": rendered.label,
+                            "codec": "h264",
+                            "container": "mp4",
+                        },
+                    )
+                    quality_metadata[rendered.label] = {
+                        "variant_type": rendered.variant_type.value,
+                        "width": rendered.width,
+                        "height": rendered.height,
+                        "mime_type": stored.mime_type,
+                        "size_bytes": stored.size_bytes,
+                    }
+
+            await self._set_video_processing_status(
+                asset=asset,
+                processing_status=VideoProcessingStatusEnum.READY,
+                metadata=metadata,
+                available_quality_metadata=quality_metadata,
+                detected_mime_type=detected_mime_type,
+            )
+            await self._repository.set_asset_ready(
+                asset_id=asset.asset_id,
+                detected_mime_type=detected_mime_type,
+                now=self._now(),
+            )
+        except (VideoProcessingError, OSError, ValueError) as exc:
+            await self._repository.set_asset_failed(
+                asset_id=asset.asset_id,
+                error_message=str(exc),
+                now=self._now(),
+            )
+            await self._set_video_processing_status(
+                asset=asset,
+                processing_status=VideoProcessingStatusEnum.FAILED,
+                metadata=metadata,
+                available_quality_metadata=quality_metadata,
+                detected_mime_type=detected_mime_type,
+                processing_error=str(exc),
+            )
+            raise
 
     async def cleanup_stale_uploads(self) -> list[uuid.UUID]:
         cutoff = self._now() - datetime.timedelta(hours=self._settings.stale_upload_grace_hours)
@@ -407,6 +553,13 @@ class AssetService:
         elif data.asset_type == AssetTypeEnum.VIDEO:
             if declared_mime_type and not declared_mime_type.startswith("video/"):
                 raise InvalidAsset("Asset type video requires a video mime type")
+            if extension not in {"mp4", "webm", "mov"} and declared_mime_type not in {
+                "video/mp4",
+                "video/webm",
+                "video/quicktime",
+                "video/x-quicktime",
+            }:
+                raise InvalidAsset("Video uploads must be mp4, webm, or mov")
             max_size = self._settings.max_video_size_mb * 1024 * 1024
         else:
             max_size = self._settings.max_file_size_mb * 1024 * 1024
@@ -444,6 +597,71 @@ class AssetService:
         if self._task_dispatcher is None:
             return
         self._task_dispatcher.enqueue_video_processing(asset_id)
+
+    async def _set_video_processing_status(
+        self,
+        *,
+        asset: AssetModel,
+        processing_status: VideoProcessingStatusEnum,
+        detected_mime_type: str | None,
+        metadata: VideoMetadata | None = None,
+        available_quality_metadata: dict[str, object] | None = None,
+        processing_error: str | None = None,
+    ) -> None:
+        asset_metadata = dict(asset.asset_metadata or {})
+        asset_metadata["video_processing_status"] = processing_status.value
+        if detected_mime_type:
+            asset_metadata["detected_video_mime_type"] = detected_mime_type
+        if metadata is not None:
+            asset_metadata["duration_seconds"] = metadata.duration_seconds
+            asset_metadata["width"] = metadata.width
+            asset_metadata["height"] = metadata.height
+            asset_metadata["orientation"] = metadata.orientation.value
+            asset_metadata["bitrate"] = metadata.bitrate
+        if available_quality_metadata is not None:
+            asset_metadata["available_quality_metadata"] = available_quality_metadata
+        if processing_error:
+            asset_metadata["last_processing_error"] = processing_error
+        await self._repository.update_asset_metadata(
+            asset_id=asset.asset_id,
+            asset_metadata=asset_metadata,
+            now=self._now(),
+        )
+        asset.asset_metadata = asset_metadata
+        await self._notify_video_processing(
+            AssetVideoProcessingUpdate(
+                asset_id=asset.asset_id,
+                processing_status=processing_status,
+                duration_seconds=metadata.duration_seconds if metadata is not None else None,
+                width=metadata.width if metadata is not None else None,
+                height=metadata.height if metadata is not None else None,
+                orientation=metadata.orientation if metadata is not None else None,
+                available_quality_metadata=available_quality_metadata or {},
+                processing_error=processing_error,
+            )
+        )
+
+    async def _notify_video_processing(self, update: AssetVideoProcessingUpdate) -> None:
+        if self._video_processing_notifier is None:
+            return
+        await self._video_processing_notifier.notify(update)
+
+    def _quality_metadata_for_original(
+        self,
+        *,
+        original_variant,
+        metadata: VideoMetadata,
+    ) -> dict[str, object]:
+        return {
+            "original": {
+                "variant_type": AssetVariantTypeEnum.ORIGINAL.value,
+                "width": metadata.width,
+                "height": metadata.height,
+                "duration_seconds": metadata.duration_seconds,
+                "mime_type": original_variant.mime_type,
+                "size_bytes": original_variant.size_bytes,
+            }
+        }
 
     def _require_avatar_source_asset(self, asset: AssetModel):
         if asset.asset_type != AssetTypeEnum.IMAGE:
