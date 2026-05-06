@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, Query
 
 from src.auth.dependencies import get_current_optional_user, get_current_user
 from src.common.schemas import Status
+from src.content.dependencies import get_content_service
+from src.content.enums import ReactionTypeEnum
+from src.content.service import ContentService
 from src.users.schemas import UserGet
 from src.videos.dependencies import get_video_service
 from src.videos.enums import VideoOrder, VideoProfileFilter
@@ -89,33 +92,53 @@ async def delete_video(
 async def like_video(
     video_id: uuid.UUID,
     user: UserGet = Depends(get_current_user),
-    video_service: VideoService = Depends(get_video_service),
+    content_service: ContentService = Depends(get_content_service),
 ) -> VideoRating:
-    return await video_service.add_like_to_video(video_id=video_id, user_id=user.user_id)
+    rating = await content_service.set_reaction(
+        content_id=video_id,
+        user=user,
+        reaction_type=ReactionTypeEnum.LIKE,
+    )
+    return VideoRating(video_id=rating.content_id, **rating.model_dump(exclude={"content_id"}))
 
 
 @router.delete("/{video_id}/like")
 async def unlike_video(
     video_id: uuid.UUID,
     user: UserGet = Depends(get_current_user),
-    video_service: VideoService = Depends(get_video_service),
+    content_service: ContentService = Depends(get_content_service),
 ) -> VideoRating:
-    return await video_service.remove_like_from_video(video_id=video_id, user_id=user.user_id)
+    rating = await content_service.remove_reaction(
+        content_id=video_id,
+        user=user,
+        reaction_type=ReactionTypeEnum.LIKE,
+    )
+    return VideoRating(video_id=rating.content_id, **rating.model_dump(exclude={"content_id"}))
 
 
 @router.post("/{video_id}/dislike")
 async def dislike_video(
     video_id: uuid.UUID,
     user: UserGet = Depends(get_current_user),
-    video_service: VideoService = Depends(get_video_service),
+    content_service: ContentService = Depends(get_content_service),
 ) -> VideoRating:
-    return await video_service.add_dislike_to_video(video_id=video_id, user_id=user.user_id)
+    rating = await content_service.set_reaction(
+        content_id=video_id,
+        user=user,
+        reaction_type=ReactionTypeEnum.DISLIKE,
+    )
+    return VideoRating(video_id=rating.content_id, **rating.model_dump(exclude={"content_id"}))
 
 
 @router.delete("/{video_id}/dislike")
 async def undislike_video(
     video_id: uuid.UUID,
     user: UserGet = Depends(get_current_user),
-    video_service: VideoService = Depends(get_video_service),
+    content_service: ContentService = Depends(get_content_service),
 ) -> VideoRating:
-    return await video_service.remove_dislike_from_video(video_id=video_id, user_id=user.user_id)
+    rating = await content_service.remove_reaction(
+        content_id=video_id,
+        user=user,
+        reaction_type=ReactionTypeEnum.DISLIKE,
+    )
+    return VideoRating(video_id=rating.content_id, **rating.model_dump(exclude={"content_id"}))

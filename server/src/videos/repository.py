@@ -11,7 +11,7 @@ from src.assets.enums import AttachmentTypeEnum
 from src.assets.models import AssetModel, ContentAssetModel
 import src.tags.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
-from src.content.models import ContentModel, ContentReactionModel
+from src.content.models import ContentModel, ContentReactionModel, ContentViewSessionModel
 from src.users.models import UserModel
 from src.videos.enums import VideoOrder, VideoProcessingStatusEnum, VideoProfileFilter
 from src.videos.models import VideoDetailsModel, VideoPlaybackDetailsModel
@@ -294,6 +294,21 @@ class VideoRepository:
         )
         return set(result.scalars().all())
 
+    async def get_latest_view_session(
+        self,
+        *,
+        content_id: uuid.UUID,
+        viewer_id: uuid.UUID,
+    ) -> ContentViewSessionModel | None:
+        result = await self._session.execute(
+            select(ContentViewSessionModel)
+            .where(ContentViewSessionModel.content_id == content_id)
+            .where(ContentViewSessionModel.viewer_id == viewer_id)
+            .order_by(desc(ContentViewSessionModel.last_seen_at))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def soft_delete_video(
         self,
         *,
@@ -424,6 +439,8 @@ class VideoRepository:
     ) -> None:
         video = await self.get_single(content_id=content_id)
         if video is None or video.video_details.publish_requested_at is None:
+            return
+        if video.status == ContentStatusEnum.PUBLISHED or video.deleted_at is not None:
             return
         error = await self._publish_validation_error(video)
         if error is not None:

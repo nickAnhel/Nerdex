@@ -148,6 +148,7 @@ async def _base_payload(
         "comments_count": item.comments_count,
         "likes_count": item.likes_count,
         "dislikes_count": item.dislikes_count,
+        "views_count": getattr(item, "views_count", 0),
         "user": await build_user_get(item.author, viewer_id=viewer_id, storage=storage),
         "tags": item.tags,
         "my_reaction": item.my_reaction,

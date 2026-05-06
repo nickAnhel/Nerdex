@@ -15,6 +15,7 @@ function getBufferedEnd(video) {
 export default function useVideoController({
     sources,
     initialQualityId,
+    initialTimeSeconds,
     autoPlay = false,
     muted = false,
     checkpoints,
@@ -29,6 +30,7 @@ export default function useVideoController({
     const videoRef = useRef(null);
     const playerRef = useRef(null);
     const pendingQualitySwitchRef = useRef(null);
+    const initialSeekAppliedRef = useRef(false);
     const [selectedQualityId, setSelectedQualityId] = useState(
         initialQualityId || sources[0]?.id || ""
     );
@@ -247,8 +249,16 @@ export default function useVideoController({
                     });
                 }
                 pendingQualitySwitchRef.current = null;
-            } else if (autoPlay) {
-                video.play().catch(() => {});
+            } else {
+                if (!initialSeekAppliedRef.current && Number(initialTimeSeconds) > 0) {
+                    const targetTime = Math.min(Number(initialTimeSeconds), video.duration || Number(initialTimeSeconds));
+                    video.currentTime = targetTime;
+                    setCurrentTime(targetTime);
+                    initialSeekAppliedRef.current = true;
+                }
+                if (autoPlay) {
+                    video.play().catch(() => {});
+                }
             }
         };
 
@@ -332,6 +342,7 @@ export default function useVideoController({
         buildPayload,
         duration,
         isMuted,
+        initialTimeSeconds,
         onEnded,
         onError,
         onPause,

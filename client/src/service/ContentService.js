@@ -9,4 +9,38 @@ export default class ContentService {
     static async getSubscriptionsFeed(params) {
         return api.get("/contents/subscriptions", { params });
     }
+
+    static async getVideoRecommendations(params) {
+        return api.get("/contents/videos/recommendations", { params });
+    }
+
+    static async getVideoSubscriptions(params) {
+        return api.get("/contents/videos/subscriptions", { params });
+    }
+
+    static async getHistory(params) {
+        return api.get("/contents/history", { params });
+    }
+
+    static async setReaction(contentId, reactionType) {
+        return api.post(`/contents/${contentId}/reaction`, { reaction_type: reactionType });
+    }
+
+    static async removeReaction(contentId, reactionType = null) {
+        return api.delete(`/contents/${contentId}/reaction`, {
+            data: reactionType ? { reaction_type: reactionType } : null,
+        });
+    }
+
+    static async startViewSession(contentId, data) {
+        return api.post(`/contents/${contentId}/view-session/start`, data);
+    }
+
+    static async heartbeatViewSession(contentId, sessionId, data) {
+        return api.post(`/contents/${contentId}/view-session/${sessionId}/heartbeat`, data);
+    }
+
+    static async finishViewSession(contentId, sessionId, data) {
+        return api.post(`/contents/${contentId}/view-session/${sessionId}/finish`, data);
+    }
 }

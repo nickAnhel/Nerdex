@@ -119,6 +119,7 @@ class VideoService:
             title=title,
             playback_status=playback_seed["processing_status"],
             current_published_at=None,
+            current_publish_requested_at=None,
         )
         now = self._now()
         video = await self._repository.create(
@@ -280,6 +281,7 @@ class VideoService:
             title=next_title,
             playback_status=playback_status,
             current_published_at=video.published_at,
+            current_publish_requested_at=video.video_details.publish_requested_at,
         )
         if requested_status == ContentStatusEnum.DRAFT:
             published_at = None
@@ -472,11 +474,12 @@ class VideoService:
         title: str,
         playback_status: VideoProcessingStatusEnum,
         current_published_at: datetime.datetime | None,
+        current_publish_requested_at: datetime.datetime | None,
     ) -> tuple[ContentStatusEnum, datetime.datetime | None, datetime.datetime | None, str | None]:
         now = self._now()
         if requested_status == ContentStatusEnum.DRAFT:
             return ContentStatusEnum.DRAFT, current_published_at, None, None
-        publish_requested_at = now
+        publish_requested_at = current_publish_requested_at or now
         if playback_status != VideoProcessingStatusEnum.READY:
             return ContentStatusEnum.DRAFT, current_published_at, publish_requested_at, None
         if not title:
@@ -541,6 +544,22 @@ class VideoService:
             and video.video_playback_details.processing_status == VideoProcessingStatusEnum.READY
             and self._can_view_video(video=video, viewer_id=viewer_id)
         )
+        if viewer_id is not None and hasattr(self._repository, "get_latest_view_session"):
+            latest_session = await self._repository.get_latest_view_session(
+                content_id=video.content_id,
+                viewer_id=viewer_id,
+            )
+            video.history_progress = (
+                {
+                    "last_position_seconds": latest_session.last_position_seconds,
+                    "max_position_seconds": latest_session.max_position_seconds,
+                    "watched_seconds": latest_session.watched_seconds,
+                    "progress_percent": latest_session.progress_percent,
+                    "last_seen_at": latest_session.last_seen_at,
+                }
+                if latest_session is not None
+                else None
+            )
         return await build_video_get(
             video,
             viewer_id=viewer_id,

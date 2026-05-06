@@ -24,7 +24,11 @@ function ContentList({
     const [offset, setOffset] = useState(0);
 
     const removeItem = (itemId) => {
-        setItems((prevItems) => prevItems.filter((item) => item.content_id !== itemId && item.article_id !== itemId));
+        setItems((prevItems) => prevItems.filter((item) => (
+            item.content_id !== itemId
+            && item.article_id !== itemId
+            && item.content?.content_id !== itemId
+        )));
     };
 
     useEffect(() => {

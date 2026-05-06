@@ -128,6 +128,7 @@ function VideoPlayer(props) {
         skin = VIDEO_SKINS.article,
         sources = [],
         initialQualityId,
+        initialTimeSeconds,
         posterUrl,
         title,
         chapters,
@@ -148,6 +149,7 @@ function VideoPlayer(props) {
         <VideoPlayerCore
             sources={sources}
             initialQualityId={initialQualityId}
+            initialTimeSeconds={initialTimeSeconds}
             posterUrl={posterUrl}
             title={title}
             chapters={chapters}

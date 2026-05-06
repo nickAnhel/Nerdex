@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import "./VideoCard.css";
 
 import { StoreContext } from "../..";
-import VideoService from "../../service/VideoService";
+import ContentService from "../../service/ContentService";
 import CommentIcon from "../icons/CommentIcon";
 import DislikeIcon from "../icons/DislikeIcon";
 import LikeIcon from "../icons/LikeIcon";
@@ -26,7 +26,7 @@ export function formatDuration(seconds) {
     return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
-const VideoCard = forwardRef(({ video, removeItem }, ref) => {
+const VideoCard = forwardRef(({ video }, ref) => {
     const { store } = useContext(StoreContext);
     const navigate = useNavigate();
     const [card, setCard] = useState(video);
@@ -45,8 +45,8 @@ const VideoCard = forwardRef(({ video, removeItem }, ref) => {
 
     const handleLike = async () => {
         const res = isLiked
-            ? await VideoService.unlikeVideo(card.video_id)
-            : await VideoService.likeVideo(card.video_id);
+            ? await ContentService.removeReaction(card.content_id || card.video_id, "like")
+            : await ContentService.setReaction(card.content_id || card.video_id, "like");
         setCard((prevCard) => ({
             ...prevCard,
             likes_count: res.data.likes_count,
@@ -57,20 +57,14 @@ const VideoCard = forwardRef(({ video, removeItem }, ref) => {
 
     const handleDislike = async () => {
         const res = isDisliked
-            ? await VideoService.undislikeVideo(card.video_id)
-            : await VideoService.dislikeVideo(card.video_id);
+            ? await ContentService.removeReaction(card.content_id || card.video_id, "dislike")
+            : await ContentService.setReaction(card.content_id || card.video_id, "dislike");
         setCard((prevCard) => ({
             ...prevCard,
             likes_count: res.data.likes_count,
             dislikes_count: res.data.dislikes_count,
             my_reaction: res.data.my_reaction,
         }));
-    };
-
-    const handleDelete = async () => {
-        await VideoService.deleteVideo(card.video_id);
-        removeItem?.(card.video_id);
-        store.refreshPosts();
     };
 
     return (
@@ -152,17 +146,6 @@ const VideoCard = forwardRef(({ video, removeItem }, ref) => {
                     <DislikeIcon />
                     <span>{card.dislikes_count}</span>
                 </button>
-                {
-                    card.is_owner &&
-                    <>
-                        <button type="button" onClick={() => navigate(`/videos/${card.video_id}/edit`)}>
-                            Edit
-                        </button>
-                        <button type="button" onClick={handleDelete}>
-                            Delete
-                        </button>
-                    </>
-                }
             </div>
         </article>
     );

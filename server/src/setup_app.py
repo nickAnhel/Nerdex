@@ -49,6 +49,8 @@ from src.articles.exc_handlers import article_not_found_handler, invalid_article
 from src.articles.exceptions import ArticleNotFound, InvalidArticle
 from src.comments.exc_handlers import comment_not_found_handler, invalid_comment_handler
 from src.comments.exceptions import CommentNotFound, InvalidComment
+from src.content.exc_handlers import content_not_found_handler, invalid_content_action_handler
+from src.content.exceptions import ContentNotFound, InvalidContentAction
 from src.tags.exc_handlers import invalid_tag_handler
 from src.tags.exceptions import InvalidTag
 
@@ -133,6 +135,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(InvalidArticle, invalid_article_handler)  # type: ignore
     app.add_exception_handler(CommentNotFound, comment_not_found_handler)  # type: ignore
     app.add_exception_handler(InvalidComment, invalid_comment_handler)  # type: ignore
+    app.add_exception_handler(ContentNotFound, content_not_found_handler)  # type: ignore
+    app.add_exception_handler(InvalidContentAction, invalid_content_action_handler)  # type: ignore
     app.add_exception_handler(InvalidTag, invalid_tag_handler)  # type: ignore
 
     app.add_exception_handler(ChatNotFound, chat_not_found_handler)  # type: ignore

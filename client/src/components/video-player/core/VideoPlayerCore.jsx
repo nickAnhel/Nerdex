@@ -18,6 +18,7 @@ export function useVideoPlayer() {
 function VideoPlayerCore({
     sources = [],
     initialQualityId,
+    initialTimeSeconds,
     posterUrl,
     title,
     chapters = [],
@@ -39,6 +40,7 @@ function VideoPlayerCore({
     const controller = useVideoController({
         sources: normalizedSources,
         initialQualityId,
+        initialTimeSeconds,
         autoPlay,
         muted,
         checkpoints,

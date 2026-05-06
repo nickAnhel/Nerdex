@@ -58,6 +58,7 @@ async def build_video_card_get(
         comments_count=video.comments_count,
         likes_count=video.likes_count,
         dislikes_count=video.dislikes_count,
+        views_count=getattr(video, "views_count", 0),
         duration_seconds=playback.duration_seconds if playback is not None else None,
         orientation=playback.orientation if playback is not None else None,
         processing_status=(
@@ -99,6 +100,7 @@ async def build_video_get(
         publish_requested_at=(
             video.video_details.publish_requested_at if video.video_details is not None else None
         ),
+        history_progress=getattr(video, "history_progress", None),
     )
 
 

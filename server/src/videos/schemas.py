@@ -92,6 +92,7 @@ class VideoCardGet(BaseSchema):
     comments_count: int = Field(ge=0)
     likes_count: int = Field(ge=0)
     dislikes_count: int = Field(ge=0)
+    views_count: int = Field(default=0, ge=0)
     duration_seconds: int | None = Field(default=None, ge=0)
     orientation: VideoOrientationEnum | None = None
     processing_status: VideoProcessingStatusEnum
@@ -109,6 +110,7 @@ class VideoGet(VideoCardGet):
     playback_sources: list[VideoPlaybackSourceGet] = Field(default_factory=list)
     chapters: list[VideoChapterGet] = Field(default_factory=list)
     publish_requested_at: datetime.datetime | None = None
+    history_progress: dict | None = None
 
 
 class VideoEditorGet(VideoGet):

@@ -56,7 +56,10 @@
 .video-details-title-row,
 .video-owner-actions,
 .video-details-badges,
-.video-details-tags {
+.video-details-tags,
+.video-details-feedback,
+.video-details-feedback button,
+.video-details-views {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -120,6 +123,43 @@
     letter-spacing: 0.06em;
 }
 
+.video-details-feedback {
+    margin-top: 1rem;
+}
+
+.video-details-feedback button,
+.video-details-views {
+    min-height: 2.35rem;
+    border: 1px solid #404040;
+    border-radius: 999px;
+    background: #1f1f1f;
+    color: #e8eaed;
+    padding: 0.45rem 0.75rem;
+}
+
+.video-details-feedback button {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.video-details-feedback button:hover:not(:disabled),
+.video-details-feedback button.active {
+    border-color: #9d50ff;
+    color: #ffffff;
+    background: rgba(157, 80, 255, 0.18);
+}
+
+.video-details-feedback button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.video-details-feedback svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: none;
+}
+
 .video-details-description {
     max-width: 48rem;
     margin: 1rem 0 0;
@@ -141,6 +181,54 @@
 
 .video-details-state p {
     color: #aaa;
+}
+
+.video-delete-modal {
+    width: min(28rem, calc(100vw - 2rem));
+    display: grid;
+    gap: 1rem;
+    color: #e8eaed;
+}
+
+.video-delete-modal h2,
+.video-delete-modal p {
+    margin: 0;
+}
+
+.video-delete-modal p {
+    color: #b3b3b3;
+    line-height: 1.5;
+}
+
+.video-delete-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.video-delete-modal-actions button {
+    border-radius: 999px;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.video-delete-modal-actions .secondary {
+    border: 1px solid #404040;
+    background: transparent;
+    color: #e8eaed;
+}
+
+.video-delete-modal-actions .danger {
+    border: 1px solid #ff6969;
+    background: #ff6969;
+    color: #0a0a0a;
+}
+
+.video-delete-modal-actions button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 @media (max-width: 760px) {

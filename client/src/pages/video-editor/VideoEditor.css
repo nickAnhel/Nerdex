@@ -271,8 +271,8 @@
     margin-top: 0.75rem;
 }
 
-.video-chapter-row input[type="number"] {
-    max-width: 8rem;
+.video-chapter-row input[aria-label="Chapter start time"] {
+    max-width: 9rem;
 }
 
 .video-editor-state {
