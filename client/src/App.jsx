@@ -24,6 +24,8 @@ import ArticleEditor from "./pages/article-editor/ArticleEditor";
 import Videos from "./pages/videos/Videos";
 import VideoDetails from "./pages/video-details/VideoDetails";
 import VideoEditor from "./pages/video-editor/VideoEditor";
+import Moments from "./pages/moments/Moments";
+import MomentEditor from "./pages/moment-editor/MomentEditor";
 import Courses from "./pages/courses/Courses";
 
 import GlobalFeed from "./pages/global-feed/GlobalFeed";
@@ -137,6 +139,14 @@ const router = createBrowserRouter([
                         element: <VideoEditor />,
                     },
                     {
+                        path: "moments/new",
+                        element: <MomentEditor />,
+                    },
+                    {
+                        path: "moments/:momentId/edit",
+                        element: <MomentEditor />,
+                    },
+                    {
                         path: ":videoId/edit",
                         element: <VideoEditor />,
                     },
@@ -145,6 +155,18 @@ const router = createBrowserRouter([
                         element: <VideoDetails />,
                     },
                 ],
+            },
+            {
+                path: "moments",
+                element: <Moments />,
+            },
+            {
+                path: "moments/new",
+                element: <MomentEditor />,
+            },
+            {
+                path: "moments/:momentId/edit",
+                element: <MomentEditor />,
             },
             {
                 path: "courses",

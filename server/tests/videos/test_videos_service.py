@@ -18,7 +18,7 @@ from src.users.schemas import UserGet
 from src.videos.enums import VideoOrientationEnum, VideoProcessingStatusEnum, VideoWriteStatus
 from src.videos.exceptions import InvalidVideo
 from src.videos.schemas import VideoCreate
-from src.videos.service import VideoService
+from src.videos.service import VideoAssetProcessingNotifier, VideoProcessingAssetUpdate, VideoService
 
 
 @dataclass
@@ -163,6 +163,57 @@ class FakeVideoRepository:
 
     async def commit(self) -> None:
         return None
+
+    async def update_processing_for_source_asset(
+        self,
+        *,
+        asset_id: uuid.UUID,
+        processing_status: VideoProcessingStatusEnum,
+        duration_seconds: int | None,
+        width: int | None,
+        height: int | None,
+        orientation: VideoOrientationEnum | None,
+        available_quality_metadata: dict[str, object],
+        processing_error: str | None,
+        now: datetime.datetime,
+    ) -> None:
+        for video in self.videos.values():
+            if not any(
+                link.asset_id == asset_id
+                and link.attachment_type == AttachmentTypeEnum.VIDEO_SOURCE
+                and link.deleted_at is None
+                for link in video.asset_links
+            ):
+                continue
+            video.video_playback_details.duration_seconds = duration_seconds
+            video.video_playback_details.width = width
+            video.video_playback_details.height = height
+            video.video_playback_details.orientation = orientation
+            video.video_playback_details.processing_status = processing_status
+            video.video_playback_details.processing_error = processing_error
+            video.video_playback_details.available_quality_metadata = available_quality_metadata
+            if processing_status == VideoProcessingStatusEnum.READY:
+                await self._auto_publish_if_requested(video=video, now=now)
+
+    async def _auto_publish_if_requested(self, *, video: FakeVideo, now: datetime.datetime) -> None:
+        if video.video_details.publish_requested_at is None:
+            return
+        if video.status == ContentStatusEnum.PUBLISHED or video.deleted_at is not None:
+            return
+        if not (video.title or "").strip():
+            video.video_playback_details.processing_error = "Publish validation failed: title is required"
+            return
+        has_cover = any(
+            link.attachment_type == AttachmentTypeEnum.COVER and link.deleted_at is None
+            for link in video.asset_links
+        )
+        if not has_cover:
+            video.video_playback_details.processing_error = "Publish validation failed: cover asset is required"
+            return
+        video.status = ContentStatusEnum.PUBLISHED
+        video.published_at = video.published_at or now
+        video.updated_at = now
+        video.video_playback_details.processing_error = None
 
     def _decorate(self, video: FakeVideo, viewer_id: uuid.UUID | None) -> FakeVideo:
         video.is_owner = video.author_id == viewer_id
@@ -339,6 +390,67 @@ async def test_publish_request_while_processing_keeps_video_owner_only_draft(bun
     assert video.publish_requested_at is not None
     with pytest.raises(Exception):
         await bundle.service.get_video(video_id=video.video_id, user=bundle.stranger)
+
+
+@pytest.mark.anyio
+async def test_video_processing_notifier_auto_publishes_requested_ready_video(bundle: Bundle) -> None:
+    video = await bundle.service.create_video(
+        user=bundle.author,
+        data=VideoCreate(
+            source_asset_id=bundle.source_asset.asset_id,
+            cover_asset_id=bundle.cover_asset.asset_id,
+            title="Processing video",
+            visibility="public",
+            status="published",
+        ),
+    )
+
+    await VideoAssetProcessingNotifier(bundle.repository).notify(
+        VideoProcessingAssetUpdate(
+            asset_id=bundle.source_asset.asset_id,
+            processing_status=VideoProcessingStatusEnum.READY,
+            duration_seconds=55,
+            width=1920,
+            height=1080,
+            orientation=VideoOrientationEnum.LANDSCAPE,
+            available_quality_metadata={"qualities": ["720p"]},
+        )
+    )
+
+    stored_video = bundle.repository.videos[video.video_id]
+    assert stored_video.status == ContentStatusEnum.PUBLISHED
+    assert stored_video.published_at is not None
+    assert stored_video.video_playback_details.processing_status == VideoProcessingStatusEnum.READY
+    assert stored_video.video_playback_details.processing_error is None
+
+
+@pytest.mark.anyio
+async def test_video_processing_notifier_keeps_requested_video_draft_when_publish_validation_fails(bundle: Bundle) -> None:
+    video = await bundle.service.create_video(
+        user=bundle.author,
+        data=VideoCreate(
+            source_asset_id=bundle.source_asset.asset_id,
+            cover_asset_id=bundle.cover_asset.asset_id,
+            visibility="public",
+            status="published",
+        ),
+    )
+
+    await VideoAssetProcessingNotifier(bundle.repository).notify(
+        VideoProcessingAssetUpdate(
+            asset_id=bundle.source_asset.asset_id,
+            processing_status=VideoProcessingStatusEnum.READY,
+            duration_seconds=55,
+            width=1920,
+            height=1080,
+            orientation=VideoOrientationEnum.LANDSCAPE,
+            available_quality_metadata={"qualities": ["720p"]},
+        )
+    )
+
+    stored_video = bundle.repository.videos[video.video_id]
+    assert stored_video.status == ContentStatusEnum.DRAFT
+    assert stored_video.video_playback_details.processing_error == "Publish validation failed: title is required"
 
 
 @pytest.mark.anyio

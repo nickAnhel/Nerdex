@@ -141,17 +141,20 @@
     width: 100%;
 }
 
-#user-details .profile-videos-list {
+#user-details .profile-videos-list,
+#user-details .profile-moments-list {
     width: 100%;
 }
 
-#user-details .profile-videos-list .content-list-items {
+#user-details .profile-videos-list .content-list-items,
+#user-details .profile-moments-list .content-list-items {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
 }
 
-#user-details .profile-videos-list .video-card {
+#user-details .profile-videos-list .video-card,
+#user-details .profile-moments-list .moment-card {
     width: 100%;
 }
 

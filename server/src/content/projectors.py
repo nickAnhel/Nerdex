@@ -8,6 +8,7 @@ from src.articles.schemas import ArticleAssetGet
 from src.assets.storage import AssetStorage
 from src.content.enums import ContentTypeEnum
 from src.content.schemas import ContentListItemGet
+from src.moments.presentation import build_moment_get
 from src.posts.presentation import build_post_attachment_get
 from src.users.presentation import build_user_get
 from src.videos.enums import VideoProcessingStatusEnum
@@ -131,6 +132,34 @@ class VideoContentProjector(BaseContentProjector):
         )
 
 
+class MomentContentProjector(BaseContentProjector):
+    async def project_feed_item(
+        self,
+        item,
+        *,
+        viewer_id: uuid.UUID | None,
+        storage: AssetStorage,
+    ) -> ContentListItemGet:
+        payload = await _base_payload(item, viewer_id=viewer_id, storage=storage)
+        moment = await build_moment_get(
+            item,
+            viewer_id=viewer_id,
+            storage=storage,
+            include_playback_sources=False,
+        )
+        return ContentListItemGet(
+            **payload,
+            caption=moment.caption,
+            excerpt=moment.caption,
+            canonical_path=f"/moments?moment={item.content_id}",
+            cover=moment.cover,
+            duration_seconds=moment.duration_seconds,
+            orientation=moment.orientation,
+            processing_status=moment.processing_status,
+            processing_error=moment.processing_error,
+        )
+
+
 async def _base_payload(
     item,
     *,
@@ -162,5 +191,6 @@ def build_default_content_projector_registry() -> ContentProjectorRegistry:
             ContentTypeEnum.POST: PostContentProjector(),
             ContentTypeEnum.ARTICLE: ArticleContentProjector(),
             ContentTypeEnum.VIDEO: VideoContentProjector(),
+            ContentTypeEnum.MOMENT: MomentContentProjector(),
         }
     )

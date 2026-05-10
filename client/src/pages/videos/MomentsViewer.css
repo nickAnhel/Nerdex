@@ -1,0 +1,402 @@
+.moments-viewer {
+    position: relative;
+    height: calc(100vh - 6rem);
+    min-height: 32rem;
+    display: grid;
+    grid-template-columns: 3rem minmax(18rem, 28rem) minmax(16rem, 22rem) 3rem;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem 1rem;
+    color: #f5f5f5;
+    overflow: hidden;
+}
+
+.moments-viewer-state {
+    min-height: 24rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1rem;
+    color: #cfcfcf;
+}
+
+.moments-viewer-state button,
+.moment-swipe-buttons button {
+    border: 1px solid #3a3a3a;
+    border-radius: 0.65rem;
+    background: #202020;
+    color: #f5f5f5;
+    padding: 0.65rem 0.9rem;
+    cursor: pointer;
+}
+
+.moments-nav-button {
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 1px solid #343434;
+    border-radius: 999px;
+    background: #161616;
+    color: #f5f5f5;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+}
+
+.moments-nav-button svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.moments-nav-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.moments-nav-button.prev {
+    grid-column: 1;
+}
+
+.moments-nav-button.next {
+    grid-column: 4;
+}
+
+.moments-stage {
+    grid-column: 2;
+    width: min(100%, 28rem);
+    height: min(100%, calc(100vh - 7rem));
+    min-height: 28rem;
+    justify-self: center;
+    overflow: hidden;
+}
+
+.moments-track {
+    height: 100%;
+    transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: transform;
+}
+
+.moment-slide {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    align-content: center;
+    opacity: 0.58;
+    transform: scale(0.985);
+    transition: opacity 260ms ease, transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.moment-slide.active {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.moment-player-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-height: calc(100vh - 7rem);
+    border-radius: 1rem;
+    overflow: hidden;
+    background: #070707;
+    box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.32);
+}
+
+.moment-player-shell .video-player.moments:not(.fullscreen) .video-player-frame {
+    height: 100%;
+    max-height: calc(100vh - 7rem);
+    border-radius: 1rem;
+}
+
+.moment-overlay {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 6;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.75rem;
+    padding: 5rem 0.85rem 0.9rem;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0));
+}
+
+.moment-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.4rem;
+}
+
+.moment-copy strong,
+.moment-copy p,
+.moment-tags {
+    margin: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.moment-copy strong {
+    font-size: 0.95rem;
+}
+
+.moment-copy p {
+    max-height: 8rem;
+    overflow: hidden;
+    font-size: 0.95rem;
+    line-height: 1.35;
+}
+
+.moment-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    color: #d7e7ff;
+    font-size: 0.85rem;
+}
+
+.moment-actions {
+    display: grid;
+    gap: 0.6rem;
+    pointer-events: auto;
+}
+
+.moment-actions button {
+    width: 3rem;
+    min-height: 3rem;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    background: rgba(20, 20, 20, 0.74);
+    color: #f7f7f7;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+}
+
+.moment-actions button svg,
+.moment-options-menu svg {
+    width: 1.08rem;
+    height: 1.08rem;
+}
+
+.moment-options {
+    position: relative;
+}
+
+.moment-options-menu {
+    position: absolute;
+    right: calc(100% + 0.55rem);
+    top: 0;
+    z-index: 9;
+    min-width: 9rem;
+    padding: 0.35rem;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.65rem;
+    background: rgba(15, 15, 15, 0.96);
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(12px);
+}
+
+.moment-options-menu button {
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    border: 0;
+    border-radius: 0.45rem;
+    background: transparent;
+    padding: 0.55rem 0.65rem;
+    color: #f5f5f5;
+}
+
+.moment-options-menu button:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.moment-options-menu button.danger {
+    color: #ff9ba7;
+}
+
+.moment-actions button.active {
+    background: #f5f5f5;
+    color: #101010;
+}
+
+.moment-actions button span:last-child {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.moment-action-error {
+    position: absolute;
+    left: 0.85rem;
+    right: 0.85rem;
+    bottom: 0.85rem;
+    z-index: 7;
+    padding: 0.6rem 0.7rem;
+    border-radius: 0.65rem;
+    background: rgba(90, 18, 18, 0.9);
+    color: #fff;
+    font-size: 0.85rem;
+}
+
+.moment-swipe-buttons {
+    display: none;
+}
+
+.moments-comments-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+}
+
+.moments-comments-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.42);
+    pointer-events: auto;
+}
+
+.moments-comments-shell {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(100vw, 29rem);
+    height: 100%;
+    overflow: auto;
+    padding: 1rem 1rem 1.5rem;
+    border-left: 1px solid #2b2b2b;
+    background: #121212;
+    box-shadow: -1rem 0 2.5rem rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+    animation: comments-drawer-in 180ms ease-out;
+}
+
+.moments-comments-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: -1rem -1rem 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid #292929;
+    background: #121212;
+}
+
+.moments-comments-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.moments-comments-close {
+    width: 2.2rem;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #393939;
+    border-radius: 999px;
+    background: #1f1f1f;
+    color: #f5f5f5;
+    cursor: pointer;
+}
+
+.moments-comments-close svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.moments-comments-shell .comment-section-header {
+    display: none;
+}
+
+@keyframes comments-drawer-in {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+.moments-loading-more {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #bdbdbd;
+    font-size: 0.85rem;
+}
+
+@media (max-width: 980px) {
+    .moments-viewer {
+        grid-template-columns: 2.75rem minmax(16rem, 28rem) 2.75rem;
+    }
+
+    .moments-nav-button.next {
+        grid-column: 3;
+    }
+
+    .moments-comments-shell {
+        top: auto;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: 68vh;
+        height: 68vh;
+        border-left: none;
+        border-top: 1px solid #2b2b2b;
+        animation-name: comments-sheet-in;
+    }
+}
+
+@media (max-width: 720px) {
+    .moments-viewer {
+        height: calc(100vh - 4.5rem);
+        min-height: 30rem;
+        grid-template-columns: 1fr;
+        padding: 0;
+    }
+
+    .moments-nav-button {
+        display: none;
+    }
+
+    .moments-stage {
+        grid-column: 1;
+        width: min(100%, 28rem);
+        height: 100%;
+    }
+
+    .moment-player-shell,
+    .moment-player-shell .video-player.moments:not(.fullscreen) .video-player-frame {
+        max-height: calc(100vh - 5rem);
+        border-radius: 0;
+    }
+
+    .moment-swipe-buttons {
+        display: none;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: #101010;
+    }
+}
+
+@keyframes comments-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}

@@ -255,7 +255,7 @@ class ContentService:
         if content.status != ContentStatusEnum.PUBLISHED:
             raise ContentNotFound(f"Content with id {content_id!s} not found")
         if (
-            content.content_type == ContentTypeEnum.VIDEO
+            content.content_type in {ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT}
             and (
                 content.video_playback_details is None
                 or content.video_playback_details.processing_status != VideoProcessingStatusEnum.READY
@@ -271,8 +271,8 @@ class ContentService:
         viewer_id: uuid.UUID,
     ):
         content = await self._get_reactable_content(content_id=content_id, viewer_id=viewer_id)
-        if content.content_type != ContentTypeEnum.VIDEO:
-            raise InvalidContentAction("View sessions are currently supported for videos only")
+        if content.content_type not in {ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT}:
+            raise InvalidContentAction("View sessions are currently supported for video-backed content only")
         return content
 
     async def _update_view_session(
@@ -307,8 +307,14 @@ class ContentService:
         increment_views = False
         if not is_counted:
             today = now.date()
-            threshold = self._view_count_threshold(duration_seconds)
-            qualifies = watched_seconds >= threshold or max_position >= threshold or data.ended
+            qualifies = self._view_qualifies(
+                content=content,
+                duration_seconds=duration_seconds,
+                watched_seconds=watched_seconds,
+                max_position=max_position,
+                progress_percent=progress_percent,
+                ended=data.ended,
+            )
             already_counted = await self._repository.has_counted_view_on_date(
                 content_id=content_id,
                 viewer_id=user.user_id,
@@ -318,7 +324,10 @@ class ContentService:
                 is_counted = True
                 counted_at = now
                 counted_date = today
-                increment_views = True
+                increment_views = not (
+                    content.content_type == ContentTypeEnum.MOMENT
+                    and content.author_id == user.user_id
+                )
 
         views_count = await self._repository.update_view_session(
             view_session_id=session_id,
@@ -367,7 +376,7 @@ class ContentService:
         )
 
     def _content_duration_seconds(self, content) -> int | None:  # type: ignore[no-untyped-def]
-        if content.content_type == ContentTypeEnum.VIDEO and content.video_playback_details is not None:
+        if content.content_type in {ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT} and content.video_playback_details is not None:
             return content.video_playback_details.duration_seconds
         return None
 
@@ -386,6 +395,21 @@ class ContentService:
         if duration_seconds is None or duration_seconds <= 0:
             return 30
         return math.ceil(min(30, max(5, duration_seconds * 0.3)))
+
+    def _view_qualifies(
+        self,
+        *,
+        content,
+        duration_seconds: int | None,
+        watched_seconds: int,
+        max_position: int,
+        progress_percent: int,
+        ended: bool,
+    ) -> bool:  # type: ignore[no-untyped-def]
+        if content.content_type == ContentTypeEnum.MOMENT:
+            return watched_seconds >= 2 or progress_percent >= 50
+        threshold = self._view_count_threshold(duration_seconds)
+        return watched_seconds >= threshold or max_position >= threshold or ended
 
     def _now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.timezone.utc)

@@ -10,9 +10,29 @@ jest.mock("../article-card/ArticleCard", () => {
     const React = require("react");
     return React.forwardRef(() => <div>Article card</div>);
 });
+jest.mock("../moment-card/MomentCard", () => {
+    const React = require("react");
+    return React.forwardRef(({ moment }, ref) => (
+        <div ref={ref}>Moment card: {moment.caption}</div>
+    ));
+});
 jest.mock("../post-list-item/PostListItem", () => {
     const React = require("react");
     return React.forwardRef(() => <div>Post card</div>);
+});
+
+test("dispatches moment content to MomentCard", () => {
+    render(
+        <FeedContentCard
+            item={{
+                content_id: "moment-1",
+                content_type: "moment",
+                caption: "Feed moment",
+            }}
+        />
+    );
+
+    expect(screen.getByText("Moment card: Feed moment")).not.toBeNull();
 });
 
 import FeedContentCard from "./FeedContentCard";

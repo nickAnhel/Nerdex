@@ -43,6 +43,7 @@ class ContentListItemGet(BaseSchema):
     cover: ArticleAssetGet | VideoAssetGet | None = None
 
     description: str | None = None
+    caption: str | None = None
     duration_seconds: int | None = None
     orientation: VideoOrientationEnum | None = None
     processing_status: VideoProcessingStatusEnum | None = None

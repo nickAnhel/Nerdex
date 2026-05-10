@@ -5,6 +5,7 @@ class ContentTypeEnum(str, Enum):
     POST = "post"
     ARTICLE = "article"
     VIDEO = "video"
+    MOMENT = "moment"
     COURSE = "course"
 
 

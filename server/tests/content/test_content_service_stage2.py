@@ -269,3 +269,71 @@ async def test_author_view_session_increments_public_views_once(service_bundle) 
     assert result.is_counted is True
     assert result.views_count == 1
     assert content.views_count == 1
+
+
+@pytest.mark.anyio
+async def test_moment_view_session_counts_after_two_seconds(service_bundle) -> None:
+    service, _repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.MOMENT
+    content.video_playback_details.duration_seconds = 90
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="moments_feed"),
+    )
+    result = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(position_seconds=2, duration_seconds=90, watched_seconds_delta=2),
+    )
+
+    assert result.is_counted is True
+    assert result.views_count == 1
+    assert content.views_count == 1
+
+
+@pytest.mark.anyio
+async def test_moment_view_session_counts_at_half_progress_for_short_video(service_bundle) -> None:
+    service, _repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.MOMENT
+    content.video_playback_details.duration_seconds = 3
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="moments_feed"),
+    )
+    result = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(position_seconds=2, duration_seconds=3, watched_seconds_delta=1),
+    )
+
+    assert result.is_counted is True
+    assert result.views_count == 1
+
+
+@pytest.mark.anyio
+async def test_moment_author_view_session_does_not_increment_public_views(service_bundle) -> None:
+    service, _repository, content, author, _viewer = service_bundle
+    content.content_type = ContentTypeEnum.MOMENT
+    content.video_playback_details.duration_seconds = 30
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=author,
+        data=ContentViewSessionStart(source="moments_feed"),
+    )
+    result = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=author,
+        data=ContentViewSessionHeartbeat(position_seconds=10, duration_seconds=30, watched_seconds_delta=10),
+    )
+
+    assert result.is_counted is True
+    assert result.views_count == 0
+    assert content.views_count == 0

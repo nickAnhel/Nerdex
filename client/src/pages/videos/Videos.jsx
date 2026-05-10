@@ -13,7 +13,6 @@ import VideoService from "../../service/VideoService";
 const VIDEO_TABS = {
     recommendations: "recommendations",
     subscriptions: "subscriptions",
-    moments: "moments",
     history: "history",
 };
 
@@ -30,12 +29,6 @@ const VIDEO_SECTIONS = [
         description: "Ready videos from people you follow.",
         authOnly: true,
         icon: <SubscriptionsIcon />,
-    },
-    {
-        id: VIDEO_TABS.moments,
-        label: "Moments",
-        description: "Short video format is in work.",
-        icon: <MomentsIcon />,
     },
     {
         id: VIDEO_TABS.history,
@@ -75,10 +68,6 @@ function Videos() {
     };
 
     const renderTabContent = () => {
-        if (activeTab === VIDEO_TABS.moments) {
-            return <div className="videos-inwork">Moments are in work.</div>;
-        }
-
         if (activeTab === VIDEO_TABS.history) {
             return (
                 <div className="videos-grid-panel videos-history-grid">
@@ -153,7 +142,12 @@ function Videos() {
                 </nav>
                 {
                     store.isAuthenticated &&
-                    <Link to="/videos/new" className="videos-new-link">New video</Link>
+                    <Link
+                        to="/videos/new"
+                        className="videos-new-link"
+                    >
+                        New video
+                    </Link>
                 }
             </aside>
 
@@ -220,14 +214,6 @@ function SubscriptionsIcon() {
     return (
         <VideoNavIcon>
             <path d="M7 4h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h2Zm3 4v6l5-3-5-3Z" fill="currentColor" />
-        </VideoNavIcon>
-    );
-}
-
-function MomentsIcon() {
-    return (
-        <VideoNavIcon>
-            <path d="M13 2 5 13h6l-1 9 9-12h-6l0-8Z" fill="currentColor" />
         </VideoNavIcon>
     );
 }

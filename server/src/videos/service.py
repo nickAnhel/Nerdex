@@ -67,21 +67,26 @@ class VideoProcessingAssetUpdate:
 
 
 class VideoAssetProcessingNotifier:
-    def __init__(self, repository: VideoRepository) -> None:
+    def __init__(self, repository: VideoRepository, moment_repository=None) -> None:  # type: ignore[no-untyped-def]
         self._repository = repository
+        self._moment_repository = moment_repository
 
     async def notify(self, update: VideoProcessingAssetUpdate) -> None:
-        await self._repository.update_processing_for_source_asset(
-            asset_id=update.asset_id,
-            processing_status=update.processing_status,
-            duration_seconds=update.duration_seconds,
-            width=update.width,
-            height=update.height,
-            orientation=update.orientation,
-            available_quality_metadata=update.available_quality_metadata or {},
-            processing_error=update.processing_error,
-            now=datetime.datetime.now(datetime.timezone.utc),
-        )
+        now = datetime.datetime.now(datetime.timezone.utc)
+        payload = {
+            "asset_id": update.asset_id,
+            "processing_status": update.processing_status,
+            "duration_seconds": update.duration_seconds,
+            "width": update.width,
+            "height": update.height,
+            "orientation": update.orientation,
+            "available_quality_metadata": update.available_quality_metadata or {},
+            "processing_error": update.processing_error,
+            "now": now,
+        }
+        await self._repository.update_processing_for_source_asset(**payload)
+        if self._moment_repository is not None:
+            await self._moment_repository.update_processing_for_source_asset(**payload)
 
 
 class VideoService:

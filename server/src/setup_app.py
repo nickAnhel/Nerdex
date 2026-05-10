@@ -19,6 +19,7 @@ from src.messages.router import router as messages_router
 from src.events.router import router as events_router
 from src.assets.router import router as assets_router
 from src.videos.router import router as videos_router
+from src.moments.router import router as moments_router
 
 # Exception handlers
 from src.common.exceptions import (
@@ -98,6 +99,8 @@ from src.assets.exceptions import (
 )
 from src.videos.exc_handlers import invalid_video_handler, video_not_found_handler
 from src.videos.exceptions import InvalidVideo, VideoNotFound
+from src.moments.exc_handlers import invalid_moment_handler, moment_not_found_handler
+from src.moments.exceptions import InvalidMoment, MomentNotFound
 
 
 def register_routes(app: FastAPI) -> None:
@@ -113,6 +116,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(events_router)
     app.include_router(assets_router)
     app.include_router(videos_router)
+    app.include_router(moments_router)
 
     app.mount("/ws", ws_app)
 
@@ -155,6 +159,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AssetUploadNotReady, asset_upload_not_ready_handler)  # type: ignore
     app.add_exception_handler(VideoNotFound, video_not_found_handler)  # type: ignore
     app.add_exception_handler(InvalidVideo, invalid_video_handler)  # type: ignore
+    app.add_exception_handler(MomentNotFound, moment_not_found_handler)  # type: ignore
+    app.add_exception_handler(InvalidMoment, invalid_moment_handler)  # type: ignore
 
 
 def register_middleware(app: FastAPI) -> None:

@@ -95,6 +95,12 @@ class ContentModel(Base):
         passive_deletes=True,
         uselist=False,
     )
+    moment_details: Mapped["MomentDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
     video_playback_details: Mapped["VideoPlaybackDetailsModel"] = relationship(  # type: ignore[name-defined]
         back_populates="content",
         cascade="all, delete-orphan",
@@ -155,6 +161,8 @@ class ContentModel(Base):
             return self.article_details.body_markdown
         if self.content_type == ContentTypeEnum.VIDEO and self.video_details is not None:
             return self.video_details.description
+        if self.content_type == ContentTypeEnum.MOMENT and self.moment_details is not None:
+            return self.moment_details.caption
         return ""
 
     @property
@@ -166,6 +174,8 @@ class ContentModel(Base):
             text = self.excerpt or self.article_details.body_markdown
         elif self.content_type == ContentTypeEnum.VIDEO and self.video_details is not None:
             text = self.excerpt or self.video_details.description
+        elif self.content_type == ContentTypeEnum.MOMENT and self.moment_details is not None:
+            text = self.excerpt or self.moment_details.caption
 
         text = text.strip()
         if len(text) < 100:

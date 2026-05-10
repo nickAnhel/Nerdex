@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from src.assets.models import AssetModel, ContentAssetModel
 import src.articles.models  # noqa: F401
+import src.moments.models  # noqa: F401
 import src.tags.models  # noqa: F401
 import src.videos.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
@@ -33,13 +34,18 @@ class ContentRepository:
         stmt = (
             self._build_content_query(viewer_id=viewer_id)
             .outerjoin(VideoPlaybackDetailsModel)
-            .where(ContentModel.content_type.in_([ContentTypeEnum.POST, ContentTypeEnum.ARTICLE, ContentTypeEnum.VIDEO]))
+            .where(ContentModel.content_type.in_([
+                ContentTypeEnum.POST,
+                ContentTypeEnum.ARTICLE,
+                ContentTypeEnum.VIDEO,
+                ContentTypeEnum.MOMENT,
+            ]))
             .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
             .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
             .where(ContentModel.deleted_at.is_(None))
             .where(
                 or_(
-                    ContentModel.content_type != ContentTypeEnum.VIDEO,
+                    ContentModel.content_type.notin_([ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT]),
                     VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
                 )
             )
@@ -68,14 +74,19 @@ class ContentRepository:
         stmt = (
             self._build_content_query(viewer_id=user_id)
             .outerjoin(VideoPlaybackDetailsModel)
-            .where(ContentModel.content_type.in_([ContentTypeEnum.POST, ContentTypeEnum.ARTICLE, ContentTypeEnum.VIDEO]))
+            .where(ContentModel.content_type.in_([
+                ContentTypeEnum.POST,
+                ContentTypeEnum.ARTICLE,
+                ContentTypeEnum.VIDEO,
+                ContentTypeEnum.MOMENT,
+            ]))
             .where(ContentModel.author_id.in_(select(subs_subquery.c.subscribed_id)))
             .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
             .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
             .where(ContentModel.deleted_at.is_(None))
             .where(
                 or_(
-                    ContentModel.content_type != ContentTypeEnum.VIDEO,
+                    ContentModel.content_type.notin_([ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT]),
                     VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
                 )
             )
@@ -173,7 +184,7 @@ class ContentRepository:
             .where(ContentModel.deleted_at.is_(None))
             .where(
                 or_(
-                    ContentModel.content_type != ContentTypeEnum.VIDEO,
+                    ContentModel.content_type.notin_([ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT]),
                     VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
                 )
             )
@@ -191,6 +202,7 @@ class ContentRepository:
                 selectinload(ContentModel.post_details),
                 selectinload(ContentModel.article_details),
                 selectinload(ContentModel.video_details),
+                selectinload(ContentModel.moment_details),
                 selectinload(ContentModel.video_playback_details),
                 selectinload(ContentModel.tags),
                 selectinload(ContentModel.asset_links)
@@ -412,6 +424,7 @@ class ContentRepository:
             selectinload(ContentModel.post_details),
             selectinload(ContentModel.article_details),
             selectinload(ContentModel.video_details),
+            selectinload(ContentModel.moment_details),
             selectinload(ContentModel.video_playback_details),
             selectinload(ContentModel.tags),
             selectinload(ContentModel.asset_links)

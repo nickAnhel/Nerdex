@@ -12,6 +12,7 @@ from src.assets.service import AssetService
 from src.assets.storage import AssetStorage
 from src.common.model_registry import import_all_models
 from src.config import settings
+from src.moments.repository import MomentRepository
 from src.videos.repository import VideoRepository
 from src.videos.service import VideoAssetProcessingNotifier
 
@@ -52,7 +53,10 @@ async def _run_with_service(
                 repository=AssetRepository(session),
                 storage=AssetStorage(settings.storage),
                 settings=settings.assets,
-                video_processing_notifier=VideoAssetProcessingNotifier(VideoRepository(session)),
+                video_processing_notifier=VideoAssetProcessingNotifier(
+                    VideoRepository(session),
+                    moment_repository=MomentRepository(session),
+                ),
             )
             return await handler(service)
     finally:

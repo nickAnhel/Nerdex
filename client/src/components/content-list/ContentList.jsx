@@ -27,6 +27,7 @@ function ContentList({
         setItems((prevItems) => prevItems.filter((item) => (
             item.content_id !== itemId
             && item.article_id !== itemId
+            && item.moment_id !== itemId
             && item.content?.content_id !== itemId
         )));
     };

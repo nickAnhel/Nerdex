@@ -59,6 +59,16 @@
     max-height: 82vh;
 }
 
+.video-player.moments .video-player-controls-layer {
+    top: 0;
+    bottom: auto;
+    padding: 0.65rem;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+}
+
 .video-player.fullscreen .video-player-frame,
 .video-player:fullscreen .video-player-frame {
     border-radius: 0;
@@ -135,6 +145,16 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
+}
+
+.video-player-skin.moments {
+    gap: 0.45rem;
+}
+
+.video-player-moments-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
 }
 
 .video-player-title {

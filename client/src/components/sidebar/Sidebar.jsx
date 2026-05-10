@@ -5,6 +5,14 @@ import { observer } from "mobx-react-lite";
 import "./Sidebar.css"
 
 import { StoreContext } from "../..";
+import ArticleIcon from "../icons/ArticleIcon";
+import ChatIcon from "../icons/ChatIcon";
+import CourseIcon from "../icons/CourseIcon";
+import FeedIcon from "../icons/FeedIcon";
+import LoginIcon from "../icons/LoginIcon";
+import MomentsIcon from "../icons/MomentsIcon";
+import PeopleIcon from "../icons/PeopleIcon";
+import VideoIcon from "../icons/VideoIcon";
 import { getAvatarRenderKey, getAvatarUrl } from "../../utils/avatar";
 
 
@@ -17,27 +25,31 @@ function Sidebar() {
         <div id="sidebar">
             <div id="sidebar-top">
                 <NavLink to="/people" className="sidebar-item" >
-                    <img src="/assets/people.svg" alt="People" />
+                    <PeopleIcon />
                     People
                 </NavLink>
                 <NavLink to="/feed" className="sidebar-item">
-                    <img src="/assets/feed.svg" alt="Feed" />
+                    <FeedIcon />
                     Feed
                 </NavLink>
                 <NavLink to="/articles" className="sidebar-item">
-                    <img src="/assets/articles.svg" alt="Articles" />
+                    <ArticleIcon />
                     Articles
                 </NavLink>
                 <NavLink to="/videos" className="sidebar-item">
-                    <img src="/assets/videos.svg" alt="Videos" />
+                    <VideoIcon />
                     Videos
                 </NavLink>
+                <NavLink to="/moments" className="sidebar-item">
+                    <MomentsIcon />
+                    Moments
+                </NavLink>
                 <NavLink to="/courses" className="sidebar-item">
-                    <img src="/assets/courses.svg" alt="Courses" />
+                    <CourseIcon />
                     Courses
                 </NavLink>
                 <NavLink to="/chats" className="sidebar-item">
-                    <img src="/assets/chats.svg" alt="Chats" />
+                    <ChatIcon />
                     Chats
                 </NavLink>
             </div>
@@ -61,7 +73,7 @@ function Sidebar() {
                         </Link>
                         :
                         <Link to="/login" className="sidebar-item">
-                            <img src="/assets/login.svg" alt="Login" />
+                            <LoginIcon />
                         </Link>
                 }
             </div>
