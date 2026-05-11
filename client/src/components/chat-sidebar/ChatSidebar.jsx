@@ -1,8 +1,7 @@
-import { useState, useContext } from "react";
+import { useState } from "react";
 
 import "./ChatSidebar.css";
 
-import { StoreContext } from "../..";
 import ChatService from "../../service/ChatService";
 
 import ChatModal from "../chat-modal/ChatModal";
@@ -15,6 +14,7 @@ function Chats() {
 
     const [query, setQuery] = useState();
     const [isSearch, setIsSearch] = useState(false);
+    const [refreshChats, setRefreshChats] = useState(0);
 
     const handleClear = () => {
         setQuery("");
@@ -60,7 +60,7 @@ function Chats() {
                 isSearch ?
                     <ChatList fetchChats={ChatService.searchChats} filters={{ query: query }} refresh={query} />
                     :
-                    <ChatList fetchChats={ChatService.getUserJoinedChats} refresh={isSearch} />
+                    <ChatList fetchChats={ChatService.getUserJoinedChats} refresh={`${isSearch}-${refreshChats}`} />
             }
 
             <ChatModal
@@ -68,6 +68,7 @@ function Chats() {
                 active={isCreateChatActive}
                 setActive={setIsCreateChatActive}
                 saveChatFunc={ChatService.createChat}
+                onSaved={() => setRefreshChats((value) => value + 1)}
                 modalHeader={"Create new chat"}
                 buttonText={"Create chat"}
             />

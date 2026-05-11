@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.auth.dependencies import get_current_user
 from src.chats.dependencies import get_chat_service
-from src.chats.enums import ChatOrder
+from src.chats.enums import ChatOrder, ChatType
 from src.chats.schemas import (
     ChatCreate,
     ChatGet,
@@ -39,13 +39,14 @@ async def create_chat(
         data=data,
     )
 
-    await event_service.create_event(
-        data=EventCreate(
-            chat_id=chat.chat_id,
-            event_type=EventType.CREATE,
-            user_id=user.user_id,
+    if chat.chat_type == ChatType.GROUP:
+        await event_service.create_event(
+            data=EventCreate(
+                chat_id=chat.chat_id,
+                event_type=EventType.CREATE,
+                user_id=user.user_id,
+            )
         )
-    )
 
     return chat
 
@@ -107,7 +108,7 @@ async def get_chat(
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ) -> ChatGet:
-    return await service.get_chat(chat_id=chat_id)
+    return await service.get_chat(chat_id=chat_id, user_id=user.user_id)
 
 
 @router.get("/{chat_id}/members")
@@ -116,7 +117,7 @@ async def get_chat_members(
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ) -> list[UserGet]:
-    return await service.get_chat_members(chat_id=chat_id)
+    return await service.get_chat_members(chat_id=chat_id, user_id=user.user_id)
 
 
 @router.get("/{chat_id}/history")
@@ -129,6 +130,7 @@ async def get_chat_history(
 ) -> list[MessageHistoryItem | EventHistoryItem]:
     return await service.get_chat_history(
         chat_id=chat_id,
+        user_id=user.user_id,
         offset=offset,
         limit=limit,
     )

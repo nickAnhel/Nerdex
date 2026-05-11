@@ -2,8 +2,8 @@ import api from "../http";
 
 
 export default class ChatService {
-    static async createChat(chatId, data) {
-        return api.post("/chats", data);
+    static async createChat(chatIdOrData, data) {
+        return api.post("/chats", data || chatIdOrData);
     }
 
     static async getChatById(chatId) {

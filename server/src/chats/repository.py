@@ -1,10 +1,12 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, desc, func, insert, or_, select, text, union, update
+from sqlalchemy import delete, desc, func, insert, literal, or_, select, union, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 
+from src.assets.models import AssetModel
+from src.chats.enums import ChatMemberRole, ChatType
 from src.chats.models import ChatModel, MembershipModel
 from src.events.models import EventModel
 from src.messages.models import MessageModel
@@ -28,6 +30,40 @@ class ChatRepository:
         await self._session.commit()
         return result.scalar_one()
 
+    async def create_with_member_roles(
+        self,
+        *,
+        data: dict[str, Any],
+        member_roles: list[tuple[uuid.UUID, ChatMemberRole]],
+    ) -> ChatModel:
+        try:
+            chat_result = await self._session.execute(
+                insert(ChatModel)
+                .values(**data)
+                .returning(ChatModel)
+            )
+            chat = chat_result.scalar_one()
+
+            if member_roles:
+                await self._session.execute(
+                    insert(MembershipModel).values(
+                        [
+                            {
+                                "chat_id": chat.chat_id,
+                                "user_id": user_id,
+                                "role": role.value,
+                            }
+                            for user_id, role in member_roles
+                        ]
+                    )
+                )
+
+            await self._session.commit()
+            return chat
+        except Exception:
+            await self._session.rollback()
+            raise
+
     async def get_single(
         self,
         **filters,
@@ -35,10 +71,24 @@ class ChatRepository:
         query = (
             select(ChatModel)
             .filter_by(**filters)
+            .options(self._members_load())
         )
 
         result = await self._session.execute(query)
         return result.scalar_one()
+
+    async def get_by_direct_key(
+        self,
+        direct_key: str,
+    ) -> ChatModel | None:
+        query = (
+            select(ChatModel)
+            .filter_by(chat_type=ChatType.DIRECT.value, direct_key=direct_key)
+            .options(self._members_load())
+        )
+
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none()
 
     async def history(
         self,
@@ -92,14 +142,20 @@ class ChatRepository:
         chat_id: uuid.UUID,
     ) -> list[UserModel]:
         query = (
-            select(ChatModel)
-            .filter_by(chat_id=chat_id)
-            .options(joinedload(ChatModel.members))
+            select(UserModel)
+            .join(MembershipModel, MembershipModel.user_id == UserModel.user_id)
+            .where(MembershipModel.chat_id == chat_id)
+            .options(
+                selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants)
+            )
         )
 
         result = await self._session.execute(query)
-        chat =  result.unique().scalar_one()
-        return chat.members
+        members = list(result.scalars().all())
+        if not members:
+            await self.get_single(chat_id=chat_id)
+        return members
 
     async def is_member(
         self,
@@ -116,6 +172,25 @@ class ChatRepository:
         result = await self._session.execute(query)
         return result.scalar_one_or_none() is not None
 
+    async def is_owner_member(
+        self,
+        *,
+        chat_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> bool:
+        query = (
+            select(MembershipModel.user_id)
+            .filter_by(
+                chat_id=chat_id,
+                user_id=user_id,
+                role=ChatMemberRole.OWNER.value,
+            )
+            .limit(1)
+        )
+
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none() is not None
+
     async def get_multi(
         self,
         *,
@@ -126,7 +201,8 @@ class ChatRepository:
     ) -> list[ChatModel]:
         query = (
             select(ChatModel)
-            .filter_by(is_private=False)
+            .filter_by(is_private=False, chat_type=ChatType.GROUP.value)
+            .options(self._members_load())
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
@@ -138,9 +214,10 @@ class ChatRepository:
         self,
         chat_id: uuid.UUID,
         users_ids: list[uuid.UUID],
+        role: ChatMemberRole = ChatMemberRole.MEMBER,
     ) -> int:
         users_query = (
-            select(text(f"'{chat_id}' as chat_id"), UserModel.user_id)
+            select(literal(chat_id), UserModel.user_id, literal(role.value))
             .where(
                 UserModel.user_id.in_([user_id for user_id in users_ids]),
             )
@@ -149,7 +226,7 @@ class ChatRepository:
         stmt = (
             insert(MembershipModel)
             .from_select(
-                ["chat_id", "user_id"],
+                ["chat_id", "user_id", "role"],
                 users_query,
             )
         )
@@ -214,6 +291,7 @@ class ChatRepository:
             select(ChatModel.chat_id)
             .where(
                 ChatModel.title.bool_op("%")(q),
+                ChatModel.chat_type == ChatType.GROUP.value,
                 or_(
                     ChatModel.is_private == False,
                     ChatModel.members.contains(UserModel(user_id=user_id)),
@@ -226,6 +304,7 @@ class ChatRepository:
         query = (
             select(ChatModel)
             .join(subquery, ChatModel.chat_id == subquery.c.chat_id)
+            .options(self._members_load())
             .order_by(
                 func.similarity(ChatModel.title, q).desc(),
             )
@@ -254,6 +333,7 @@ class ChatRepository:
         query = (
             select(ChatModel)
             .where(ChatModel.chat_id.in_(chat_ids_query))
+            .options(self._members_load())
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
@@ -261,3 +341,10 @@ class ChatRepository:
 
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    def _members_load(self):
+        return (
+            selectinload(ChatModel.members)
+            .selectinload(UserModel.avatar_asset)
+            .selectinload(AssetModel.variants)
+        )

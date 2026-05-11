@@ -13,6 +13,7 @@ import Message from "../message/Message";
 import Event from "../event/Event";
 
 import ChatModal from "../chat-modal/ChatModal";
+import { getAvatarUrl } from "../../utils/avatar";
 
 
 function getMaxCharsInLine(textarea, content) {
@@ -56,6 +57,11 @@ function ChatDetails() {
     const socket = useRef(null);
     const messagesEndRef = useRef(null);
     const textareaRef = useRef(null);
+    const directMember = chat.chat_type === "direct"
+        ? chat.members?.find((member) => member.user_id !== store.user.user_id)
+        : null;
+    const chatTitle = directMember?.username || chat.title;
+    const chatImage = directMember ? getAvatarUrl(directMember, "small") : "../../../assets/chat.svg";
 
     useEffect(() => {
         const fetchChat = async () => {
@@ -102,13 +108,15 @@ function ChatDetails() {
 
                 const joined = await ChatService.getUserJoinedChats({ user_id: store.user.user_id });
                 const isJoined = joined.data.some((ch) => ch.chat_id === chatId);
+                const chatFooter = document.getElementById("chat-footer");
+                const joinButton = document.getElementById("join-btn");
 
-                if (isJoined) {
-                    document.getElementById("chat-footer").classList.remove("hidden");
-                    document.getElementById("join-btn").classList.add("hidden");
+                if (isJoined || chat.chat_type === "direct") {
+                    chatFooter?.classList.remove("hidden");
+                    joinButton?.classList.add("hidden");
                 } else {
-                    document.getElementById("chat-footer").classList.add("hidden");
-                    document.getElementById("join-btn").classList.remove("hidden");
+                    chatFooter?.classList.add("hidden");
+                    joinButton?.classList.remove("hidden");
                 }
             } catch (e) {
                 console.log(e);
@@ -417,8 +425,14 @@ function ChatDetails() {
         <div className="chat-details">
             <div className="chat-header">
                 <div className="header-label">
-                    <img src="../../../assets/chat.svg" alt="" />
-                    <h2><span id="ws-id">{chat.title}</span></h2>
+                    <img
+                        src={chatImage}
+                        alt=""
+                        onError={(event) => {
+                            event.currentTarget.src = "../../../assets/chat.svg";
+                        }}
+                    />
+                    <h2><span id="ws-id">{chatTitle}</span></h2>
                 </div>
 
                 <div className="header-actions">
@@ -427,7 +441,7 @@ function ChatDetails() {
             </div>
             <div id="options">
                 {
-                    store.user.user_id === chat.owner_id &&
+                    store.user.user_id === chat.owner_id && chat.chat_type !== "direct" &&
                     <>
                         <div className="option" onClick={() => setIsEditChatModalActive(true)}>
                             <img src="../../../assets/edit.svg" alt="Edit" />
@@ -493,7 +507,7 @@ function ChatDetails() {
                     <img src="../../../assets/send-message.svg" alt="" />
                 </button>
             </div>
-            <button id="join-btn" className="btn btn-primary hidden" onClick={handleChatJoin}>Join</button>
+            {chat.chat_type !== "direct" && <button id="join-btn" className="btn btn-primary hidden" onClick={handleChatJoin}>Join</button>}
 
             <ChatModal
                 key={"edit"}
