@@ -1,8 +1,10 @@
 import uuid
 
 import pytest
+import socketio
 from sqlalchemy.exc import NoResultFound
 
+from src.chats import sockets
 from src.chats.exceptions import ChatNotFound
 from src.chats.service import ChatService
 from src.chats.socket_messages import build_socket_message_create
@@ -23,6 +25,11 @@ class FakeChatRepository:
             raise NoResultFound
 
         return object()
+
+
+def test_socket_server_uses_redis_manager() -> None:
+    assert isinstance(sockets.sio.manager, socketio.AsyncRedisManager)
+    assert sockets.sio.manager.redis_url == sockets.settings.redis.socketio_manager_url
 
 
 @pytest.mark.asyncio

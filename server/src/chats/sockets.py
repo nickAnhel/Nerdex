@@ -18,9 +18,12 @@ from src.users.repository import UserRepository
 from src.users.presentation import build_user_avatar_get
 from src.users.service import UserService
 
+socketio_manager = socketio.AsyncRedisManager(settings.redis.socketio_manager_url)
+
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=settings.ws.allowed_hosts,
+    client_manager=socketio_manager,
 )
 
 socket_app = socketio.ASGIApp(

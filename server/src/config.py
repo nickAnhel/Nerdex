@@ -113,12 +113,20 @@ class RedisSettings(ConfigBase):
     host: str
     port: int
     db: int = 0
+    socketio_url: str | None = None
 
     model_config = SettingsConfigDict(env_prefix="redis_")
 
     @property
     def url(self) -> str:
         return f"redis://{self.host}:{self.port}/{self.db}"
+
+    @property
+    def socketio_manager_url(self) -> str:
+        if self.socketio_url:
+            return self.socketio_url
+
+        return self.url
 
 
 class CelerySettings(ConfigBase):

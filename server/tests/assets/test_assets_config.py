@@ -20,6 +20,7 @@ def test_new_config_sections_read_from_env(monkeypatch) -> None:  # type: ignore
     monkeypatch.setenv("REDIS_HOST", "redis")
     monkeypatch.setenv("REDIS_PORT", "6379")
     monkeypatch.setenv("REDIS_DB", "0")
+    monkeypatch.setenv("REDIS_SOCKETIO_URL", "redis://redis:6379/2")
     monkeypatch.setenv("CELERY_BROKER_URL", "redis://redis:6379/0")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
     monkeypatch.setenv("CELERY_MEDIA_QUEUE_NAME", "media")
@@ -33,4 +34,16 @@ def test_new_config_sections_read_from_env(monkeypatch) -> None:  # type: ignore
     assert storage.addressing_style == "path"
     assert assets.max_video_size_mb == 250
     assert redis.url == "redis://redis:6379/0"
+    assert redis.socketio_manager_url == "redis://redis:6379/2"
     assert celery.media_queue_name == "media"
+
+
+def test_socketio_redis_url_falls_back_to_default_redis() -> None:
+    redis = RedisSettings(
+        host="redis",
+        port=6379,
+        db=0,
+        socketio_url=None,
+    )
+
+    assert redis.socketio_manager_url == "redis://redis:6379/0"
