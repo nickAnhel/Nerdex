@@ -101,6 +101,21 @@ class ChatRepository:
         chat =  result.unique().scalar_one()
         return chat.members
 
+    async def is_member(
+        self,
+        *,
+        chat_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> bool:
+        query = (
+            select(MembershipModel.user_id)
+            .filter_by(chat_id=chat_id, user_id=user_id)
+            .limit(1)
+        )
+
+        result = await self._session.execute(query)
+        return result.scalar_one_or_none() is not None
+
     async def get_multi(
         self,
         *,

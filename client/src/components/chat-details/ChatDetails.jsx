@@ -164,15 +164,31 @@ function ChatDetails() {
     }, [chat, store.user]);
 
     useEffect(() => {
+        if (!chat.chat_id) {
+            return;
+        }
+
         socket.current = io(process.env.REACT_APP_WS_HOST, {
             path: "/ws",
             transports: ["websocket"],
             upgrade: false,
+            auth: {
+                token: localStorage.getItem("token"),
+            },
+        });
+
+        socket.current.on("connect_error", (error) => {
+            console.log(error);
+            setIsError(true);
         });
 
         socket.current.emit("join", {
             chat_id: chat.chat_id,
-        })
+        }, (response) => {
+            if (response && !response.ok) {
+                console.log(response.error?.detail || "Failed to join chat");
+            }
+        });
 
         socket.current.on("message", (data) => {
             let msgData = JSON.parse(data);
@@ -190,6 +206,9 @@ function ChatDetails() {
             socket.current.emit("leave", {
                 chat_id: chat.chat_id,
             });
+            socket.current.off("message");
+            socket.current.off("connect_error");
+            socket.current.disconnect();
         }
     }, [chat, store.user]);
 
@@ -244,12 +263,15 @@ function ChatDetails() {
 
             let msgData = {
                 chat_id: chat.chat_id,
-                user_id: store.user.user_id,
                 content: message.trim(),
                 created_at: new Date()
             }
 
-            socket.current.emit("message", msgData);
+            socket.current.emit("message", msgData, (response) => {
+                if (response && !response.ok) {
+                    console.log(response.error?.detail || "Failed to send message");
+                }
+            });
 
             setMessage("");
             textareaRef.current.value = "";

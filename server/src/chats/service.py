@@ -173,6 +173,24 @@ class ChatService:
                 f"User with id '{user_id}' is not owner of chat with id '{chat_id}'"
             )
 
+    async def ensure_user_is_chat_member(
+        self,
+        *,
+        chat_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        if await self._repository.is_member(chat_id=chat_id, user_id=user_id):
+            return
+
+        try:
+            await self._repository.get_single(chat_id=chat_id)
+        except NoResultFound as exc:
+            raise ChatNotFound(f"Chat with id '{chat_id}' not found") from exc
+
+        raise PermissionDenied(
+            f"User with id '{user_id}' is not a member of chat with id '{chat_id}'"
+        )
+
     async def add_members_to_chat(
         self,
         *,
