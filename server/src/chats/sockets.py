@@ -29,8 +29,11 @@ socket_app = socketio.ASGIApp(
 )
 
 
-def _success_response() -> dict[str, Any]:
-    return {"ok": True}
+def _success_response(data: dict[str, Any] | None = None) -> dict[str, Any]:
+    response: dict[str, Any] = {"ok": True}
+    if data is not None:
+        response["data"] = data
+    return response
 
 
 def _error_response(code: str, detail: str) -> dict[str, Any]:
@@ -124,9 +127,9 @@ async def on_message(
     data: dict[str, Any],
 ) -> dict[str, Any]:
     try:
-        chat_id = uuid.UUID(str(data["chat_id"]))
         user_id = await _get_socket_user_id(sid)
         msg = MessageCreateWS.model_validate(data)
+        chat_id = msg.chat_id
     except (KeyError, TypeError, ValueError, ValidationError):
         return _error_response("bad_request", "Invalid message payload")
     except SocketAuthenticationError as exc:
@@ -154,17 +157,27 @@ async def on_message(
         )
     avatar = await build_user_avatar_get(message.user)
 
+    message_dto = MessageGetWS(
+        message_id=message.message_id,
+        chat_id=message.chat_id,
+        client_message_id=message.client_message_id,
+        username=message.user.username,
+        user_id=message.user_id,
+        avatar_small_url=avatar.small_url if avatar is not None else None,
+        content=message.content,
+        created_at=message.created_at,
+    )
+    message_payload = message_dto.model_dump(mode="json")
+
+    await sio.emit(
+        "message:created",
+        message_payload,
+        room=str(chat_id),
+    )
     await sio.emit(
         "message",
-        MessageGetWS(
-            message_id=message.message_id,
-            username=message.user.username,
-            user_id=message.user_id,
-            avatar_small_url=avatar.small_url if avatar is not None else None,
-            content=message.content,
-            created_at=message.created_at,
-        ).model_dump_json(),
+        message_dto.model_dump_json(),
         room=str(chat_id),
         skip_sid=sid,
     )
-    return _success_response()
+    return _success_response(message_payload)

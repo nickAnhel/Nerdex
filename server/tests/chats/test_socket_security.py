@@ -1,4 +1,3 @@
-import datetime
 import uuid
 
 import pytest
@@ -64,8 +63,9 @@ def test_socket_message_create_uses_authenticated_user_id() -> None:
     spoofed_user_id = uuid.uuid4()
     msg = MessageCreateWS.model_validate(
         {
+            "chat_id": chat_id,
+            "client_message_id": uuid.uuid4(),
             "content": "hello",
-            "created_at": datetime.datetime.now(datetime.UTC),
             "user_id": spoofed_user_id,
         }
     )
@@ -80,3 +80,23 @@ def test_socket_message_create_uses_authenticated_user_id() -> None:
     assert result.user_id == authenticated_user_id
     assert result.user_id != spoofed_user_id
     assert result.content == "hello"
+    assert result.client_message_id == msg.client_message_id
+
+
+def test_socket_message_create_does_not_accept_client_created_at() -> None:
+    msg = MessageCreateWS.model_validate(
+        {
+            "chat_id": uuid.uuid4(),
+            "client_message_id": uuid.uuid4(),
+            "content": "hello",
+            "created_at": "1999-01-01T00:00:00Z",
+        }
+    )
+
+    result = build_socket_message_create(
+        chat_id=msg.chat_id,
+        user_id=uuid.uuid4(),
+        msg=msg,
+    )
+
+    assert not hasattr(result, "created_at")

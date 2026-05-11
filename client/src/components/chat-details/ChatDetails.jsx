@@ -23,6 +23,18 @@ function getMaxCharsInLine(textarea, content) {
     return Math.floor(textarea.clientWidth / width);
 }
 
+function createClientMessageId() {
+    if (window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function parseSocketPayload(data) {
+    return typeof data === "string" ? JSON.parse(data) : data;
+}
+
 
 function ChatDetails() {
     const { store } = useContext(StoreContext);
@@ -105,7 +117,7 @@ function ChatDetails() {
         }
 
         checkJoinedWrapper();
-    }, [store.user, chat])
+    }, [params.chatId, store.user, chat])
 
     useEffect(() => {
         const getHistoryWrapper = async () => {
@@ -121,17 +133,19 @@ function ChatDetails() {
                 const items = await ChatService.getChatHistory(chatId);
                 items.data.forEach(
                     (item) => {
-                        if (item.item_type == "message") {
-                            let sender = item.user_id == store.user.user_id ? "You" : item.user.username;
-                            addMessageToChat(
-                                item.user_id,
-                                item.content,
-                                sender,
-                                item.created_at,
-                                item.user?.avatar?.small_url || null,
-                            );
+                        if (item.item_type === "message") {
+                            addMessageToChat({
+                                messageId: item.message_id,
+                                clientMessageId: item.client_message_id,
+                                userId: item.user_id,
+                                content: item.content,
+                                username: item.user_id === store.user.user_id ? "You" : item.user.username,
+                                createdAt: item.created_at,
+                                avatarUrl: item.user?.avatar?.small_url || null,
+                                status: "sent",
+                            });
 
-                        } else if (item.item_type == "event") {
+                        } else if (item.item_type === "event") {
                             switch (item.event_type) {
                                 case "joined":
                                     addEventToChat(item.event_type, item.user.username, null);
@@ -148,6 +162,8 @@ function ChatDetails() {
                                 case "removed":
                                     addEventToChat(item.event_type, item.user.username, item.altered_user.username);
                                     break;
+                                default:
+                                    break;
                             }
                         }
                     }
@@ -161,7 +177,7 @@ function ChatDetails() {
         }
 
         getHistoryWrapper();
-    }, [chat, store.user]);
+    }, [params.chatId, chat, store.user]);
 
     useEffect(() => {
         if (!chat.chat_id) {
@@ -190,23 +206,25 @@ function ChatDetails() {
             }
         });
 
-        socket.current.on("message", (data) => {
-            let msgData = JSON.parse(data);
-            let sender = msgData.user_id == store.user.user_id ? "You" : msgData.username;
-            addMessageToChat(
-                msgData.user_id,
-                msgData.content,
-                sender,
-                msgData.created_at,
-                msgData.avatar_small_url || null,
-            );
+        socket.current.on("message:created", (data) => {
+            const msgData = parseSocketPayload(data);
+            addMessageToChat({
+                messageId: msgData.message_id,
+                clientMessageId: msgData.client_message_id,
+                userId: msgData.user_id,
+                content: msgData.content,
+                username: msgData.user_id === store.user.user_id ? "You" : msgData.username,
+                createdAt: msgData.created_at,
+                avatarUrl: msgData.avatar_small_url || null,
+                status: "sent",
+            });
         })
 
         return () => {
             socket.current.emit("leave", {
                 chat_id: chat.chat_id,
             });
-            socket.current.off("message");
+            socket.current.off("message:created");
             socket.current.off("connect_error");
             socket.current.disconnect();
         }
@@ -234,15 +252,27 @@ function ChatDetails() {
         setChatItems([]);
     }
 
-    const addMessageToChat = (userId, msg, sender, createdAt, avatarUrl = null) => {
-        setChatItems(items => [...items, {
+    const addMessageToChat = (messageItem) => {
+        const nextItem = {
             type: "message",
-            userId: userId,
-            content: msg,
-            username: sender,
-            createdAt: createdAt,
-            avatarUrl,
-        }]);
+            ...messageItem,
+        };
+
+        setChatItems(items => {
+            const existingIndex = items.findIndex((item) => (
+                item.type === "message" &&
+                (
+                    (nextItem.messageId && item.messageId === nextItem.messageId) ||
+                    (nextItem.clientMessageId && item.clientMessageId === nextItem.clientMessageId)
+                )
+            ));
+
+            if (existingIndex === -1) {
+                return [...items, nextItem];
+            }
+
+            return items.map((item, index) => index === existingIndex ? { ...item, ...nextItem } : item);
+        });
     }
 
     const addEventToChat = (action, username, addedUserUsername) => {
@@ -254,24 +284,67 @@ function ChatDetails() {
         }]);
     }
 
-    const sendMessage = (event) => {
-        if (message.trim() != "") {
-            document.getElementById("message-input").value = "";
+    const markMessageFailed = (clientMessageId) => {
+        setChatItems(items => items.map((item) => (
+            item.type === "message" && item.clientMessageId === clientMessageId
+                ? { ...item, status: "failed" }
+                : item
+        )));
+    }
 
-            let now = new Date();
-            addMessageToChat(store.user.user_id, message.trim(), "You", now, store.user?.avatar?.small_url || null);
-
-            let msgData = {
-                chat_id: chat.chat_id,
-                content: message.trim(),
-                created_at: new Date()
+    const sendMessagePayload = (pendingMessage) => {
+        socket.current.timeout(10000).emit("message", {
+            chat_id: chat.chat_id,
+            client_message_id: pendingMessage.clientMessageId,
+            content: pendingMessage.content,
+        }, (error, response) => {
+            if (error || !response || !response.ok) {
+                console.log(response?.error?.detail || "Failed to send message");
+                markMessageFailed(pendingMessage.clientMessageId);
+                return;
             }
 
-            socket.current.emit("message", msgData, (response) => {
-                if (response && !response.ok) {
-                    console.log(response.error?.detail || "Failed to send message");
-                }
+            const msgData = response.data;
+            addMessageToChat({
+                messageId: msgData.message_id,
+                clientMessageId: msgData.client_message_id,
+                userId: msgData.user_id,
+                content: msgData.content,
+                username: "You",
+                createdAt: msgData.created_at,
+                avatarUrl: msgData.avatar_small_url || null,
+                status: "sent",
             });
+        });
+    }
+
+    const retryMessage = (clientMessageId) => {
+        const failedMessage = chatItems.find((item) => (
+            item.type === "message" && item.clientMessageId === clientMessageId
+        ));
+        if (!failedMessage) {
+            return;
+        }
+
+        addMessageToChat({ ...failedMessage, status: "pending" });
+        sendMessagePayload(failedMessage);
+    }
+
+    const sendMessage = () => {
+        const trimmedMessage = message.trim();
+        if (trimmedMessage !== "") {
+            const pendingMessage = {
+                clientMessageId: createClientMessageId(),
+                userId: store.user.user_id,
+                content: trimmedMessage,
+                username: "You",
+                createdAt: new Date().toISOString(),
+                avatarUrl: store.user?.avatar?.small_url || null,
+                status: "pending",
+            };
+
+            addMessageToChat(pendingMessage);
+            sendMessagePayload(pendingMessage);
 
             setMessage("");
             textareaRef.current.value = "";
@@ -281,10 +354,10 @@ function ChatDetails() {
     }
 
     const handleKeyDown = (event) => {
-        if (event.shiftKey && event.key === 'Enter' && message.trim() != "") {
+        if (event.shiftKey && event.key === 'Enter' && message.trim() !== "") {
             return;
         }
-        else if (event.key === 'Enter' && message.trim() != "") {
+        else if (event.key === 'Enter' && message.trim() !== "") {
             sendMessage(message);
             event.preventDefault();
             resizeTextarea();
@@ -312,10 +385,7 @@ function ChatDetails() {
     }
 
     const optionsHandler = () => {
-        const button = document.getElementById('options-btn');
         const menu = document.getElementById('options');
-        const rect = button.getBoundingClientRect();
-        // menu.style.top = `${rect.bottom + 20}px`;
         menu.style.display = (menu.style.display === 'none' || menu.style.display === '') ? 'flex' : 'none';
     }
 
@@ -357,7 +427,7 @@ function ChatDetails() {
             </div>
             <div id="options">
                 {
-                    store.user.user_id == chat.owner_id &&
+                    store.user.user_id === chat.owner_id &&
                     <>
                         <div className="option" onClick={() => setIsEditChatModalActive(true)}>
                             <img src="../../../assets/edit.svg" alt="Edit" />
@@ -371,7 +441,7 @@ function ChatDetails() {
                     <div>Leave chat</div>
                 </div>
                 {
-                    store.user.user_id == chat.owner_id &&
+                    store.user.user_id === chat.owner_id &&
                     <div className="option danger" onClick={handleChatDelete}>
                         <img src="../../../assets/delete.svg" alt="Delete" />
                         <div>Delete chat</div>
@@ -382,7 +452,7 @@ function ChatDetails() {
             <div className="chat-body" ref={messagesEndRef}>
                 {
                     chatItems.map((item, index) => {
-                        if (item.type == "message") {
+                        if (item.type === "message") {
                             return (
                                 <Message
                                     key={index}
@@ -391,13 +461,17 @@ function ChatDetails() {
                                     content={item.content}
                                     createdAt={item.createdAt}
                                     avatarUrl={item.avatarUrl}
+                                    status={item.status}
+                                    onRetry={() => retryMessage(item.clientMessageId)}
                                 />
                             )
-                        } else if (item.type == "event") {
+                        } else if (item.type === "event") {
                             return (
                                 <Event key={index} action={item.action} username={item.username} addedUserUsername={item.addedUserUsername} />
                             )
                         }
+
+                        return null;
                     })
                 }
             </div>

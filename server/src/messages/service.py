@@ -23,7 +23,11 @@ class MessageService:
         message: MessageCreate,
     ) -> MessageGetWithUser:
         try:
-            msg = await self._repository.create(data=message.model_dump())
+            data = message.model_dump()
+            if message.client_message_id is not None:
+                msg = await self._repository.create_idempotent(data=data)
+            else:
+                msg = await self._repository.create(data=data)
             return await self._build_message_with_user(msg)
         except IntegrityError as exc:
             raise ChatNotFound(f"Chat with id '{message.chat_id}' not found") from exc
@@ -117,6 +121,7 @@ class MessageService:
         return MessageGetWithUser(
             message_id=message.message_id,
             chat_id=message.chat_id,
+            client_message_id=message.client_message_id,
             content=message.content,
             user_id=message.user_id,
             created_at=message.created_at,

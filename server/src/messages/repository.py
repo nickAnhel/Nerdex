@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import delete, desc, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -32,6 +33,36 @@ class MessageRepository:
         result = await self._session.execute(stmt)
         await self._session.commit()
         return result.scalar_one()
+
+    async def create_idempotent(
+        self,
+        data: dict[str, Any],
+    ) -> MessageModel:
+        stmt = (
+            pg_insert(MessageModel)
+            .values(**data)
+            .on_conflict_do_nothing(
+                constraint="uq_messages_chat_user_client_message_id",
+            )
+            .returning(MessageModel)
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+            )
+        )
+        result = await self._session.execute(stmt)
+        message = result.scalar_one_or_none()
+        if message is None:
+            message = await self.get_single(
+                chat_id=data["chat_id"],
+                user_id=data["user_id"],
+                client_message_id=data["client_message_id"],
+            )
+
+        await self._session.commit()
+        return message
 
     async def get_single(
         self,

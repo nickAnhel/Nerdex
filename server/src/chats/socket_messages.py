@@ -12,6 +12,6 @@ def build_socket_message_create(
     return MessageCreate(
         chat_id=chat_id,
         user_id=user_id,
+        client_message_id=msg.client_message_id,
         content=msg.content,
-        created_at=msg.created_at.replace(tzinfo=None),
     )

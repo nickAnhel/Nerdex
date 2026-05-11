@@ -8,12 +8,17 @@ from src.users.schemas import UserGet
 
 
 class MessageCreateWS(BaseModel):
+    chat_id: uuid.UUID
+    client_message_id: uuid.UUID
+    content: str
+
+
+class MessageGetWS(BaseModel):
+    message_id: uuid.UUID
+    chat_id: uuid.UUID
+    client_message_id: uuid.UUID | None = None
     content: str
     created_at: datetime.datetime
-
-
-class MessageGetWS(MessageCreateWS):
-    message_id: uuid.UUID
     username: str
     user_id: uuid.UUID
     avatar_small_url: str | None = None
@@ -21,13 +26,14 @@ class MessageGetWS(MessageCreateWS):
 
 class MessageCreate(BaseSchema):
     chat_id: uuid.UUID
+    client_message_id: uuid.UUID | None = None
     content: str
     user_id: uuid.UUID
-    created_at: datetime.datetime
 
 
 class MessageGet(MessageCreate):
     message_id: uuid.UUID
+    created_at: datetime.datetime
 
 
 class MessageGetWithUser(MessageGet):
