@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from src.content.enums import ContentStatusEnum, ContentVisibilityEnum
+from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum
+from src.videos.enums import VideoProcessingStatusEnum
 
 
 def can_view_content(
@@ -30,7 +31,11 @@ def can_access_comments(
     content,
     viewer_id: uuid.UUID | None,
 ) -> bool:
-    return (
-        content.status == ContentStatusEnum.PUBLISHED
-        and can_view_content(content=content, viewer_id=viewer_id)
-    )
+    if content.status != ContentStatusEnum.PUBLISHED or not can_view_content(content=content, viewer_id=viewer_id):
+        return False
+    if getattr(content, "content_type", None) in {ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT}:
+        return (
+            content.video_playback_details is not None
+            and content.video_playback_details.processing_status == VideoProcessingStatusEnum.READY
+        )
+    return True

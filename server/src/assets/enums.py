@@ -40,6 +40,8 @@ class AssetVariantTypeEnum(str, Enum):
     VIDEO_PREVIEW_SMALL = "video_preview_small"
     VIDEO_720P = "video_720p"
     VIDEO_1080P = "video_1080p"
+    VIDEO_480P = "video_480p"
+    VIDEO_360P = "video_360p"
 
 
 class AttachmentTypeEnum(str, Enum):

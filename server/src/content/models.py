@@ -4,7 +4,7 @@ import datetime
 import typing as tp
 import uuid
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Index, String, Text, text
+from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,6 +65,7 @@ class ContentModel(Base):
     comments_count: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     likes_count: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     dislikes_count: Mapped[int] = mapped_column(default=0, server_default=text("0"))
+    views_count: Mapped[int] = mapped_column(default=0, server_default=text("0"))
     content_metadata: Mapped[dict[str, tp.Any]] = mapped_column(
         "metadata",
         JSON().with_variant(JSONB, "postgresql"),
@@ -88,12 +89,35 @@ class ContentModel(Base):
         passive_deletes=True,
         uselist=False,
     )
+    video_details: Mapped["VideoDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+    moment_details: Mapped["MomentDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+    video_playback_details: Mapped["VideoPlaybackDetailsModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
     comments: Mapped[list["CommentModel"]] = relationship(  # type: ignore[name-defined]
         back_populates="content",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
     reactions: Mapped[list["ContentReactionModel"]] = relationship(
+        back_populates="content",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    view_sessions: Mapped[list["ContentViewSessionModel"]] = relationship(
         back_populates="content",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -135,6 +159,10 @@ class ContentModel(Base):
             return self.post_details.body_text
         if self.content_type == ContentTypeEnum.ARTICLE and self.article_details is not None:
             return self.article_details.body_markdown
+        if self.content_type == ContentTypeEnum.VIDEO and self.video_details is not None:
+            return self.video_details.description
+        if self.content_type == ContentTypeEnum.MOMENT and self.moment_details is not None:
+            return self.moment_details.caption
         return ""
 
     @property
@@ -144,6 +172,10 @@ class ContentModel(Base):
             text = self.post_details.body_text
         elif self.content_type == ContentTypeEnum.ARTICLE and self.article_details is not None:
             text = self.excerpt or self.article_details.body_markdown
+        elif self.content_type == ContentTypeEnum.VIDEO and self.video_details is not None:
+            text = self.excerpt or self.video_details.description
+        elif self.content_type == ContentTypeEnum.MOMENT and self.moment_details is not None:
+            text = self.excerpt or self.moment_details.caption
 
         text = text.strip()
         if len(text) < 100:
@@ -176,5 +208,65 @@ class ContentReactionModel(Base):
     content: Mapped[ContentModel] = relationship(back_populates="reactions")
     user: Mapped["UserModel"] = relationship(  # type: ignore[name-defined]
         back_populates="content_reactions",
+        passive_deletes=True,
+    )
+
+
+class ContentViewSessionModel(Base):
+    __tablename__ = "content_view_sessions"
+    __table_args__ = (
+        CheckConstraint("last_position_seconds >= 0", name="ck_content_view_sessions_last_position_non_negative"),
+        CheckConstraint("max_position_seconds >= 0", name="ck_content_view_sessions_max_position_non_negative"),
+        CheckConstraint("watched_seconds >= 0", name="ck_content_view_sessions_watched_seconds_non_negative"),
+        CheckConstraint("progress_percent >= 0 AND progress_percent <= 100", name="ck_content_view_sessions_progress_percent_range"),
+        Index("ix_content_view_sessions_viewer_last_seen", "viewer_id", text("last_seen_at DESC")),
+        Index("ix_content_view_sessions_content_viewer_started", "content_id", "viewer_id", text("started_at DESC")),
+        Index(
+            "uq_content_view_sessions_counted_viewer_day",
+            "content_id",
+            "viewer_id",
+            "counted_date",
+            unique=True,
+            postgresql_where=text("is_counted = true AND viewer_id IS NOT NULL AND counted_date IS NOT NULL"),
+        ),
+    )
+
+    view_session_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content.content_id", ondelete="CASCADE"),
+    )
+    viewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    anonymous_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        server_default=text("now()"),
+    )
+    last_seen_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        server_default=text("now()"),
+    )
+    last_position_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    max_position_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    watched_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    is_counted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    counted_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    counted_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    view_metadata: Mapped[dict[str, tp.Any]] = mapped_column(
+        "metadata",
+        JSON().with_variant(JSONB, "postgresql"),
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+
+    content: Mapped[ContentModel] = relationship(back_populates="view_sessions")
+    viewer: Mapped["UserModel"] = relationship(  # type: ignore[name-defined]
+        foreign_keys=[viewer_id],
         passive_deletes=True,
     )

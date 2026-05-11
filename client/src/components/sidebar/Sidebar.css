@@ -7,9 +7,14 @@
     background-color: #1a1a1a;
 }
 
-#sidebar img {
+#sidebar img,
+#sidebar svg {
     width: 2rem;
     aspect-ratio: 1/1;
+}
+
+#sidebar svg {
+    display: block;
 }
 
 #sidebar-top {

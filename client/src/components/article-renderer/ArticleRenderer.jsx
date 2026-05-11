@@ -6,6 +6,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./ArticleRenderer.css";
 
 import { buildArticleAssetLookup, buildMermaidPreviewUrl, parseArticleMarkdown, slugifyHeading } from "../../utils/articleMarkdown";
+import VideoPlayer from "../video-player";
 
 
 function MarkdownBlock({ content }) {
@@ -48,6 +49,21 @@ function MarkdownBlock({ content }) {
             {content}
         </ReactMarkdown>
     );
+}
+
+function buildVideoSources(asset) {
+    const sourceUrl = asset?.stream_url || asset?.original_url;
+    if (!sourceUrl) {
+        return [];
+    }
+
+    return [{
+        id: "original",
+        label: "Original",
+        src: sourceUrl,
+        mimeType: asset.mime_type || asset.declared_mime_type || "",
+        isOriginal: true,
+    }];
 }
 
 function ArticleRenderer({
@@ -123,11 +139,12 @@ function ArticleRenderer({
 
                         return (
                             <figure className={`article-video-block ${block.attrs.size || "wide"}`} key={`video-${index}`}>
-                                <video
-                                    controls
+                                <VideoPlayer
+                                    skin="article"
+                                    sources={buildVideoSources(asset)}
+                                    posterUrl={asset.poster_url || undefined}
+                                    title={block.attrs.caption || asset.original_filename || "Article video"}
                                     preload="metadata"
-                                    poster={asset.poster_url || undefined}
-                                    src={asset.stream_url || asset.original_url}
                                 />
                                 {block.attrs.caption && <figcaption>{block.attrs.caption}</figcaption>}
                             </figure>

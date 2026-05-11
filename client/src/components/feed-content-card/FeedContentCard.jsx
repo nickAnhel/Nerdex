@@ -1,5 +1,7 @@
 import PostListItem from "../post-list-item/PostListItem";
 import ArticleCard from "../article-card/ArticleCard";
+import MomentCard from "../moment-card/MomentCard";
+import VideoCard from "../video-card/VideoCard";
 
 
 function FeedContentCard({ item, removeItem, forwardedRef = null }) {
@@ -16,19 +18,49 @@ function FeedContentCard({ item, removeItem, forwardedRef = null }) {
         );
     }
 
-    const post = {
-        ...item,
-        post_id: item.content_id,
-        content: item.post_content,
-    };
+    if (item.content_type === "video") {
+        return (
+            <VideoCard
+                ref={forwardedRef}
+                video={{
+                    ...item,
+                    video_id: item.content_id,
+                }}
+                removeItem={removeItem}
+            />
+        );
+    }
 
-    return (
-        <PostListItem
-            ref={forwardedRef}
-            post={post}
-            removePost={removeItem}
-        />
-    );
+    if (item.content_type === "moment") {
+        return (
+            <MomentCard
+                ref={forwardedRef}
+                moment={{
+                    ...item,
+                    moment_id: item.content_id,
+                }}
+                removeItem={removeItem}
+            />
+        );
+    }
+
+    if (item.content_type === "post") {
+        const post = {
+            ...item,
+            post_id: item.content_id,
+            content: item.post_content,
+        };
+
+        return (
+            <PostListItem
+                ref={forwardedRef}
+                post={post}
+                removePost={removeItem}
+            />
+        );
+    }
+
+    return null;
 }
 
 export default FeedContentCard;

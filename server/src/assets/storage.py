@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import mimetypes
 import uuid
+from pathlib import Path
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -12,6 +13,8 @@ from botocore.exceptions import ClientError
 
 from src.assets.enums import AssetVariantTypeEnum
 from src.config import StorageSettings
+
+import aiofiles
 
 try:
     from aiobotocore.session import get_session
@@ -176,6 +179,24 @@ class AssetStorage:
             body = response["Body"]
             return await body.read()
 
+    async def download_to_file(
+        self,
+        *,
+        bucket: str,
+        key: str,
+        path: Path,
+        chunk_size: int = 1024 * 1024,
+    ) -> None:
+        async with self._client() as client:
+            response = await client.get_object(Bucket=bucket, Key=key)
+            body = response["Body"]
+            async with aiofiles.open(path, "wb") as file:
+                while True:
+                    chunk = await body.read(chunk_size)
+                    if not chunk:
+                        break
+                    await file.write(chunk)
+
     async def upload_bytes(
         self,
         *,
@@ -195,6 +216,37 @@ class AssetStorage:
         return StoredObject(
             size_bytes=len(payload),
             checksum_sha256=hashlib.sha256(payload).hexdigest(),
+            mime_type=mime_type,
+        )
+
+    async def upload_file(
+        self,
+        *,
+        bucket: str,
+        key: str,
+        path: Path,
+        mime_type: str,
+    ) -> StoredObject:
+        checksum = hashlib.sha256()
+        async with aiofiles.open(path, "rb") as file:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                checksum.update(chunk)
+
+        with path.open("rb") as body:
+            async with self._client() as client:
+                await client.put_object(
+                    Bucket=bucket,
+                    Key=key,
+                    Body=body,
+                    ContentType=mime_type,
+                )
+
+        return StoredObject(
+            size_bytes=path.stat().st_size,
+            checksum_sha256=checksum.hexdigest(),
             mime_type=mime_type,
         )
 

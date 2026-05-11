@@ -1,0 +1,236 @@
+.moment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid #333;
+    border-radius: 0.75rem;
+    background: #1f1f1f;
+    color: #e8eaed;
+}
+
+.moment-card-author-row,
+.moment-card-author,
+.moment-card-header-actions,
+.moment-card-actions,
+.moment-card-badges,
+.moment-card-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.moment-card-author-row {
+    justify-content: space-between;
+    color: #aaa;
+    font-size: 0.92rem;
+}
+
+.moment-card-author {
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.moment-card-author img {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 999px;
+    object-fit: cover;
+}
+
+.moment-card-options {
+    position: relative;
+}
+
+.moment-card-options-trigger {
+    width: 2rem;
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid #3a3a3a;
+    border-radius: 999px;
+    background: transparent;
+    color: #e8eaed;
+    cursor: pointer;
+}
+
+.moment-card-options-trigger svg,
+.moment-card-options-menu svg,
+.moment-card-pill svg,
+.moment-card-actions svg,
+.moment-card-preview-empty svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.moment-card-options-menu {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 5;
+    min-width: 9rem;
+    padding: 0.35rem;
+    border: 1px solid #3a3a3a;
+    border-radius: 0.6rem;
+    background: #111;
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
+}
+
+.moment-card-options-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0;
+    border-radius: 0.45rem;
+    padding: 0.55rem 0.65rem;
+    background: transparent;
+    color: #e8eaed;
+    cursor: pointer;
+    text-align: left;
+}
+
+.moment-card-options-menu button:hover {
+    background: #222;
+}
+
+.moment-card-options-menu button.danger {
+    color: #ff9ba7;
+}
+
+.moment-card-preview {
+    position: relative;
+    width: min(100%, 18rem);
+    aspect-ratio: 9 / 16;
+    align-self: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0.7rem;
+    overflow: hidden;
+    background: #070707;
+    cursor: pointer;
+}
+
+.moment-card-preview img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    transition: transform 0.2s ease;
+}
+
+.moment-card-preview:hover img {
+    transform: scale(1.02);
+}
+
+.moment-card-preview-empty {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: #bbb;
+}
+
+.moment-card-pill,
+.moment-card-duration {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    background: rgba(10, 10, 10, 0.78);
+    color: #fff;
+    font-size: 0.82rem;
+    line-height: 1;
+    backdrop-filter: blur(10px);
+}
+
+.moment-card-pill {
+    left: 0.7rem;
+    bottom: 0.7rem;
+    padding: 0.48rem 0.65rem;
+}
+
+.moment-card-duration {
+    right: 0.7rem;
+    bottom: 0.7rem;
+    padding: 0.45rem 0.6rem;
+}
+
+.moment-card-body {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.moment-card-caption,
+.moment-card-error {
+    margin: 0;
+    color: #e8eaed;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.moment-card-error {
+    color: #ff9ba7;
+}
+
+.moment-card-badge {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #404040;
+    border-radius: 999px;
+    color: #bdbdbd;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.moment-card-badge.draft {
+    border-color: #d9a441;
+    color: #f2cf82;
+}
+
+.moment-card-badge.private {
+    border-color: #5f8cff;
+    color: #9db6ff;
+}
+
+.moment-card-badge.processing {
+    border-color: #2f8f5b;
+    color: #8ee6b3;
+}
+
+.moment-card-actions {
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+    border-top: 1px solid #333;
+}
+
+.moment-card-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid #9d50ff;
+    border-radius: 999px;
+    padding: 0.55rem 0.8rem;
+    background: transparent;
+    color: #9d50ff;
+    cursor: pointer;
+}
+
+.moment-card-actions button.active {
+    background: #9d50ff;
+    color: #fff;
+}
+
+.moment-card-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+@media (max-width: 760px) {
+    .moment-card-author-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

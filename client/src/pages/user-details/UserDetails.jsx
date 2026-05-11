@@ -8,6 +8,8 @@ import { StoreContext } from "../..";
 import UserService from "../../service/UserService";
 import PostService from "../../service/PostService";
 import ArticleService from "../../service/ArticleService";
+import VideoService from "../../service/VideoService";
+import MomentService from "../../service/MomentService";
 
 import NotFound from "../../components/not-found/NotFound";
 import Loader from "../../components/loader/Loader";
@@ -18,6 +20,8 @@ import PostList from "../../components/post-list/PostList";
 import ContentList from "../../components/content-list/ContentList";
 import UserList from "../../components/user-list/UserList";
 import ArticleCard from "../../components/article-card/ArticleCard";
+import MomentCard from "../../components/moment-card/MomentCard";
+import VideoCard from "../../components/video-card/VideoCard";
 import { getAvatarUrl } from "../../utils/avatar";
 
 
@@ -25,11 +29,15 @@ function UserDetails() {
     const { store } = useContext(StoreContext);
     const ownerPostFilters = ["all", "public", "private", "drafts"];
     const ownerArticleFilters = ["all", "public", "private", "drafts"];
+    const ownerVideoFilters = ["all", "public", "private", "drafts"];
+    const ownerMomentFilters = ["all", "public", "private", "drafts"];
     const navigate = useNavigate();
 
     const [tab, setTab] = useState("posts");
     const [postFilter, setPostFilter] = useState("all");
     const [articleFilter, setArticleFilter] = useState("all");
+    const [videoFilter, setVideoFilter] = useState("all");
+    const [momentFilter, setMomentFilter] = useState("all");
     const [isCreatePostModalActive, setIsCreatePostModalActive] = useState(false);
 
     const params = useParams();
@@ -58,6 +66,8 @@ function UserDetails() {
                 setTab("posts");
                 setPostFilter("all");
                 setArticleFilter("all");
+                setVideoFilter("all");
+                setMomentFilter("all");
 
             } catch (e) {
                 setUserNotFound(true);
@@ -190,6 +200,18 @@ function UserDetails() {
                         Articles
                     </div>
                     <div
+                        className={tab === "videos" ? "tab active" : "tab"}
+                        onClick={() => setTab("videos")}
+                    >
+                        Videos
+                    </div>
+                    <div
+                        className={tab === "moments" ? "tab active" : "tab"}
+                        onClick={() => setTab("moments")}
+                    >
+                        Moments
+                    </div>
+                    <div
                         className={tab === "subscriptions" ? "tab active" : "tab"}
                         onClick={() => setTab("subscriptions")}
                     >
@@ -295,6 +317,124 @@ function UserDetails() {
                                     />
                                 )}
                             />
+                        }
+                    </>
+                }
+
+                {
+                    tab === "videos" &&
+                    <>
+                        {
+                            isOwner &&
+                            <div className="posts-toolbar">
+                                <div className="post-filter-tabs">
+                                    {ownerVideoFilters.map((filter) => (
+                                        <button
+                                            key={filter}
+                                            type="button"
+                                            className={videoFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
+                                            onClick={() => setVideoFilter(filter)}
+                                        >
+                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="create-post-button btn btn-primary"
+                                    onClick={() => navigate("/videos/new")}
+                                >
+                                    New video
+                                </button>
+                            </div>
+                        }
+
+                        {
+                            user.user_id &&
+                            <div className="profile-videos-list">
+                                <ContentList
+                                    fetchItems={VideoService.getVideos}
+                                    filters={{
+                                        desc: true,
+                                        order: "published_at",
+                                        user_id: user.user_id,
+                                        profile_filter: isOwner ? videoFilter : "public",
+                                    }}
+                                    refresh={`${store.isRefreshPosts}-videos-${user.user_id}-${videoFilter}`}
+                                    emptyText="No videos"
+                                    renderItem={({ item, removeItem, ref }) => (
+                                        <VideoCard
+                                            key={item.video_id || item.content_id}
+                                            ref={ref}
+                                            video={{
+                                                ...item,
+                                                video_id: item.video_id || item.content_id,
+                                            }}
+                                            removeItem={removeItem}
+                                        />
+                                    )}
+                                />
+                            </div>
+                        }
+                    </>
+                }
+
+                {
+                    tab === "moments" &&
+                    <>
+                        {
+                            isOwner &&
+                            <div className="posts-toolbar">
+                                <div className="post-filter-tabs">
+                                    {ownerMomentFilters.map((filter) => (
+                                        <button
+                                            key={filter}
+                                            type="button"
+                                            className={momentFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
+                                            onClick={() => setMomentFilter(filter)}
+                                        >
+                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="create-post-button btn btn-primary"
+                                    onClick={() => navigate("/moments/new")}
+                                >
+                                    New Moment
+                                </button>
+                            </div>
+                        }
+
+                        {
+                            user.user_id &&
+                            <div className="profile-moments-list">
+                                <ContentList
+                                    fetchItems={MomentService.getMoments}
+                                    filters={{
+                                        desc: true,
+                                        order: "published_at",
+                                        user_id: user.user_id,
+                                        profile_filter: isOwner ? momentFilter : "public",
+                                    }}
+                                    refresh={`${store.isRefreshPosts}-moments-${user.user_id}-${momentFilter}`}
+                                    emptyText="No Moments"
+                                    renderItem={({ item, removeItem, ref }) => (
+                                        <MomentCard
+                                            key={item.moment_id || item.content_id}
+                                            ref={ref}
+                                            moment={{
+                                                ...item,
+                                                moment_id: item.moment_id || item.content_id,
+                                            }}
+                                            removeItem={removeItem}
+                                        />
+                                    )}
+                                />
+                            </div>
                         }
                     </>
                 }

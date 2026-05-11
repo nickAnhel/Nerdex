@@ -7,7 +7,8 @@ from src.content.enums import (
     ContentVisibilityEnum,
     ReactionTypeEnum,
 )
-from src.content.models import ContentModel, ContentReactionModel
+from src.content.models import ContentModel, ContentReactionModel, ContentViewSessionModel
+from src.videos.models import VideoDetailsModel, VideoPlaybackDetailsModel
 
 
 def _bind_value(column_type, value):  # type: ignore[no-untyped-def]
@@ -37,3 +38,10 @@ def test_reaction_enum_column_bind_and_restore_lowercase_values() -> None:
 
     assert _bind_value(column_type, ReactionTypeEnum.LIKE) == "like"
     assert _result_value(column_type, "like") == ReactionTypeEnum.LIKE
+
+
+def test_stage2_content_and_video_tables_are_registered() -> None:
+    assert ContentViewSessionModel.__table__.name == "content_view_sessions"
+    assert VideoDetailsModel.__table__.name == "video_details"
+    assert VideoPlaybackDetailsModel.__table__.name == "video_playback_details"
+    assert "views_count" in ContentModel.__table__.c

@@ -202,7 +202,7 @@ class ContentAssetModel(Base):
     asset: Mapped[AssetModel] = relationship(back_populates="content_links")
 
 
-class MessageAdessetModel(Base):
+class MessageAssetModel(Base):
     __tablename__ = "message_asset"
     __table_args__ = (
         Index("ix_message_asset_message_sort", "message_id", "sort_order"),

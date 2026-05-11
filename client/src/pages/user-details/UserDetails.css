@@ -141,7 +141,37 @@
     width: 100%;
 }
 
+#user-details .profile-videos-list,
+#user-details .profile-moments-list {
+    width: 100%;
+}
+
+#user-details .profile-videos-list .content-list-items,
+#user-details .profile-moments-list .content-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+#user-details .profile-videos-list .video-card,
+#user-details .profile-moments-list .moment-card {
+    width: 100%;
+}
+
 #user-details .post-list-item .author:hover {
     opacity: 1;
     cursor: default;
+}
+
+@media (max-width: 1100px) {
+    #user-details {
+        padding: 1rem;
+        flex-direction: column;
+    }
+
+    #user-details .user-card {
+        position: static;
+        max-width: none;
+        width: 100%;
+    }
 }
