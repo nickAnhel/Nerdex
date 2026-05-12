@@ -140,6 +140,78 @@
     transition: all .1s;
 }
 
+.attachment-input {
+    display: none;
+}
+
+.chat-footer .attach-button {
+    width: 2rem;
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    margin-right: .6rem;
+    padding: 0;
+    border-radius: 50%;
+    color: #dbdbdb;
+    background-color: #333;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.chat-footer .attach-button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.composer-attachments {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.composer-attachment {
+    max-width: 18rem;
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .4rem .45rem .4rem .65rem;
+    border-radius: .5rem;
+    color: #dbdbdb;
+    background-color: #1e1e1e;
+}
+
+.composer-attachment-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-attachment-meta {
+    flex: 0 0 auto;
+    color: #8f8f8f;
+    font-size: .78rem;
+}
+
+.composer-attachment-failed .composer-attachment-meta {
+    color: #f73636;
+}
+
+.composer-attachment button {
+    width: 1.4rem;
+    height: 1.4rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 50%;
+    color: #dbdbdb;
+    background-color: #333;
+    cursor: pointer;
+}
+
 .chat-footer #message-input {
     font-family: inherit;
     width: 100%;

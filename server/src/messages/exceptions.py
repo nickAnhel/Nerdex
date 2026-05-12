@@ -8,3 +8,7 @@ class CantDeleteMessage(Exception):
 
 class InvalidMessageReply(Exception):
     """Raised when a message reply target is invalid"""
+
+
+class InvalidMessageAssets(Exception):
+    """Raised when message attachments are invalid or unavailable"""

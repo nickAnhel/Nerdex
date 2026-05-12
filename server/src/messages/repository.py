@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.assets.models import AssetModel
+from src.assets.models import AssetModel, MessageAssetModel
 from src.chats.timeline import create_message_timeline_item, get_message_chat_seq
 from src.messages.models import MessageModel
 from src.users.models import UserModel
@@ -19,6 +19,7 @@ class MessageRepository:
     async def create(
         self,
         data: dict[str, Any],
+        asset_ids: list[uuid.UUID] | None = None,
     ) -> MessageModel:
         stmt = (
             insert(MessageModel)
@@ -30,22 +31,26 @@ class MessageRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
         result = await self._session.execute(stmt)
         message = result.scalar_one()
+        await self._insert_asset_links(message_id=message.message_id, asset_ids=asset_ids or [])
         chat_seq = await create_message_timeline_item(
             session=self._session,
             chat_id=message.chat_id,
             message_id=message.message_id,
         )
         await self._session.commit()
+        message = await self.get_single(message_id=message.message_id)
         setattr(message, "chat_seq", chat_seq)
         return message
 
     async def create_idempotent(
         self,
         data: dict[str, Any],
+        asset_ids: list[uuid.UUID] | None = None,
     ) -> MessageModel:
         stmt = (
             pg_insert(MessageModel)
@@ -60,6 +65,7 @@ class MessageRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
         result = await self._session.execute(stmt)
@@ -75,6 +81,7 @@ class MessageRepository:
                 message_id=message.message_id,
             )
         else:
+            await self._insert_asset_links(message_id=message.message_id, asset_ids=asset_ids or [])
             chat_seq = await create_message_timeline_item(
                 session=self._session,
                 chat_id=message.chat_id,
@@ -82,6 +89,7 @@ class MessageRepository:
             )
 
         await self._session.commit()
+        message = await self.get_single(message_id=message.message_id)
         setattr(message, "chat_seq", chat_seq)
         return message
 
@@ -92,12 +100,14 @@ class MessageRepository:
         query = (
             select(MessageModel)
             .filter_by(**filters)
+            .execution_options(populate_existing=True)
             .options(
                 selectinload(MessageModel.user).selectinload(UserModel.subscribers),
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
 
@@ -124,6 +134,7 @@ class MessageRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
 
@@ -160,6 +171,7 @@ class MessageRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
 
@@ -199,6 +211,7 @@ class MessageRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
 
@@ -231,6 +244,7 @@ class MessageRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._asset_links_load(),
             )
         )
 
@@ -250,3 +264,32 @@ class MessageRepository:
 
         result = await self._session.execute(query)
         return result.scalar_one()
+
+    async def _insert_asset_links(
+        self,
+        *,
+        message_id: uuid.UUID,
+        asset_ids: list[uuid.UUID],
+    ) -> None:
+        if not asset_ids:
+            return
+
+        await self._session.execute(
+            insert(MessageAssetModel).values(
+                [
+                    {
+                        "message_id": message_id,
+                        "asset_id": asset_id,
+                        "sort_order": position,
+                    }
+                    for position, asset_id in enumerate(asset_ids)
+                ]
+            )
+        )
+
+    def _asset_links_load(self):
+        return (
+            selectinload(MessageModel.asset_links)
+            .selectinload(MessageAssetModel.asset)
+            .selectinload(AssetModel.variants)
+        )

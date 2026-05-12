@@ -22,6 +22,38 @@ function formatChatTime(value) {
     return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function buildLastMessagePreview(lastMessage) {
+    if (!lastMessage) {
+        return {
+            text: "No messages yet",
+            isAttachmentOnly: false,
+        };
+    }
+
+    const content = lastMessage.content || "";
+    if (content.trim()) {
+        return {
+            text: content,
+            isAttachmentOnly: false,
+        };
+    }
+
+    const attachmentsCount = Array.isArray(lastMessage.attachments)
+        ? lastMessage.attachments.length
+        : 0;
+    if (attachmentsCount > 0) {
+        return {
+            text: `${attachmentsCount} ${attachmentsCount === 1 ? "attachment" : "attachments"}`,
+            isAttachmentOnly: true,
+        };
+    }
+
+    return {
+        text: "No messages yet",
+        isAttachmentOnly: false,
+    };
+}
+
 
 const ChatListItem = forwardRef((props, ref) => {
     const { store } = useContext(StoreContext);
@@ -31,7 +63,7 @@ const ChatListItem = forwardRef((props, ref) => {
         : null;
     const title = chat.display_title || directMember?.username || chat.title;
     const imageSrc = chat.display_avatar?.small_url || (directMember ? getAvatarUrl(directMember, "small") : "../../../assets/chat.svg");
-    const lastMessage = chat.last_message?.content || "No messages yet";
+    const lastMessagePreview = buildLastMessagePreview(chat.last_message);
     const lastMessageAt = chat.last_message_at || chat.last_message?.created_at;
     const unreadCount = chat.unread_count || 0;
 
@@ -51,7 +83,9 @@ const ChatListItem = forwardRef((props, ref) => {
                     <div className="time">{formatChatTime(lastMessageAt)}</div>
                 </div>
                 <div className="chat-list-item-footer">
-                    <div className="last-message">{lastMessage}</div>
+                    <div className={`last-message${lastMessagePreview.isAttachmentOnly ? " attachment-preview" : ""}`}>
+                        {lastMessagePreview.text}
+                    </div>
                     {unreadCount > 0 && <div className="unread-count">{unreadCount}</div>}
                 </div>
             </div>

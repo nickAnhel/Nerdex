@@ -38,6 +38,99 @@
     word-wrap: break-word;
 }
 
+.msg-attachments {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    margin-top: .25rem;
+}
+
+.msg-attachment-media {
+    display: block;
+    max-width: min(22rem, 60vw);
+    overflow: hidden;
+    border-radius: .5rem;
+    background-color: rgba(0, 0, 0, .18);
+}
+
+.msg .msg-attachment-media img {
+    width: 100%;
+    max-height: 18rem;
+    aspect-ratio: auto;
+    display: block;
+    object-fit: contain;
+    border-radius: 0;
+}
+
+.msg-attachment-video {
+    width: min(22rem, 60vw);
+    max-height: 18rem;
+    border-radius: .5rem;
+    background-color: #000;
+}
+
+.msg-attachment-file {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: min(17rem, 58vw);
+    padding: .5rem;
+    border-radius: .5rem;
+    background-color: rgba(255, 255, 255, .1);
+}
+
+.msg-attachment-file-icon {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+}
+
+.msg-attachment-file-icon svg {
+    width: 1.4rem;
+    height: 1.4rem;
+}
+
+.msg-attachment-file-body {
+    min-width: 0;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+}
+
+.msg-attachment-file-name,
+.msg-attachment-file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.msg-attachment-file-name {
+    font-size: .9rem;
+}
+
+.msg-attachment-file-meta {
+    color: #c7c7c7;
+    font-size: .72rem;
+}
+
+.msg-attachment-download {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: .35rem;
+    color: #fff;
+    background-color: rgba(255, 255, 255, .14);
+}
+
+.msg-attachment-download svg {
+    width: 1rem;
+    height: 1rem;
+}
+
 .msg-reply-preview {
     width: 100%;
     display: flex;

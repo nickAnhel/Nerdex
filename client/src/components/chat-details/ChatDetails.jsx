@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import "./ChatDetails.css"
 
 import { StoreContext } from "../..";
+import AssetService from "../../service/AssetService";
 import ChatService from "../../service/ChatService";
 
 import NotFound from "../not-found/NotFound";
@@ -15,6 +16,11 @@ import Event from "../event/Event";
 import ChatModal from "../chat-modal/ChatModal";
 import Modal from "../modal/Modal";
 import { getAvatarUrl } from "../../utils/avatar";
+import {
+    buildComposerAttachmentFromAsset,
+    formatAttachmentSize,
+    resolveAssetTypeForFile,
+} from "../../utils/postAttachments";
 
 
 const HISTORY_PAGE_SIZE = 50;
@@ -58,6 +64,7 @@ function normalizeTimelineItem(item, currentUserId) {
             username: item.user_id === currentUserId ? "You" : item.user.username,
             createdAt: item.created_at,
             avatarUrl: item.user?.avatar?.small_url || null,
+            attachments: normalizeMessageAttachments(item.attachments),
             status: "sent",
         };
     }
@@ -165,8 +172,29 @@ function normalizeMessagePayload(msgData, currentUserId) {
         username: msgData.user_id === currentUserId ? "You" : msgData.username,
         createdAt: msgData.created_at,
         avatarUrl: msgData.avatar_small_url || null,
+        attachments: normalizeMessageAttachments(msgData.attachments),
         status: "sent",
     };
+}
+
+function normalizeMessageAttachments(attachments = []) {
+    return attachments.map((attachment) => ({
+        asset_id: attachment.asset_id,
+        asset_type: attachment.asset_type,
+        mime_type: attachment.mime_type,
+        file_kind: attachment.file_kind || "file",
+        original_filename: attachment.original_filename || "Untitled file",
+        size_bytes: attachment.size_bytes,
+        preview_url: attachment.preview_url,
+        original_url: attachment.original_url,
+        poster_url: attachment.poster_url,
+        download_url: attachment.download_url,
+        stream_url: attachment.stream_url,
+        is_audio: Boolean(attachment.is_audio),
+        duration_ms: attachment.duration_ms || null,
+        position: attachment.position || 0,
+        uploadState: "ready",
+    }));
 }
 
 function buildReplyPreviewFromMessage(messageItem) {
@@ -194,6 +222,7 @@ function ChatDetails() {
 
     const [chatItems, setChatItems] = useState([]);
     const [message, setMessage] = useState("");
+    const [attachments, setAttachments] = useState([]);
     const [editingMessage, setEditingMessage] = useState(null);
     const [replyingToMessage, setReplyingToMessage] = useState(null);
     const [messageMenu, setMessageMenu] = useState(null);
@@ -207,6 +236,7 @@ function ChatDetails() {
     const socket = useRef(null);
     const messagesEndRef = useRef(null);
     const textareaRef = useRef(null);
+    const fileInputRef = useRef(null);
     const latestSeqRef = useRef(null);
     const pendingPrependScrollRef = useRef(null);
     const shouldScrollBottomRef = useRef(false);
@@ -538,6 +568,9 @@ function ChatDetails() {
             client_message_id: pendingMessage.clientMessageId,
             content: pendingMessage.content,
             reply_to_message_id: pendingMessage.replyToMessageId || null,
+            asset_ids: pendingMessage.attachments
+                .filter((attachment) => attachment.uploadState === "ready" && attachment.asset_id)
+                .map((attachment) => attachment.asset_id),
         }, (error, response) => {
             if (error || !response || !response.ok) {
                 console.log(response?.error?.detail || "Failed to send message");
@@ -565,8 +598,12 @@ function ChatDetails() {
 
     const clearComposer = () => {
         setMessage("");
+        setAttachments([]);
         setEditingMessage(null);
         setReplyingToMessage(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
         if (textareaRef.current) {
             textareaRef.current.value = "";
             textareaRef.current.style.height = "25px";
@@ -594,6 +631,64 @@ function ChatDetails() {
         });
     }
 
+    const uploadAttachment = async (file) => {
+        const localId = `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const pendingAttachment = {
+            id: localId,
+            original_filename: file.name,
+            size_bytes: file.size,
+            file_kind: resolveAssetTypeForFile(file),
+            uploadState: "uploading",
+            error: "",
+        };
+
+        setAttachments((items) => [...items, pendingAttachment]);
+        try {
+            const initRes = await AssetService.initUpload({
+                filename: file.name,
+                size_bytes: file.size,
+                declared_mime_type: file.type || null,
+                asset_type: resolveAssetTypeForFile(file),
+                usage_context: "message_attachment",
+            });
+            const uploadRes = await AssetService.uploadFile(
+                initRes.data.upload_url,
+                file,
+                initRes.data.upload_headers || {},
+            );
+            if (!uploadRes.ok) {
+                throw new Error("Upload failed");
+            }
+
+            const finalizeRes = await AssetService.finalizeUpload(initRes.data.asset.asset_id);
+            const attachment = buildComposerAttachmentFromAsset(
+                finalizeRes.data.asset,
+                "file",
+                file.name,
+            );
+            setAttachments((items) => items.map((item) => (
+                item.id === localId ? { ...attachment, id: localId } : item
+            )));
+        } catch (e) {
+            console.log(e);
+            setAttachments((items) => items.map((item) => (
+                item.id === localId
+                    ? { ...item, uploadState: "failed", error: "Upload failed" }
+                    : item
+            )));
+        }
+    }
+
+    const handleAttachmentSelect = (event) => {
+        const files = Array.from(event.target.files || []);
+        files.forEach(uploadAttachment);
+        event.target.value = "";
+    }
+
+    const removeAttachment = (attachmentId) => {
+        setAttachments((items) => items.filter((item) => item.id !== attachmentId));
+    }
+
     const sendMessage = () => {
         if (editingMessage) {
             updateMessage();
@@ -601,11 +696,20 @@ function ChatDetails() {
         }
 
         const trimmedMessage = message.trim();
-        if (trimmedMessage !== "") {
+        const readyAttachments = attachments.filter((attachment) => (
+            attachment.uploadState === "ready" && attachment.asset_id
+        ));
+        const hasUploadingAttachments = attachments.some((attachment) => attachment.uploadState === "uploading");
+        if (hasUploadingAttachments) {
+            return;
+        }
+
+        if (trimmedMessage !== "" || readyAttachments.length > 0) {
             const pendingMessage = {
                 clientMessageId: createClientMessageId(),
                 userId: store.user.user_id,
                 content: trimmedMessage,
+                attachments: readyAttachments,
                 replyToMessageId: replyingToMessage?.messageId || null,
                 replyPreview: replyingToMessage ? buildReplyPreviewFromMessage(replyingToMessage) : null,
                 username: "You",
@@ -627,7 +731,7 @@ function ChatDetails() {
         if (event.shiftKey && event.key === 'Enter' && message.trim() !== "") {
             return;
         }
-        else if (event.key === 'Enter' && message.trim() !== "") {
+        else if (event.key === 'Enter' && (message.trim() !== "" || attachments.length > 0)) {
             sendMessage();
             event.preventDefault();
             resizeTextarea();
@@ -838,6 +942,7 @@ function ChatDetails() {
                                     editedAt={item.editedAt}
                                     deletedAt={item.deletedAt}
                                     replyPreview={item.replyPreview}
+                                    attachments={item.attachments}
                                     onContextMenu={(event) => openMessageMenu(event, item)}
                                     onReplyPreviewClick={scrollToMessage}
                                     onRetry={() => retryMessage(item.clientMessageId)}
@@ -916,7 +1021,52 @@ function ChatDetails() {
                         <button type="button" onClick={() => setReplyingToMessage(null)}>Cancel</button>
                     </div>
                 }
+                {
+                    attachments.length > 0 &&
+                    <div className="composer-attachments">
+                        {attachments.map((attachment) => (
+                            <div
+                                key={attachment.id || attachment.asset_id}
+                                className={`composer-attachment composer-attachment-${attachment.uploadState}`}
+                            >
+                                <span className="composer-attachment-name">
+                                    {attachment.original_filename || "Untitled file"}
+                                </span>
+                                <span className="composer-attachment-meta">
+                                    {attachment.uploadState === "uploading"
+                                        ? "Uploading"
+                                        : attachment.uploadState === "failed"
+                                            ? attachment.error || "Failed"
+                                            : formatAttachmentSize(attachment.size_bytes)}
+                                </span>
+                                <button
+                                    type="button"
+                                    aria-label={`Remove ${attachment.original_filename || "attachment"}`}
+                                    onClick={() => removeAttachment(attachment.id)}
+                                >
+                                    x
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                }
                 <div className="msg-box">
+                    <button
+                        type="button"
+                        className="attach-button"
+                        aria-label="Attach file"
+                        disabled={Boolean(editingMessage)}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        +
+                    </button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="attachment-input"
+                        onChange={handleAttachmentSelect}
+                    />
                     <textarea
                         name="message-input"
                         ref={textareaRef}

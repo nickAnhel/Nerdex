@@ -79,6 +79,12 @@
     white-space: nowrap;
 }
 
+.chat-list-item .last-message.attachment-preview {
+    color: #b18cff;
+    font-style: italic;
+    font-weight: 600;
+}
+
 .chat-list-item .unread-count {
     min-width: 1.35rem;
     height: 1.35rem;
@@ -97,6 +103,10 @@
 .chat-list-item.unread .title,
 .chat-list-item.unread .last-message {
     color: #fff;
+}
+
+.chat-list-item.unread .last-message.attachment-preview {
+    color: #d8c5ff;
 }
 
 .chat-list-item.active {

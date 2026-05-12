@@ -134,6 +134,7 @@ function ChatList({ fetchChats, filters, refresh, enableRealtime = true }) {
                         chat_id: msgData.chat_id,
                         client_message_id: msgData.client_message_id,
                         content: msgData.content,
+                        attachments: msgData.attachments || [],
                         created_at: msgData.created_at,
                         user_id: msgData.user_id,
                     },

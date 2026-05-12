@@ -14,7 +14,7 @@ from src.config import settings
 from src.common.database import async_session_maker
 from src.common.exceptions import PermissionDenied
 from src.messages.dependencies import get_message_service
-from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageReply
+from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
 from src.messages.schemas import (
     MessageCreateWS,
     MessageDeleteWS,
@@ -82,6 +82,7 @@ async def _build_message_ws_payload(message) -> dict[str, Any]:
         deleted_by=message.deleted_by,
         reply_to_message_id=message.reply_to_message_id,
         reply_preview=message.reply_preview,
+        attachments=message.attachments,
     ).model_dump(mode="json")
 
 
@@ -187,6 +188,8 @@ async def on_message(
                 )
             )
         except InvalidMessageReply as exc:
+            return _error_response("bad_request", str(exc))
+        except InvalidMessageAssets as exc:
             return _error_response("bad_request", str(exc))
     message_payload = await _build_message_ws_payload(message)
 

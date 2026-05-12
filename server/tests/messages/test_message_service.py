@@ -4,7 +4,8 @@ import uuid
 import pytest
 from sqlalchemy.exc import NoResultFound
 
-from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageReply
+from src.assets.enums import AssetStatusEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
+from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
 from src.messages.schemas import MessageCreate, MessageUpdate
 from src.messages.service import DELETED_MESSAGE_STUB, MessageService
 
@@ -37,6 +38,7 @@ class _Message:
             reply_to_message.message_id if reply_to_message is not None else None
         )
         self.reply_to_message = reply_to_message
+        self.asset_links = []
 
     @property
     def content_ellipsis(self) -> str:
@@ -47,6 +49,7 @@ class _Repository:
     def __init__(self, message=None, *, raises=None) -> None:
         self.message = message
         self.raises = raises
+        self.created_asset_ids = None
 
     async def update(self, **_kwargs):
         if self.raises is not None:
@@ -58,20 +61,56 @@ class _Repository:
             raise self.raises
         return self.message
 
-    async def create(self, **_kwargs):
+    async def create(self, **kwargs):
         if self.raises is not None:
             raise self.raises
+        self.created_asset_ids = kwargs.get("asset_ids")
         return self.message
 
-    async def create_idempotent(self, **_kwargs):
+    async def create_idempotent(self, **kwargs):
         if self.raises is not None:
             raise self.raises
+        self.created_asset_ids = kwargs.get("asset_ids")
         return self.message
 
     async def get_reply_target(self, **_kwargs):
         if self.raises is not None:
             raise self.raises
         return self.message.reply_to_message
+
+
+class _Variant:
+    def __init__(self, *, status=AssetVariantStatusEnum.READY) -> None:
+        self.asset_variant_type = AssetVariantTypeEnum.ORIGINAL
+        self.status = status
+
+
+class _Asset:
+    def __init__(
+        self,
+        *,
+        asset_id,
+        owner_id,
+        status=AssetStatusEnum.READY,
+        variant_status=AssetVariantStatusEnum.READY,
+    ) -> None:
+        self.asset_id = asset_id
+        self.owner_id = owner_id
+        self.status = status
+        self.variants = [_Variant(status=variant_status)]
+
+
+class _AssetRepository:
+    def __init__(self, assets) -> None:
+        self.assets = assets
+
+    async def get_assets(self, *, asset_ids, owner_id=None):
+        return [
+            asset
+            for asset_id in asset_ids
+            if (asset := self.assets.get(asset_id)) is not None
+            and (owner_id is None or asset.owner_id == owner_id)
+        ]
 
 
 @pytest.mark.asyncio
@@ -149,6 +188,64 @@ async def test_create_message_accepts_reply_in_same_chat() -> None:
     assert result.reply_preview is not None
     assert result.reply_preview.message_id == reply_target.message_id
     assert result.reply_preview.content_preview == reply_target.content
+
+
+@pytest.mark.asyncio
+async def test_create_message_accepts_owned_ready_assets() -> None:
+    chat_id = uuid.uuid4()
+    asset_id = uuid.uuid4()
+    message = _Message(chat_id=chat_id)
+    repository = _Repository(message)
+    asset_repository = _AssetRepository({
+        asset_id: _Asset(asset_id=asset_id, owner_id=message.user_id),
+    })
+    service = MessageService(
+        repository,  # type: ignore[arg-type]
+        asset_repository=asset_repository,  # type: ignore[arg-type]
+    )
+
+    result = await service.create_message(
+        MessageCreate(
+            chat_id=chat_id,
+            user_id=message.user_id,
+            client_message_id=message.client_message_id,
+            content="",
+            asset_ids=[asset_id],
+        )
+    )
+
+    assert result.message_id == message.message_id
+    assert repository.created_asset_ids == [asset_id]
+
+
+@pytest.mark.asyncio
+async def test_create_message_rejects_foreign_or_unready_assets() -> None:
+    chat_id = uuid.uuid4()
+    asset_id = uuid.uuid4()
+    message = _Message(chat_id=chat_id)
+    repository = _Repository(message)
+    asset_repository = _AssetRepository({
+        asset_id: _Asset(
+            asset_id=asset_id,
+            owner_id=message.user_id,
+            status=AssetStatusEnum.PENDING_UPLOAD,
+        ),
+    })
+    service = MessageService(
+        repository,  # type: ignore[arg-type]
+        asset_repository=asset_repository,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(InvalidMessageAssets):
+        await service.create_message(
+            MessageCreate(
+                chat_id=chat_id,
+                user_id=message.user_id,
+                client_message_id=message.client_message_id,
+                content="",
+                asset_ids=[asset_id],
+            )
+        )
 
 
 @pytest.mark.asyncio

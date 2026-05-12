@@ -25,8 +25,10 @@ class _Session:
     def __init__(self, results) -> None:
         self.results = list(results)
         self.committed = False
+        self.statements = []
 
-    async def execute(self, _stmt):
+    async def execute(self, stmt):
+        self.statements.append(stmt)
         return _Result(self.results.pop(0))
 
     async def commit(self):
@@ -48,7 +50,7 @@ async def test_idempotent_duplicate_message_reuses_existing_timeline(
         content="hello",
         created_at=datetime.datetime.now(datetime.timezone.utc),
     )
-    session = _Session([None, message, 7])
+    session = _Session([None, message, 7, message])
     created_timeline_items = []
 
     async def fake_create_message_timeline_item(**kwargs):
@@ -74,3 +76,21 @@ async def test_idempotent_duplicate_message_reuses_existing_timeline(
     assert result.chat_seq == 7
     assert created_timeline_items == []
     assert session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_get_single_refreshes_loaded_relationships() -> None:
+    message = MessageModel(
+        message_id=uuid.uuid4(),
+        chat_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        content="hello",
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    session = _Session([message])
+    repository = MessageRepository(session)  # type: ignore[arg-type]
+
+    result = await repository.get_single(message_id=message.message_id)
+
+    assert result is message
+    assert session.statements[-1].get_execution_options()["populate_existing"] is True

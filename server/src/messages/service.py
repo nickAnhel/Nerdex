@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
+from src.assets.enums import AssetStatusEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
+from src.assets.repository import AssetRepository
 from src.chats.exceptions import ChatNotFound
-from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageReply
+from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
+from src.messages.presentation import DELETED_MESSAGE_STUB, build_message_get_with_user
 from src.messages.repository import MessageRepository
 from src.messages.schemas import (
     MessageCreate,
@@ -12,31 +18,45 @@ from src.messages.schemas import (
     MessageReplyPreview,
     MessageUpdate,
 )
-from src.users.presentation import build_user_get
 
-DELETED_MESSAGE_STUB = "Message deleted"
+if TYPE_CHECKING:
+    from src.assets.storage import AssetStorage
 
 
 class MessageService:
-    def __init__(self, repostory: MessageRepository) -> None:
+    def __init__(
+        self,
+        repostory: MessageRepository,
+        asset_repository: AssetRepository | None = None,
+        storage: AssetStorage | None = None,
+    ) -> None:
         self._repository = repostory
+        self._asset_repository = asset_repository
+        self._storage = storage
 
     async def create_message(
         self,
         message: MessageCreate,
     ) -> MessageGetWithUser:
         try:
+            asset_ids = self._dedupe_asset_ids(message.asset_ids)
+            if asset_ids:
+                await self._ensure_assets_can_be_attached(
+                    asset_ids=asset_ids,
+                    owner_id=message.user_id,
+                )
+
             if message.reply_to_message_id is not None:
                 await self._ensure_reply_target_belongs_to_chat(
                     reply_to_message_id=message.reply_to_message_id,
                     chat_id=message.chat_id,
                 )
 
-            data = message.model_dump()
+            data = message.model_dump(exclude={"asset_ids"})
             if message.client_message_id is not None:
-                msg = await self._repository.create_idempotent(data=data)
+                msg = await self._repository.create_idempotent(data=data, asset_ids=asset_ids)
             else:
-                msg = await self._repository.create(data=data)
+                msg = await self._repository.create(data=data, asset_ids=asset_ids)
             return await self._build_message_with_user(msg)
         except (IntegrityError, NoResultFound) as exc:
             raise ChatNotFound(f"Chat with id '{message.chat_id}' not found") from exc
@@ -161,30 +181,7 @@ class MessageService:
         self,
         message,
     ) -> MessageGetWithUser:
-        reply_to_message = getattr(message, "reply_to_message", None)
-        return MessageGetWithUser(
-            message_id=message.message_id,
-            chat_id=message.chat_id,
-            client_message_id=message.client_message_id,
-            content=(
-                DELETED_MESSAGE_STUB
-                if message.deleted_at is not None
-                else message.content
-            ),
-            user_id=message.user_id,
-            created_at=message.created_at,
-            edited_at=message.edited_at,
-            deleted_at=message.deleted_at,
-            deleted_by=message.deleted_by,
-            chat_seq=getattr(message, "chat_seq", None),
-            reply_to_message_id=getattr(message, "reply_to_message_id", None),
-            reply_preview=(
-                self._build_reply_preview(reply_to_message)
-                if reply_to_message is not None
-                else None
-            ),
-            user=await build_user_get(message.user),
-        )
+        return await build_message_get_with_user(message, storage=self._storage)
 
     def _build_reply_preview(self, message) -> MessageReplyPreview:
         deleted = message.deleted_at is not None
@@ -194,3 +191,44 @@ class MessageService:
             content_preview=DELETED_MESSAGE_STUB if deleted else message.content_ellipsis,
             deleted=deleted,
         )
+
+    def _dedupe_asset_ids(self, asset_ids: list[uuid.UUID]) -> list[uuid.UUID]:
+        return list(dict.fromkeys(asset_ids))
+
+    async def _ensure_assets_can_be_attached(
+        self,
+        *,
+        asset_ids: list[uuid.UUID],
+        owner_id: uuid.UUID,
+    ) -> None:
+        if self._asset_repository is None:
+            raise InvalidMessageAssets("Message attachments are not configured")
+
+        assets = await self._asset_repository.get_assets(asset_ids=asset_ids, owner_id=owner_id)
+        assets_by_id = {asset.asset_id: asset for asset in assets}
+        missing_asset_ids = [asset_id for asset_id in asset_ids if asset_id not in assets_by_id]
+        if missing_asset_ids:
+            raise InvalidMessageAssets(
+                "Some message attachments are unavailable for this user: "
+                + ", ".join(str(asset_id) for asset_id in missing_asset_ids)
+            )
+
+        for asset_id in asset_ids:
+            asset = assets_by_id[asset_id]
+            if asset.status not in {
+                AssetStatusEnum.UPLOADED,
+                AssetStatusEnum.PROCESSING,
+                AssetStatusEnum.READY,
+            }:
+                raise InvalidMessageAssets(f"Asset {asset_id} is not ready to attach")
+
+            original_variant = next(
+                (
+                    variant
+                    for variant in getattr(asset, "variants", [])
+                    if variant.asset_variant_type == AssetVariantTypeEnum.ORIGINAL
+                ),
+                None,
+            )
+            if original_variant is None or original_variant.status != AssetVariantStatusEnum.READY:
+                raise InvalidMessageAssets(f"Asset {asset_id} original file is not available")

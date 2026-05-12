@@ -15,4 +15,5 @@ def build_socket_message_create(
         client_message_id=msg.client_message_id,
         content=msg.content,
         reply_to_message_id=msg.reply_to_message_id,
+        asset_ids=msg.asset_ids,
     )

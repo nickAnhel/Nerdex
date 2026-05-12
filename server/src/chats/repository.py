@@ -5,7 +5,7 @@ from sqlalchemy import delete, desc, func, insert, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
-from src.assets.models import AssetModel
+from src.assets.models import AssetModel, MessageAssetModel
 from src.chats.enums import ChatMemberRole, ChatType
 from src.chats.models import ChatModel, ChatTimelineItemModel, MembershipModel
 from src.events.models import EventModel
@@ -145,6 +145,7 @@ class ChatRepository:
                     .selectinload(UserModel.avatar_asset)
                     .selectinload(AssetModel.variants),
                     selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                    self._message_asset_links_load(),
                 )
             )
             messages = (await self._session.execute(messages_query)).scalars().all()
@@ -517,6 +518,7 @@ class ChatRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                self._message_asset_links_load(),
             )
         )
 
@@ -570,5 +572,12 @@ class ChatRepository:
         return (
             selectinload(ChatModel.members)
             .selectinload(UserModel.avatar_asset)
+            .selectinload(AssetModel.variants)
+        )
+
+    def _message_asset_links_load(self):
+        return (
+            selectinload(MessageModel.asset_links)
+            .selectinload(MessageAssetModel.asset)
             .selectinload(AssetModel.variants)
         )

@@ -4,7 +4,10 @@ import { Link } from "react-router-dom";
 import "./Message.css";
 
 import { StoreContext } from "../..";
+import DownloadIcon from "../icons/DownloadIcon";
+import FileTypeIcon from "../icons/FileTypeIcon";
 import { getAvatarUrl } from "../../utils/avatar";
+import { formatAttachmentSize } from "../../utils/postAttachments";
 
 
 function Message({
@@ -18,6 +21,7 @@ function Message({
     editedAt = null,
     deletedAt = null,
     replyPreview = null,
+    attachments = [],
     onContextMenu,
     onReplyPreviewClick,
     onRetry,
@@ -73,7 +77,10 @@ function Message({
                             <p>{replyPreview.contentPreview}</p>
                         </button>
                     }
-                    <div className="msg-text">{visibleContent}</div>
+                    {visibleContent && <div className="msg-text">{visibleContent}</div>}
+                    {!isDeleted && attachments.length > 0 && (
+                        <MessageAttachments attachments={attachments} />
+                    )}
                     {
                         status === "failed" && !isDeleted &&
                         <button className="msg-retry" type="button" onClick={onRetry}>Retry</button>
@@ -82,6 +89,79 @@ function Message({
             </div>
         </>
     )
+}
+
+function MessageAttachments({ attachments = [] }) {
+    return (
+        <div className="msg-attachments">
+            {attachments.map((attachment) => {
+                const key = `${attachment.asset_id}-${attachment.position}`;
+                const isImage = attachment.asset_type === "image" || attachment.file_kind === "image";
+                const isVideo = attachment.asset_type === "video" || attachment.file_kind === "video";
+                const mediaUrl = attachment.preview_url || attachment.original_url || attachment.stream_url;
+                const metaParts = [
+                    attachment.file_kind?.toUpperCase() || "FILE",
+                    formatAttachmentSize(attachment.size_bytes),
+                ].filter(Boolean);
+
+                if (isImage && mediaUrl) {
+                    return (
+                        <a
+                            key={key}
+                            className="msg-attachment-media"
+                            href={attachment.original_url || mediaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            <img src={mediaUrl} alt={attachment.original_filename || "Image attachment"} />
+                        </a>
+                    );
+                }
+
+                if (isVideo && mediaUrl) {
+                    return (
+                        <video
+                            key={key}
+                            className="msg-attachment-video"
+                            src={attachment.stream_url || attachment.original_url || mediaUrl}
+                            poster={attachment.poster_url || undefined}
+                            controls
+                            preload="metadata"
+                        />
+                    );
+                }
+
+                return (
+                    <div key={key} className="msg-attachment-file">
+                        <span className="msg-attachment-file-icon" aria-hidden="true">
+                            <FileTypeIcon kind={attachment.file_kind} />
+                        </span>
+                        <span className="msg-attachment-file-body">
+                            <span className="msg-attachment-file-name">
+                                {attachment.original_filename || "Untitled file"}
+                            </span>
+                            {metaParts.length > 0 && (
+                                <span className="msg-attachment-file-meta">{metaParts.join(" . ")}</span>
+                            )}
+                        </span>
+                        {attachment.download_url && (
+                            <a
+                                className="msg-attachment-download"
+                                href={attachment.download_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={`Download ${attachment.original_filename || "file"}`}
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <DownloadIcon />
+                            </a>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
 }
 
 export default Message

@@ -26,7 +26,9 @@ async def get_chat_messages(
     limit: int = 100,
     user: UserGet = Depends(get_current_user),
     service: MessageService = Depends(get_message_service),
+    chat_service: ChatService = Depends(get_chat_service),
 ) -> list[MessageGetWithUser]:
+    await chat_service.ensure_user_is_chat_member(chat_id=chat_id, user_id=user.user_id)
     return await service.get_messages(
         chat_id=chat_id,
         order=order,
@@ -45,7 +47,9 @@ async def search_chat_messages(
     limit: int = 100,
     user: UserGet = Depends(get_current_user),
     service: MessageService = Depends(get_message_service),
+    chat_service: ChatService = Depends(get_chat_service),
 ) -> list[MessageGetWithUser]:
+    await chat_service.ensure_user_is_chat_member(chat_id=chat_id, user_id=user.user_id)
     return await service.search_messages(
         chat_id=chat_id,
         query=query,

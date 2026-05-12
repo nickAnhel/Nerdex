@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.assets.dependencies import get_asset_storage
 from src.chats.repository import ChatRepository
 from src.chats.service import ChatService
 from src.common.database import get_async_session
@@ -9,4 +10,4 @@ from src.common.database import get_async_session
 def get_chat_service(
     session: AsyncSession = Depends(get_async_session),
 ) -> ChatService:
-    return ChatService(ChatRepository(session))
+    return ChatService(ChatRepository(session), storage=get_asset_storage())
