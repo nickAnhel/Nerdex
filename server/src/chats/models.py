@@ -50,6 +50,7 @@ class MembershipModel(Base):
             name="ck_chat_user_role",
         ),
         Index("ix_chat_user_user_id", "user_id"),
+        Index("ix_chat_user_last_read_message_id", "last_read_message_id"),
     )
 
     chat_id: Mapped[uuid.UUID] = mapped_column(
@@ -61,3 +62,8 @@ class MembershipModel(Base):
         primary_key=True,
     )
     role: Mapped[str] = mapped_column(default=ChatMemberRole.MEMBER.value)
+    last_read_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("messages.message_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_muted: Mapped[bool] = mapped_column(default=False)

@@ -34,6 +34,10 @@ export default class ChatService {
         return api.get("/chats/user", { params });
     }
 
+    static async markChatRead(chatId) {
+        return api.post(`/chats/${chatId}/read`);
+    }
+
     static async deleteChat(chatId) {
         return api.delete(`/chats/${chatId}`);
     }

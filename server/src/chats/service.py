@@ -13,6 +13,7 @@ from src.chats.exceptions import (
 from src.chats.repository import ChatRepository
 from src.chats.schemas import (
     ChatCreate,
+    ChatDialogGet,
     ChatGet,
     ChatUpdate,
     EventHistoryItem,
@@ -20,6 +21,7 @@ from src.chats.schemas import (
 )
 from src.common.exceptions import PermissionDenied
 from src.messages.models import MessageModel
+from src.messages.schemas import MessageGetWithUser
 from src.users.presentation import build_user_get
 from src.users.schemas import UserGet
 
@@ -368,15 +370,25 @@ class ChatService:
         order_desc: bool,
         offset: int,
         limit: int,
-    ) -> list[ChatGet]:
-        chats = await self._repository.get_user_joined_chats(
+    ) -> list[ChatDialogGet]:
+        chats = await self._repository.get_user_dialogs(
             user_id=user.user_id,
-            order=order,
-            order_desc=order_desc,
             offset=offset,
             limit=limit,
         )
-        return [await self._build_chat_get(chat) for chat in chats]
+        return [
+            await self._build_chat_dialog_get(chat, user_id=user.user_id)
+            for chat in chats
+        ]
+
+    async def mark_chat_read(
+        self,
+        *,
+        chat_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> uuid.UUID | None:
+        await self.ensure_user_is_chat_member(chat_id=chat_id, user_id=user_id)
+        return await self._repository.mark_read(chat_id=chat_id, user_id=user_id)
 
     async def _build_chat_get(self, chat) -> ChatGet:
         return ChatGet(
@@ -389,6 +401,61 @@ class ChatService:
                 await build_user_get(member)
                 for member in getattr(chat, "members", [])
             ],
+        )
+
+    async def _build_chat_dialog_get(
+        self,
+        chat,
+        *,
+        user_id: uuid.UUID,
+    ) -> ChatDialogGet:
+        chat_get = await self._build_chat_get(chat)
+        direct_member = None
+        if chat.chat_type == ChatType.DIRECT.value:
+            direct_member = next(
+                (
+                    member
+                    for member in chat_get.members
+                    if member.user_id != user_id
+                ),
+                None,
+            )
+
+        last_message = getattr(chat, "last_message", None)
+        membership = getattr(chat, "membership", None)
+
+        return ChatDialogGet(
+            **chat_get.model_dump(),
+            display_title=direct_member.username if direct_member is not None else chat.title,
+            display_avatar=direct_member.avatar if direct_member is not None else None,
+            last_message=(
+                await self._build_message_get_with_user(last_message)
+                if last_message is not None
+                else None
+            ),
+            last_message_at=getattr(chat, "last_message_at", None),
+            unread_count=getattr(chat, "unread_count", 0),
+            is_muted=(
+                getattr(membership, "is_muted", False)
+                if membership is not None
+                else False
+            ),
+            last_read_message_id=(
+                getattr(membership, "last_read_message_id", None)
+                if membership is not None
+                else None
+            ),
+        )
+
+    async def _build_message_get_with_user(self, message) -> MessageGetWithUser:
+        return MessageGetWithUser(
+            message_id=message.message_id,
+            chat_id=message.chat_id,
+            client_message_id=message.client_message_id,
+            content=message.content,
+            user_id=message.user_id,
+            created_at=message.created_at,
+            user=await build_user_get(message.user),
         )
 
     def _build_direct_key(

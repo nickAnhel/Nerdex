@@ -58,7 +58,7 @@ function Chats() {
 
             {
                 isSearch ?
-                    <ChatList fetchChats={ChatService.searchChats} filters={{ query: query }} refresh={query} />
+                    <ChatList fetchChats={ChatService.searchChats} filters={{ query: query }} refresh={query} enableRealtime={false} />
                     :
                     <ChatList fetchChats={ChatService.getUserJoinedChats} refresh={`${isSearch}-${refreshChats}`} />
             }

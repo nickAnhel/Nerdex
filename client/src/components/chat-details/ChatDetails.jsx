@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useContext } from "react";
+import { useCallback, useEffect, useState, useRef, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 
@@ -63,6 +63,14 @@ function ChatDetails() {
     const chatTitle = directMember?.username || chat.title;
     const chatImage = directMember ? getAvatarUrl(directMember, "small") : "../../../assets/chat.svg";
 
+    const markCurrentChatRead = useCallback(async (chatId) => {
+        try {
+            await ChatService.markChatRead(chatId);
+        } catch (e) {
+            console.log(e);
+        }
+    }, []);
+
     useEffect(() => {
         const fetchChat = async () => {
             try {
@@ -85,6 +93,13 @@ function ChatDetails() {
         fetchChat();
     }, [params.chatId])
 
+    useEffect(() => {
+        if (!chat.chat_id) {
+            return;
+        }
+
+        markCurrentChatRead(chat.chat_id);
+    }, [chat.chat_id, markCurrentChatRead]);
 
     useEffect(() => {
         if (messagesEndRef.current) {
@@ -226,6 +241,7 @@ function ChatDetails() {
                 avatarUrl: msgData.avatar_small_url || null,
                 status: "sent",
             });
+            markCurrentChatRead(msgData.chat_id);
         })
 
         return () => {
@@ -236,7 +252,7 @@ function ChatDetails() {
             socket.current.off("connect_error");
             socket.current.disconnect();
         }
-    }, [chat, store.user]);
+    }, [chat, store.user, markCurrentChatRead]);
 
     const resizeTextarea = () => {
         let rowsTotalHeight = textareaRef.current.value.split("\n").length * 25;
@@ -323,6 +339,7 @@ function ChatDetails() {
                 avatarUrl: msgData.avatar_small_url || null,
                 status: "sent",
             });
+            markCurrentChatRead(msgData.chat_id);
         });
     }
 

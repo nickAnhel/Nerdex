@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.models import Base
@@ -16,6 +16,7 @@ class MessageModel(Base):
             "client_message_id",
             name="uq_messages_chat_user_client_message_id",
         ),
+        Index("ix_messages_chat_created_at", "chat_id", "created_at"),
     )
 
     message_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

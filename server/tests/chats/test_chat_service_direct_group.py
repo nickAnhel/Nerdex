@@ -47,6 +47,8 @@ class FakeChatRepository:
         self.created_data = None
         self.created_member_roles = None
         self.created_chat_id = uuid.uuid4()
+        self.dialogs = []
+        self.marked_read = None
 
     async def get_by_direct_key(self, direct_key: str):
         if self.existing_direct and self.existing_direct.direct_key == direct_key:
@@ -80,6 +82,16 @@ class FakeChatRepository:
             direct_key=self.created_data.get("direct_key"),
             members=members,
         )
+
+    async def get_user_dialogs(self, *, user_id, offset, limit):
+        return self.dialogs[offset:offset + limit]
+
+    async def is_member(self, *, chat_id, user_id):
+        return True
+
+    async def mark_read(self, *, chat_id, user_id):
+        self.marked_read = (chat_id, user_id)
+        return uuid.uuid4()
 
 
 @pytest.mark.asyncio
@@ -175,3 +187,88 @@ async def test_create_group_chat_assigns_owner_and_member_roles() -> None:
         (owner_id, ChatMemberRole.OWNER),
         (member_id, ChatMemberRole.MEMBER),
     ]
+
+
+@pytest.mark.asyncio
+async def test_user_dialogs_resolve_direct_display_title_and_unread_state() -> None:
+    owner_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+    read_message_id = uuid.uuid4()
+    repository = FakeChatRepository()
+    repository.dialogs = [
+        _chat(
+            chat_id=uuid.uuid4(),
+            owner_id=owner_id,
+            chat_type=ChatType.DIRECT.value,
+            title="Direct chat",
+            is_private=True,
+            members=[
+                _user(owner_id, "owner"),
+                _user(member_id, "member"),
+            ],
+        )
+    ]
+    setattr(
+        repository.dialogs[0],
+        "membership",
+        SimpleNamespace(
+            is_muted=True,
+            last_read_message_id=read_message_id,
+        ),
+    )
+    setattr(repository.dialogs[0], "unread_count", 3)
+    service = ChatService(repository)  # type: ignore[arg-type]
+
+    dialogs = await service.get_user_joined_chats(
+        user=_user(owner_id, "owner"),
+        order=None,  # type: ignore[arg-type]
+        order_desc=True,
+        offset=0,
+        limit=10,
+    )
+
+    assert dialogs[0].display_title == "member"
+    assert dialogs[0].display_avatar is None
+    assert dialogs[0].unread_count == 3
+    assert dialogs[0].is_muted is True
+    assert dialogs[0].last_read_message_id == read_message_id
+
+
+@pytest.mark.asyncio
+async def test_user_dialogs_keep_group_display_title() -> None:
+    owner_id = uuid.uuid4()
+    repository = FakeChatRepository()
+    repository.dialogs = [
+        _chat(
+            chat_id=uuid.uuid4(),
+            owner_id=owner_id,
+            chat_type=ChatType.GROUP.value,
+            title="Study group",
+            members=[_user(owner_id, "owner")],
+        )
+    ]
+    setattr(repository.dialogs[0], "membership", SimpleNamespace())
+    service = ChatService(repository)  # type: ignore[arg-type]
+
+    dialogs = await service.get_user_joined_chats(
+        user=_user(owner_id, "owner"),
+        order=None,  # type: ignore[arg-type]
+        order_desc=True,
+        offset=0,
+        limit=10,
+    )
+
+    assert dialogs[0].display_title == "Study group"
+    assert dialogs[0].display_avatar is None
+
+
+@pytest.mark.asyncio
+async def test_mark_chat_read_updates_current_member() -> None:
+    user_id = uuid.uuid4()
+    chat_id = uuid.uuid4()
+    repository = FakeChatRepository()
+    service = ChatService(repository)  # type: ignore[arg-type]
+
+    await service.mark_chat_read(chat_id=chat_id, user_id=user_id)
+
+    assert repository.marked_read == (chat_id, user_id)

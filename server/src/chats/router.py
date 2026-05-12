@@ -8,6 +8,7 @@ from src.chats.dependencies import get_chat_service
 from src.chats.enums import ChatOrder, ChatType
 from src.chats.schemas import (
     ChatCreate,
+    ChatDialogGet,
     ChatGet,
     ChatUpdate,
     EventHistoryItem,
@@ -92,7 +93,7 @@ async def get_joined_chats(
     limit: int = 100,
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
-) -> list[ChatGet]:
+) -> list[ChatDialogGet]:
     return await service.get_user_joined_chats(
         user=user,
         order=order,
@@ -100,6 +101,16 @@ async def get_joined_chats(
         offset=offset,
         limit=limit,
     )
+
+
+@router.post("/{chat_id}/read")
+async def mark_chat_read(
+    chat_id: uuid.UUID,
+    user: UserGet = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+) -> Status:
+    await service.mark_chat_read(chat_id=chat_id, user_id=user.user_id)
+    return Status(detail="Successfully marked chat as read")
 
 
 @router.get("/{chat_id}")
