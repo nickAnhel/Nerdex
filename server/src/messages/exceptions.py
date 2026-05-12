@@ -4,3 +4,7 @@ class CantUpdateMessage(Exception):
 
 class CantDeleteMessage(Exception):
     """Raised can not delete message"""
+
+
+class InvalidMessageReply(Exception):
+    """Raised when a message reply target is invalid"""

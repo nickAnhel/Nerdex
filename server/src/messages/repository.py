@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, desc, insert, select, update
+from sqlalchemy import desc, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -29,6 +29,7 @@ class MessageRepository:
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
             )
         )
         result = await self._session.execute(stmt)
@@ -58,6 +59,7 @@ class MessageRepository:
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
             )
         )
         result = await self._session.execute(stmt)
@@ -95,6 +97,7 @@ class MessageRepository:
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
             )
         )
 
@@ -120,6 +123,7 @@ class MessageRepository:
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
             )
         )
 
@@ -127,17 +131,52 @@ class MessageRepository:
         return list(reversed(result.scalars().all()))
 
     async def delete(self, **filters) -> int:
-        stmt = delete(MessageModel).filter_by(**filters)
+        stmt = (
+            update(MessageModel)
+            .values(deleted_at=func.now(), deleted_by=filters.get("user_id"))
+            .filter_by(**filters)
+            .where(MessageModel.deleted_at.is_(None))
+        )
 
         result = await self._session.execute(stmt)
         await self._session.commit()
         return result.rowcount
 
+    async def soft_delete(
+        self,
+        *,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> MessageModel:
+        stmt = (
+            update(MessageModel)
+            .values(deleted_at=func.now(), deleted_by=user_id)
+            .filter_by(message_id=message_id, user_id=user_id)
+            .where(MessageModel.deleted_at.is_(None))
+            .returning(MessageModel)
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+            )
+        )
+
+        result = await self._session.execute(stmt)
+        await self._session.commit()
+        return result.scalar_one()
+
     async def delete_multi(
         self,
         chat_id: uuid.UUID,
     ) -> int:
-        stmt = delete(MessageModel).filter_by(chat_id=chat_id)
+        stmt = (
+            update(MessageModel)
+            .values(deleted_at=func.now())
+            .filter_by(chat_id=chat_id)
+            .where(MessageModel.deleted_at.is_(None))
+        )
 
         result = await self._session.execute(stmt)
         await self._session.commit()
@@ -150,9 +189,17 @@ class MessageRepository:
     ) -> MessageModel:
         stmt = (
             update(MessageModel)
-            .values(**data)
+            .values(**data, edited_at=func.now())
             .filter_by(**filters)
+            .where(MessageModel.deleted_at.is_(None))
             .returning(MessageModel)
+            .options(
+                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                selectinload(MessageModel.user)
+                .selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+            )
         )
 
         result = await self._session.execute(stmt)
@@ -173,6 +220,7 @@ class MessageRepository:
             .filter_by(**filters)
             .where(
                 MessageModel.content.ilike(f"%{q}%"),
+                MessageModel.deleted_at.is_(None),
             )
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
@@ -182,8 +230,23 @@ class MessageRepository:
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
             )
         )
 
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def get_reply_target(
+        self,
+        *,
+        message_id: uuid.UUID,
+    ) -> MessageModel:
+        query = (
+            select(MessageModel)
+            .filter_by(message_id=message_id)
+            .options(selectinload(MessageModel.user))
+        )
+
+        result = await self._session.execute(query)
+        return result.scalar_one()

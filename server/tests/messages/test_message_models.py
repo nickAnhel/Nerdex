@@ -20,3 +20,23 @@ def test_message_chat_created_at_index_is_registered() -> None:
 
     index = indexes["ix_messages_chat_created_at"]
     assert [column.name for column in index.columns] == ["chat_id", "created_at"]
+
+
+def test_message_edit_delete_columns_are_registered() -> None:
+    columns = MessageModel.__table__.columns
+
+    assert "edited_at" in columns
+    assert "deleted_at" in columns
+    assert "deleted_by" in columns
+
+
+def test_message_reply_to_message_column_and_index_are_registered() -> None:
+    columns = MessageModel.__table__.columns
+    indexes = {index.name: index for index in MessageModel.__table__.indexes}
+
+    assert "reply_to_message_id" in columns
+    index = indexes["ix_messages_chat_reply_to_message_id"]
+    assert [column.name for column in index.columns] == [
+        "chat_id",
+        "reply_to_message_id",
+    ]

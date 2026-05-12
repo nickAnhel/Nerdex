@@ -38,6 +38,56 @@
     word-wrap: break-word;
 }
 
+.msg-reply-preview {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    margin: .15rem 0 .25rem;
+    padding: .35rem .5rem;
+    border: 0;
+    border-left: .2rem solid #9D50FF;
+    border-radius: .4rem;
+    color: #dbdbdb;
+    background-color: rgba(255, 255, 255, .08);
+    text-align: left;
+    cursor: pointer;
+}
+
+.you .msg-reply-preview {
+    border-left-color: #fff;
+    background-color: rgba(0, 0, 0, .14);
+}
+
+.msg-reply-preview span {
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.msg-reply-preview p {
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #bdbdbd;
+    font-size: .85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.msg-reply-preview-deleted p {
+    color: #9c9c9c;
+    font-style: italic;
+}
+
+.msg-deleted .msg-text {
+    color: #9c9c9c;
+    font-style: italic;
+}
+
+.msg-deleted .msg-info {
+    opacity: .8;
+}
+
 .you {
     flex-direction: row-reverse;
     align-self: flex-end;

@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Any
 
@@ -13,9 +14,15 @@ from src.config import settings
 from src.common.database import async_session_maker
 from src.common.exceptions import PermissionDenied
 from src.messages.dependencies import get_message_service
-from src.messages.schemas import MessageCreateWS, MessageGetWS
+from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageReply
+from src.messages.schemas import (
+    MessageCreateWS,
+    MessageDeleteWS,
+    MessageGetWS,
+    MessageUpdate,
+    MessageUpdateWS,
+)
 from src.users.repository import UserRepository
-from src.users.presentation import build_user_avatar_get
 from src.users.service import UserService
 
 socketio_manager = socketio.AsyncRedisManager(settings.redis.socketio_manager_url)
@@ -56,6 +63,26 @@ async def _get_socket_user_id(sid: str) -> uuid.UUID:
         raise SocketAuthenticationError("Unauthorized")
 
     return user_id
+
+
+async def _build_message_ws_payload(message) -> dict[str, Any]:
+    avatar = message.user.avatar
+    return MessageGetWS(
+        message_id=message.message_id,
+        chat_id=message.chat_id,
+        client_message_id=message.client_message_id,
+        chat_seq=message.chat_seq,
+        username=message.user.username,
+        user_id=message.user_id,
+        avatar_small_url=avatar.small_url if avatar is not None else None,
+        content=message.content,
+        created_at=message.created_at,
+        edited_at=message.edited_at,
+        deleted_at=message.deleted_at,
+        deleted_by=message.deleted_by,
+        reply_to_message_id=message.reply_to_message_id,
+        reply_preview=message.reply_preview,
+    ).model_dump(mode="json")
 
 
 @sio.event
@@ -151,27 +178,17 @@ async def on_message(
             return _error_response("forbidden", str(exc))
 
         message_service = get_message_service(session)
-        message = await message_service.create_message(
-            build_socket_message_create(
-                chat_id=chat_id,
-                user_id=user_id,
-                msg=msg,
+        try:
+            message = await message_service.create_message(
+                build_socket_message_create(
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    msg=msg,
+                )
             )
-        )
-    avatar = await build_user_avatar_get(message.user)
-
-    message_dto = MessageGetWS(
-        message_id=message.message_id,
-        chat_id=message.chat_id,
-        client_message_id=message.client_message_id,
-        chat_seq=message.chat_seq,
-        username=message.user.username,
-        user_id=message.user_id,
-        avatar_small_url=avatar.small_url if avatar is not None else None,
-        content=message.content,
-        created_at=message.created_at,
-    )
-    message_payload = message_dto.model_dump(mode="json")
+        except InvalidMessageReply as exc:
+            return _error_response("bad_request", str(exc))
+    message_payload = await _build_message_ws_payload(message)
 
     await sio.emit(
         "message:created",
@@ -180,8 +197,73 @@ async def on_message(
     )
     await sio.emit(
         "message",
-        message_dto.model_dump_json(),
+        json.dumps(message_payload),
         room=str(chat_id),
         skip_sid=sid,
+    )
+    return _success_response(message_payload)
+
+
+@sio.on("message:update")
+async def on_message_update(
+    sid: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        user_id = await _get_socket_user_id(sid)
+        msg = MessageUpdateWS.model_validate(data)
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return _error_response("bad_request", "Invalid message update payload")
+    except SocketAuthenticationError as exc:
+        return _error_response("unauthorized", str(exc))
+
+    async with async_session_maker() as session:
+        message_service = get_message_service(session)
+        try:
+            message = await message_service.update_message(
+                data=MessageUpdate(content=msg.content),
+                message_id=msg.message_id,
+                user_id=user_id,
+            )
+        except CantUpdateMessage as exc:
+            return _error_response("forbidden", str(exc))
+
+    message_payload = await _build_message_ws_payload(message)
+    await sio.emit(
+        "message:updated",
+        message_payload,
+        room=str(message.chat_id),
+    )
+    return _success_response(message_payload)
+
+
+@sio.on("message:delete")
+async def on_message_delete(
+    sid: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        user_id = await _get_socket_user_id(sid)
+        msg = MessageDeleteWS.model_validate(data)
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return _error_response("bad_request", "Invalid message delete payload")
+    except SocketAuthenticationError as exc:
+        return _error_response("unauthorized", str(exc))
+
+    async with async_session_maker() as session:
+        message_service = get_message_service(session)
+        try:
+            message = await message_service.delete_message(
+                message_id=msg.message_id,
+                user_id=user_id,
+            )
+        except CantDeleteMessage as exc:
+            return _error_response("forbidden", str(exc))
+
+    message_payload = await _build_message_ws_payload(message)
+    await sio.emit(
+        "message:deleted",
+        message_payload,
+        room=str(message.chat_id),
     )
     return _success_response(message_payload)

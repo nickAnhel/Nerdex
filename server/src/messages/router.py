@@ -7,7 +7,7 @@ from src.chats.dependencies import get_chat_service
 from src.chats.service import ChatService
 from src.messages.dependencies import get_message_service
 from src.messages.enums import MessagesOrder
-from src.messages.schemas import MessageGet, MessageGetWithUser, MessageUpdate
+from src.messages.schemas import MessageGetWithUser, MessageUpdate
 from src.messages.service import MessageService
 from src.common.schemas import Status
 from src.users.schemas import UserGet
@@ -86,8 +86,8 @@ async def update_message(
     data: MessageUpdate,
     user: UserGet = Depends(get_current_user),
     service: MessageService = Depends(get_message_service),
-) -> MessageGet:
-    return await service.udpate_message(
+) -> MessageGetWithUser:
+    return await service.update_message(
         data=data,
         message_id=message_id,
         user_id=user.user_id,

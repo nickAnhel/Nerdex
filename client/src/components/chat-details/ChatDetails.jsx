@@ -13,6 +13,7 @@ import Message from "../message/Message";
 import Event from "../event/Event";
 
 import ChatModal from "../chat-modal/ChatModal";
+import Modal from "../modal/Modal";
 import { getAvatarUrl } from "../../utils/avatar";
 
 
@@ -49,6 +50,11 @@ function normalizeTimelineItem(item, currentUserId) {
             clientMessageId: item.client_message_id,
             userId: item.user_id,
             content: item.content,
+            editedAt: item.edited_at,
+            deletedAt: item.deleted_at,
+            deletedBy: item.deleted_by,
+            replyToMessageId: item.reply_to_message_id,
+            replyPreview: normalizeReplyPreview(item.reply_preview),
             username: item.user_id === currentUserId ? "You" : item.user.username,
             createdAt: item.created_at,
             avatarUrl: item.user?.avatar?.small_url || null,
@@ -69,6 +75,19 @@ function normalizeTimelineItem(item, currentUserId) {
     }
 
     return null;
+}
+
+function normalizeReplyPreview(replyPreview) {
+    if (!replyPreview) {
+        return null;
+    }
+
+    return {
+        messageId: replyPreview.message_id,
+        senderDisplayName: replyPreview.sender_display_name,
+        contentPreview: replyPreview.content_preview,
+        deleted: replyPreview.deleted,
+    };
 }
 
 function sortTimelineItems(items) {
@@ -131,6 +150,34 @@ function getTimelineBounds(items) {
     };
 }
 
+function normalizeMessagePayload(msgData, currentUserId) {
+    return {
+        messageId: msgData.message_id,
+        clientMessageId: msgData.client_message_id,
+        chatSeq: msgData.chat_seq,
+        userId: msgData.user_id,
+        content: msgData.content,
+        editedAt: msgData.edited_at,
+        deletedAt: msgData.deleted_at,
+        deletedBy: msgData.deleted_by,
+        replyToMessageId: msgData.reply_to_message_id,
+        replyPreview: normalizeReplyPreview(msgData.reply_preview),
+        username: msgData.user_id === currentUserId ? "You" : msgData.username,
+        createdAt: msgData.created_at,
+        avatarUrl: msgData.avatar_small_url || null,
+        status: "sent",
+    };
+}
+
+function buildReplyPreviewFromMessage(messageItem) {
+    return {
+        messageId: messageItem.messageId,
+        senderDisplayName: messageItem.username,
+        contentPreview: messageItem.deletedAt ? "Message deleted" : messageItem.content,
+        deleted: Boolean(messageItem.deletedAt),
+    };
+}
+
 
 function ChatDetails() {
     const { store } = useContext(StoreContext);
@@ -146,7 +193,12 @@ function ChatDetails() {
     const [chat, setChat] = useState({});
 
     const [chatItems, setChatItems] = useState([]);
-    const [message, setMessage] = useState([]);
+    const [message, setMessage] = useState("");
+    const [editingMessage, setEditingMessage] = useState(null);
+    const [replyingToMessage, setReplyingToMessage] = useState(null);
+    const [messageMenu, setMessageMenu] = useState(null);
+    const [deleteMessageCandidate, setDeleteMessageCandidate] = useState(null);
+    const [isDeletingMessage, setIsDeletingMessage] = useState(false);
     const [oldestSeq, setOldestSeq] = useState(null);
     const [, setLatestSeq] = useState(null);
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
@@ -187,6 +239,23 @@ function ChatDetails() {
         shouldScrollBottomRef.current = scrollToBottom;
         setChatItems((prevItems) => mergeTimelineItems(prevItems, normalizedItems));
     }, [store.user.user_id]);
+
+    const updateMessageInChat = useCallback((messageItem) => {
+        setChatItems(items => items.map((item) => (
+            item.type === "message" && item.messageId === messageItem.messageId
+                ? {
+                    ...item,
+                    ...messageItem,
+                    key: item.key,
+                }
+                : item.type === "message" && item.replyToMessageId === messageItem.messageId
+                    ? {
+                        ...item,
+                        replyPreview: buildReplyPreviewFromMessage(messageItem),
+                    }
+                    : item
+        )));
+    }, []);
 
     useEffect(() => {
         const bounds = getTimelineBounds(chatItems);
@@ -393,18 +462,18 @@ function ChatDetails() {
 
         socket.current.on("message:created", (data) => {
             const msgData = parseSocketPayload(data);
-            addMessageToChat({
-                messageId: msgData.message_id,
-                clientMessageId: msgData.client_message_id,
-                chatSeq: msgData.chat_seq,
-                userId: msgData.user_id,
-                content: msgData.content,
-                username: msgData.user_id === store.user.user_id ? "You" : msgData.username,
-                createdAt: msgData.created_at,
-                avatarUrl: msgData.avatar_small_url || null,
-                status: "sent",
-            });
+            addMessageToChat(normalizeMessagePayload(msgData, store.user.user_id));
             markCurrentChatRead(msgData.chat_id);
+        })
+
+        socket.current.on("message:updated", (data) => {
+            const msgData = parseSocketPayload(data);
+            updateMessageInChat(normalizeMessagePayload(msgData, store.user.user_id));
+        })
+
+        socket.current.on("message:deleted", (data) => {
+            const msgData = parseSocketPayload(data);
+            updateMessageInChat(normalizeMessagePayload(msgData, store.user.user_id));
         })
 
         return () => {
@@ -413,10 +482,12 @@ function ChatDetails() {
             });
             socket.current.off("connect");
             socket.current.off("message:created");
+            socket.current.off("message:updated");
+            socket.current.off("message:deleted");
             socket.current.off("connect_error");
             socket.current.disconnect();
         }
-    }, [applyHistoryItems, chat.chat_id, markCurrentChatRead, store.user.user_id]);
+    }, [applyHistoryItems, chat.chat_id, markCurrentChatRead, store.user.user_id, updateMessageInChat]);
 
     const resizeTextarea = () => {
         let rowsTotalHeight = textareaRef.current.value.split("\n").length * 25;
@@ -466,6 +537,7 @@ function ChatDetails() {
             chat_id: chat.chat_id,
             client_message_id: pendingMessage.clientMessageId,
             content: pendingMessage.content,
+            reply_to_message_id: pendingMessage.replyToMessageId || null,
         }, (error, response) => {
             if (error || !response || !response.ok) {
                 console.log(response?.error?.detail || "Failed to send message");
@@ -474,17 +546,7 @@ function ChatDetails() {
             }
 
             const msgData = response.data;
-            addMessageToChat({
-                messageId: msgData.message_id,
-                clientMessageId: msgData.client_message_id,
-                chatSeq: msgData.chat_seq,
-                userId: msgData.user_id,
-                content: msgData.content,
-                username: "You",
-                createdAt: msgData.created_at,
-                avatarUrl: msgData.avatar_small_url || null,
-                status: "sent",
-            });
+            addMessageToChat(normalizeMessagePayload(msgData, store.user.user_id));
             markCurrentChatRead(msgData.chat_id);
         });
     }
@@ -501,13 +563,51 @@ function ChatDetails() {
         sendMessagePayload(failedMessage);
     }
 
+    const clearComposer = () => {
+        setMessage("");
+        setEditingMessage(null);
+        setReplyingToMessage(null);
+        if (textareaRef.current) {
+            textareaRef.current.value = "";
+            textareaRef.current.style.height = "25px";
+        }
+    }
+
+    const updateMessage = () => {
+        const trimmedMessage = message.trim();
+        if (!editingMessage || trimmedMessage === "") {
+            textareaRef.current.focus();
+            return;
+        }
+
+        socket.current.timeout(10000).emit("message:update", {
+            message_id: editingMessage.messageId,
+            content: trimmedMessage,
+        }, (error, response) => {
+            if (error || !response || !response.ok) {
+                console.log(response?.error?.detail || "Failed to update message");
+                return;
+            }
+
+            updateMessageInChat(normalizeMessagePayload(response.data, store.user.user_id));
+            clearComposer();
+        });
+    }
+
     const sendMessage = () => {
+        if (editingMessage) {
+            updateMessage();
+            return;
+        }
+
         const trimmedMessage = message.trim();
         if (trimmedMessage !== "") {
             const pendingMessage = {
                 clientMessageId: createClientMessageId(),
                 userId: store.user.user_id,
                 content: trimmedMessage,
+                replyToMessageId: replyingToMessage?.messageId || null,
+                replyPreview: replyingToMessage ? buildReplyPreviewFromMessage(replyingToMessage) : null,
                 username: "You",
                 createdAt: new Date().toISOString(),
                 avatarUrl: store.user?.avatar?.small_url || null,
@@ -517,8 +617,7 @@ function ChatDetails() {
             addMessageToChat(pendingMessage);
             sendMessagePayload(pendingMessage);
 
-            setMessage("");
-            textareaRef.current.value = "";
+            clearComposer();
         } else {
             textareaRef.current.focus()
         }
@@ -529,7 +628,7 @@ function ChatDetails() {
             return;
         }
         else if (event.key === 'Enter' && message.trim() !== "") {
-            sendMessage(message);
+            sendMessage();
             event.preventDefault();
             resizeTextarea();
         }
@@ -569,6 +668,98 @@ function ChatDetails() {
         }
     }
 
+    const openMessageMenu = (event, item) => {
+        if (!item.messageId || item.status !== "sent") {
+            return;
+        }
+
+        event.preventDefault();
+        setMessageMenu({
+            x: event.clientX,
+            y: event.clientY,
+            message: item,
+        });
+    }
+
+    const startEditingMessage = () => {
+        if (!messageMenu?.message) {
+            return;
+        }
+
+        setEditingMessage(messageMenu.message);
+        setReplyingToMessage(null);
+        setMessage(messageMenu.message.content);
+        setMessageMenu(null);
+        requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+            resizeTextarea();
+        });
+    }
+
+    const requestDeleteSelectedMessage = () => {
+        if (!messageMenu?.message) {
+            return;
+        }
+
+        setDeleteMessageCandidate(messageMenu.message);
+        setMessageMenu(null);
+    }
+
+    const startReplyingToMessage = () => {
+        if (!messageMenu?.message) {
+            return;
+        }
+
+        setReplyingToMessage(messageMenu.message);
+        setEditingMessage(null);
+        setMessageMenu(null);
+        requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+        });
+    }
+
+    const scrollToMessage = (messageId) => {
+        const target = document.getElementById(`message-${messageId}`);
+        if (!target) {
+            return;
+        }
+
+        target.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+        });
+    }
+
+    const closeDeleteMessageModal = () => {
+        if (!isDeletingMessage) {
+            setDeleteMessageCandidate(null);
+        }
+    }
+
+    const deleteSelectedMessage = () => {
+        if (!deleteMessageCandidate) {
+            return;
+        }
+
+        const messageId = deleteMessageCandidate.messageId;
+        setIsDeletingMessage(true);
+        socket.current.timeout(10000).emit("message:delete", {
+            message_id: messageId,
+        }, (error, response) => {
+            setIsDeletingMessage(false);
+            if (error || !response || !response.ok) {
+                console.log(response?.error?.detail || "Failed to delete message");
+                return;
+            }
+
+            updateMessageInChat(normalizeMessagePayload(response.data, store.user.user_id));
+            setDeleteMessageCandidate(null);
+            if (editingMessage?.messageId === messageId) {
+                clearComposer();
+            }
+        });
+    }
+
     const setTitle = (newTitle) => {
         setChat((prev) => ({
             ...prev,
@@ -585,7 +776,7 @@ function ChatDetails() {
     }
 
     return (
-        <div className="chat-details">
+        <div className="chat-details" onClick={() => setMessageMenu(null)}>
             <div className="chat-header">
                 <div className="header-label">
                     <img
@@ -637,12 +828,18 @@ function ChatDetails() {
                             return (
                                 <Message
                                     key={item.key || index}
+                                    messageId={item.messageId}
                                     userId={item.userId}
                                     username={item.username}
                                     content={item.content}
                                     createdAt={item.createdAt}
                                     avatarUrl={item.avatarUrl}
                                     status={item.status}
+                                    editedAt={item.editedAt}
+                                    deletedAt={item.deletedAt}
+                                    replyPreview={item.replyPreview}
+                                    onContextMenu={(event) => openMessageMenu(event, item)}
+                                    onReplyPreviewClick={scrollToMessage}
                                     onRetry={() => retryMessage(item.clientMessageId)}
                                 />
                             )
@@ -656,14 +853,75 @@ function ChatDetails() {
                     })
                 }
             </div>
+            {
+                messageMenu &&
+                <div
+                    className="message-context-menu"
+                    style={{ left: messageMenu.x, top: messageMenu.y }}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <button type="button" onClick={startReplyingToMessage}>Reply</button>
+                    {
+                        messageMenu.message.userId === store.user.user_id && !messageMenu.message.deletedAt &&
+                        <>
+                            <button type="button" onClick={startEditingMessage}>Edit</button>
+                            <button type="button" className="danger" onClick={requestDeleteSelectedMessage}>Delete</button>
+                        </>
+                    }
+                </div>
+            }
+            <Modal active={Boolean(deleteMessageCandidate)} setActive={closeDeleteMessageModal}>
+                <div className="delete-message-modal">
+                    <h2>Delete message?</h2>
+                    <p>The message will stay in history as a deleted message stub.</p>
+                    <div className="delete-message-modal-actions">
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={closeDeleteMessageModal}
+                            disabled={isDeletingMessage}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={deleteSelectedMessage}
+                            disabled={isDeletingMessage}
+                        >
+                            {isDeletingMessage ? "Deleting..." : "Delete"}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
 
             <div id="chat-footer" className="chat-footer">
+                {
+                    editingMessage &&
+                    <div className="edit-banner">
+                        <div>
+                            <span>Editing message</span>
+                            <p>{editingMessage.content}</p>
+                        </div>
+                        <button type="button" onClick={clearComposer}>Cancel</button>
+                    </div>
+                }
+                {
+                    replyingToMessage &&
+                    <div className="reply-banner">
+                        <div>
+                            <span>Replying to {replyingToMessage.username}</span>
+                            <p>{replyingToMessage.deletedAt ? "Message deleted" : replyingToMessage.content}</p>
+                        </div>
+                        <button type="button" onClick={() => setReplyingToMessage(null)}>Cancel</button>
+                    </div>
+                }
                 <div className="msg-box">
                     <textarea
                         name="message-input"
                         ref={textareaRef}
                         value={message}
-                        placeholder="Type a message"
+                        placeholder={editingMessage ? "Edit message" : "Type a message"}
                         onChange={(e) => { setMessage(e.target.value); resizeTextarea() }}
                         id="message-input"
                         onKeyDown={handleKeyDown}

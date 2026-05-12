@@ -22,7 +22,8 @@ from src.chats.schemas import (
 )
 from src.common.exceptions import PermissionDenied
 from src.messages.models import MessageModel
-from src.messages.schemas import MessageGetWithUser
+from src.messages.schemas import MessageGetWithUser, MessageReplyPreview
+from src.messages.service import DELETED_MESSAGE_STUB
 from src.users.presentation import build_user_get
 from src.users.schemas import UserGet
 
@@ -182,14 +183,13 @@ class ChatService:
             after_seq=after_seq,
         )
 
-        items: list[MessageHistoryItem | EventHistoryItem] = [
-            (
-                MessageHistoryItem.model_validate(item)
-                if isinstance(item, MessageModel)
-                else EventHistoryItem.model_validate(item)
-            )
-            for _timeline_item, item in history
-        ]
+        items: list[MessageHistoryItem | EventHistoryItem] = []
+        for _timeline_item, item in history:
+            if isinstance(item, MessageModel):
+                message = await self._build_message_get_with_user(item)
+                items.append(MessageHistoryItem(**message.model_dump()))
+            else:
+                items.append(EventHistoryItem.model_validate(item))
 
         return items
 
@@ -456,15 +456,38 @@ class ChatService:
         )
 
     async def _build_message_get_with_user(self, message) -> MessageGetWithUser:
+        reply_to_message = getattr(message, "reply_to_message", None)
         return MessageGetWithUser(
             message_id=message.message_id,
             chat_id=message.chat_id,
             client_message_id=message.client_message_id,
-            content=message.content,
+            content=(
+                DELETED_MESSAGE_STUB
+                if message.deleted_at is not None
+                else message.content
+            ),
             user_id=message.user_id,
             created_at=message.created_at,
+            edited_at=message.edited_at,
+            deleted_at=message.deleted_at,
+            deleted_by=message.deleted_by,
             chat_seq=getattr(message, "chat_seq", None),
+            reply_to_message_id=getattr(message, "reply_to_message_id", None),
+            reply_preview=(
+                self._build_reply_preview(reply_to_message)
+                if reply_to_message is not None
+                else None
+            ),
             user=await build_user_get(message.user),
+        )
+
+    def _build_reply_preview(self, message) -> MessageReplyPreview:
+        deleted = message.deleted_at is not None
+        return MessageReplyPreview(
+            message_id=message.message_id,
+            sender_display_name=message.user.username,
+            content_preview=DELETED_MESSAGE_STUB if deleted else message.content_ellipsis,
+            deleted=deleted,
         )
 
     def _build_direct_key(

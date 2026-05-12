@@ -144,6 +144,7 @@ class ChatRepository:
                     selectinload(MessageModel.user)
                     .selectinload(UserModel.avatar_asset)
                     .selectinload(AssetModel.variants),
+                    selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 )
             )
             messages = (await self._session.execute(messages_query)).scalars().all()
@@ -515,6 +516,7 @@ class ChatRepository:
                 selectinload(MessageModel.user)
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
+                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
             )
         )
 

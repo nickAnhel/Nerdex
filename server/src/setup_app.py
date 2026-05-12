@@ -75,10 +75,12 @@ from src.chats.exceptions import (
 from src.messages.exc_handlers import (
     cant_delete_message_handler,
     cant_update_message_handler,
+    invalid_message_reply_handler,
 )
 from src.messages.exceptions import (
     CantDeleteMessage,
     CantUpdateMessage,
+    InvalidMessageReply,
 )
 
 from src.s3.exc_handlers import (
@@ -154,6 +156,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     app.add_exception_handler(CantDeleteMessage, cant_delete_message_handler)  # type: ignore
     app.add_exception_handler(CantUpdateMessage, cant_update_message_handler)  # type: ignore
+    app.add_exception_handler(InvalidMessageReply, invalid_message_reply_handler)  # type: ignore
 
     app.add_exception_handler(CantDeleteFileFromStorage, cant_delete_file_handler)  # type: ignore
     app.add_exception_handler(CantUploadFileToStorage, cant_upload_file_handler)  # type: ignore
