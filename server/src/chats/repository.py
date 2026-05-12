@@ -1,13 +1,13 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, desc, func, insert, literal, or_, select, union, update
+from sqlalchemy import delete, desc, func, insert, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
 from src.assets.models import AssetModel
 from src.chats.enums import ChatMemberRole, ChatType
-from src.chats.models import ChatModel, MembershipModel
+from src.chats.models import ChatModel, ChatTimelineItemModel, MembershipModel
 from src.events.models import EventModel
 from src.messages.models import MessageModel
 from src.users.models import UserModel
@@ -94,48 +94,94 @@ class ChatRepository:
         self,
         *,
         chat_id: uuid.UUID,
-        offset: int,
         limit: int,
-    ) -> list[MessageModel | EventModel]:
-        msgs_query = (
-            select(MessageModel.message_id.label("id"), MessageModel.created_at)
-            .filter_by(chat_id=chat_id)
-        )
-
-        events_query = (
-            select(EventModel.event_id.label("id"), EventModel.created_at)
-            .filter_by(chat_id=chat_id)
-        )
-
-        union_query = (
-            union(
-                msgs_query,
-                events_query,
-            )
-            .order_by(desc("created_at"))
-            .offset(offset)
+        before_seq: int | None = None,
+        after_seq: int | None = None,
+    ) -> list[tuple[ChatTimelineItemModel, MessageModel | EventModel]]:
+        query = (
+            select(ChatTimelineItemModel)
+            .where(ChatTimelineItemModel.chat_id == chat_id)
             .limit(limit)
-            .cte()
         )
 
-        q1  = (
-            select(MessageModel)
-            .join(union_query, MessageModel.message_id == union_query.c.id)
-            .options(selectinload(MessageModel.user))
-        )
+        if before_seq is not None:
+            query = (
+                query
+                .where(ChatTimelineItemModel.chat_seq < before_seq)
+                .order_by(ChatTimelineItemModel.chat_seq.desc())
+            )
+        elif after_seq is not None:
+            query = (
+                query
+                .where(ChatTimelineItemModel.chat_seq > after_seq)
+                .order_by(ChatTimelineItemModel.chat_seq.asc())
+            )
+        else:
+            query = query.order_by(ChatTimelineItemModel.chat_seq.desc())
 
-        q2 = (
-            select(EventModel)
-            .join(union_query, EventModel.event_id == union_query.c.id)
-            .options(selectinload(EventModel.user))
-            .options(selectinload(EventModel.altered_user))
-        )
+        timeline_items = list((await self._session.execute(query)).scalars().all())
+        if after_seq is None:
+            timeline_items.reverse()
 
-        messages: list[MessageModel] = (await self._session.execute(q1)).scalars().all()  # type: ignore
-        events: list[EventModel] = (await self._session.execute(q2)).scalars().all()  # type: ignore
+        message_ids = [
+            item.message_id
+            for item in timeline_items
+            if item.item_type == "message" and item.message_id is not None
+        ]
+        event_ids = [
+            item.event_id
+            for item in timeline_items
+            if item.item_type == "event" and item.event_id is not None
+        ]
 
-        history = messages + events
-        return sorted(history, key=lambda item: item.created_at)
+        messages_by_id: dict[uuid.UUID, MessageModel] = {}
+        if message_ids:
+            messages_query = (
+                select(MessageModel)
+                .where(MessageModel.message_id.in_(message_ids))
+                .options(
+                    selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+                    selectinload(MessageModel.user)
+                    .selectinload(UserModel.avatar_asset)
+                    .selectinload(AssetModel.variants),
+                )
+            )
+            messages = (await self._session.execute(messages_query)).scalars().all()
+            messages_by_id = {message.message_id: message for message in messages}
+
+        events_by_id: dict[uuid.UUID, EventModel] = {}
+        if event_ids:
+            events_query = (
+                select(EventModel)
+                .where(EventModel.event_id.in_(event_ids))
+                .options(
+                    selectinload(EventModel.user)
+                    .selectinload(UserModel.avatar_asset)
+                    .selectinload(AssetModel.variants),
+                    selectinload(EventModel.altered_user)
+                    .selectinload(UserModel.avatar_asset)
+                    .selectinload(AssetModel.variants),
+                )
+            )
+            events = (await self._session.execute(events_query)).scalars().all()
+            events_by_id = {event.event_id: event for event in events}
+
+        history: list[tuple[ChatTimelineItemModel, MessageModel | EventModel]] = []
+        for timeline_item in timeline_items:
+            if timeline_item.item_type == "message" and timeline_item.message_id is not None:
+                item = messages_by_id.get(timeline_item.message_id)
+            elif timeline_item.item_type == "event" and timeline_item.event_id is not None:
+                item = events_by_id.get(timeline_item.event_id)
+            else:
+                item = None
+
+            if item is None:
+                continue
+
+            setattr(item, "chat_seq", timeline_item.chat_seq)
+            history.append((timeline_item, item))
+
+        return history
 
     async def get_members(
         self,

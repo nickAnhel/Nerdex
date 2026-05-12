@@ -29,7 +29,7 @@ class MessageService:
             else:
                 msg = await self._repository.create(data=data)
             return await self._build_message_with_user(msg)
-        except IntegrityError as exc:
+        except (IntegrityError, NoResultFound) as exc:
             raise ChatNotFound(f"Chat with id '{message.chat_id}' not found") from exc
 
     async def get_messages(
@@ -125,5 +125,6 @@ class MessageService:
             content=message.content,
             user_id=message.user_id,
             created_at=message.created_at,
+            chat_seq=getattr(message, "chat_seq", None),
             user=await build_user_get(message.user),
         )

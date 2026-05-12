@@ -9,6 +9,7 @@ from src.chats.exceptions import (
     CantRemoveMembers,
     ChatNotFound,
     FailedToLeaveChat,
+    InvalidChatHistoryCursor,
 )
 from src.chats.repository import ChatRepository
 from src.chats.schemas import (
@@ -158,9 +159,15 @@ class ChatService:
         *,
         chat_id: uuid.UUID,
         user_id: uuid.UUID | None = None,
-        offset: int,
         limit: int,
+        before_seq: int | None = None,
+        after_seq: int | None = None,
     ) -> list[MessageHistoryItem | EventHistoryItem]:
+        if before_seq is not None and after_seq is not None:
+            raise InvalidChatHistoryCursor(
+                "Use either before_seq or after_seq, not both"
+            )
+
         if user_id is not None:
             try:
                 chat = await self._repository.get_single(chat_id=chat_id)
@@ -170,8 +177,9 @@ class ChatService:
 
         history = await self._repository.history(
             chat_id=chat_id,
-            offset=offset,
             limit=limit,
+            before_seq=before_seq,
+            after_seq=after_seq,
         )
 
         items: list[MessageHistoryItem | EventHistoryItem] = [
@@ -180,7 +188,7 @@ class ChatService:
                 if isinstance(item, MessageModel)
                 else EventHistoryItem.model_validate(item)
             )
-            for item in history
+            for _timeline_item, item in history
         ]
 
         return items
@@ -455,6 +463,7 @@ class ChatService:
             content=message.content,
             user_id=message.user_id,
             created_at=message.created_at,
+            chat_seq=getattr(message, "chat_seq", None),
             user=await build_user_get(message.user),
         )
 

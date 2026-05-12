@@ -17,6 +17,8 @@ class MessageGetWS(BaseModel):
     message_id: uuid.UUID
     chat_id: uuid.UUID
     client_message_id: uuid.UUID | None = None
+    item_type: str = "message"
+    chat_seq: int | None = None
     content: str
     created_at: datetime.datetime
     username: str
@@ -34,6 +36,7 @@ class MessageCreate(BaseSchema):
 class MessageGet(MessageCreate):
     message_id: uuid.UUID
     created_at: datetime.datetime
+    chat_seq: int | None = None
 
 
 class MessageGetWithUser(MessageGet):

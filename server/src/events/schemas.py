@@ -16,6 +16,7 @@ class EventCreate(BaseSchema):
 class EventGet(EventCreate):
     event_id: uuid.UUID
     created_at: datetime.datetime
+    chat_seq: int | None = None
 
 
 class EventGetWithUsers(EventGet):

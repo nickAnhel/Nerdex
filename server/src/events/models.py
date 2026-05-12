@@ -37,3 +37,8 @@ class EventModel(Base):
         ForeignKey("chats.chat_id", ondelete="CASCADE")
     )
     chat: Mapped["ChatModel"] = relationship(back_populates="events")
+    timeline_item: Mapped["ChatTimelineItemModel | None"] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

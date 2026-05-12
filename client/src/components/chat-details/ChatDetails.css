@@ -114,6 +114,12 @@
     overflow-y: auto;
 }
 
+.history-loader {
+    color: #8f8f8f;
+    font-size: .9rem;
+    text-align: center;
+}
+
 .chat-footer {
     padding: 0 10%;
     display: flex;

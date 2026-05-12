@@ -134,16 +134,20 @@ async def get_chat_members(
 @router.get("/{chat_id}/history")
 async def get_chat_history(
     chat_id: uuid.UUID,
-    offset: int = 0,
     limit: int = 100,
+    before_seq: int | None = None,
+    after_seq: int | None = None,
+    offset: int | None = None,
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ) -> list[MessageHistoryItem | EventHistoryItem]:
+    _ = offset
     return await service.get_chat_history(
         chat_id=chat_id,
         user_id=user.user_id,
-        offset=offset,
         limit=limit,
+        before_seq=before_seq,
+        after_seq=after_seq,
     )
 
 

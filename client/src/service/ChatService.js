@@ -26,8 +26,8 @@ export default class ChatService {
         return api.delete(`/chats/${chatId}/leave`);
     }
 
-    static async getChatHistory(chatId) {
-        return api.get(`/chats/${chatId}/history`);
+    static async getChatHistory(chatId, params) {
+        return api.get(`/chats/${chatId}/history`, { params });
     }
 
     static async getUserJoinedChats(params) {

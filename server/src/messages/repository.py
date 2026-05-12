@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.assets.models import AssetModel
+from src.chats.timeline import create_message_timeline_item, get_message_chat_seq
 from src.messages.models import MessageModel
 from src.users.models import UserModel
 
@@ -31,8 +32,15 @@ class MessageRepository:
             )
         )
         result = await self._session.execute(stmt)
+        message = result.scalar_one()
+        chat_seq = await create_message_timeline_item(
+            session=self._session,
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+        )
         await self._session.commit()
-        return result.scalar_one()
+        setattr(message, "chat_seq", chat_seq)
+        return message
 
     async def create_idempotent(
         self,
@@ -60,8 +68,19 @@ class MessageRepository:
                 user_id=data["user_id"],
                 client_message_id=data["client_message_id"],
             )
+            chat_seq = await get_message_chat_seq(
+                session=self._session,
+                message_id=message.message_id,
+            )
+        else:
+            chat_seq = await create_message_timeline_item(
+                session=self._session,
+                chat_id=message.chat_id,
+                message_id=message.message_id,
+            )
 
         await self._session.commit()
+        setattr(message, "chat_seq", chat_seq)
         return message
 
     async def get_single(

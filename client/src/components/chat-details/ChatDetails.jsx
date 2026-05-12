@@ -16,6 +16,9 @@ import ChatModal from "../chat-modal/ChatModal";
 import { getAvatarUrl } from "../../utils/avatar";
 
 
+const HISTORY_PAGE_SIZE = 50;
+
+
 function getMaxCharsInLine(textarea, content) {
     const context = document.createElement('canvas').getContext('2d');
     const computedStyle = window.getComputedStyle(textarea);
@@ -36,6 +39,98 @@ function parseSocketPayload(data) {
     return typeof data === "string" ? JSON.parse(data) : data;
 }
 
+function normalizeTimelineItem(item, currentUserId) {
+    if (item.item_type === "message") {
+        return {
+            type: "message",
+            key: `message-${item.message_id || item.client_message_id}`,
+            chatSeq: item.chat_seq,
+            messageId: item.message_id,
+            clientMessageId: item.client_message_id,
+            userId: item.user_id,
+            content: item.content,
+            username: item.user_id === currentUserId ? "You" : item.user.username,
+            createdAt: item.created_at,
+            avatarUrl: item.user?.avatar?.small_url || null,
+            status: "sent",
+        };
+    }
+
+    if (item.item_type === "event") {
+        return {
+            type: "event",
+            key: `event-${item.event_id}`,
+            chatSeq: item.chat_seq,
+            eventId: item.event_id,
+            action: item.event_type,
+            username: item.user.username,
+            addedUserUsername: item.altered_user?.username || null,
+        };
+    }
+
+    return null;
+}
+
+function sortTimelineItems(items) {
+    return [...items].sort((a, b) => {
+        if (a.chatSeq == null && b.chatSeq == null) {
+            return 0;
+        }
+        if (a.chatSeq == null) {
+            return 1;
+        }
+        if (b.chatSeq == null) {
+            return -1;
+        }
+        return a.chatSeq - b.chatSeq;
+    });
+}
+
+function mergeTimelineItems(prevItems, nextItems) {
+    const byKey = new Map();
+
+    [...prevItems, ...nextItems].forEach((item) => {
+        const keys = [
+            item.key,
+            item.messageId ? `message-${item.messageId}` : null,
+            item.clientMessageId ? `client-message-${item.clientMessageId}` : null,
+            item.eventId ? `event-${item.eventId}` : null,
+        ].filter(Boolean);
+
+        const existingKey = keys.find((key) => byKey.has(key));
+        if (existingKey) {
+            const merged = {
+                ...byKey.get(existingKey),
+                ...item,
+            };
+            keys.forEach((key) => byKey.set(key, merged));
+            return;
+        }
+
+        keys.forEach((key) => byKey.set(key, item));
+    });
+
+    return sortTimelineItems(Array.from(new Set(byKey.values())));
+}
+
+function getTimelineBounds(items) {
+    const seqs = items
+        .map((item) => item.chatSeq)
+        .filter((chatSeq) => chatSeq != null);
+
+    if (seqs.length === 0) {
+        return {
+            oldestSeq: null,
+            latestSeq: null,
+        };
+    }
+
+    return {
+        oldestSeq: Math.min(...seqs),
+        latestSeq: Math.max(...seqs),
+    };
+}
+
 
 function ChatDetails() {
     const { store } = useContext(StoreContext);
@@ -52,11 +147,17 @@ function ChatDetails() {
 
     const [chatItems, setChatItems] = useState([]);
     const [message, setMessage] = useState([]);
-    const [isFirstRender, setIsFirstRender] = useState(true);
+    const [oldestSeq, setOldestSeq] = useState(null);
+    const [, setLatestSeq] = useState(null);
+    const [hasMoreHistory, setHasMoreHistory] = useState(true);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
     const socket = useRef(null);
     const messagesEndRef = useRef(null);
     const textareaRef = useRef(null);
+    const latestSeqRef = useRef(null);
+    const pendingPrependScrollRef = useRef(null);
+    const shouldScrollBottomRef = useRef(false);
     const directMember = chat.chat_type === "direct"
         ? chat.members?.find((member) => member.user_id !== store.user.user_id)
         : null;
@@ -70,6 +171,57 @@ function ChatDetails() {
             console.log(e);
         }
     }, []);
+
+    const applyHistoryItems = useCallback((items, { prepend = false, scrollToBottom = false } = {}) => {
+        const normalizedItems = items
+            .map((item) => normalizeTimelineItem(item, store.user.user_id))
+            .filter(Boolean);
+
+        if (prepend && messagesEndRef.current) {
+            pendingPrependScrollRef.current = {
+                scrollHeight: messagesEndRef.current.scrollHeight,
+                scrollTop: messagesEndRef.current.scrollTop,
+            };
+        }
+
+        shouldScrollBottomRef.current = scrollToBottom;
+        setChatItems((prevItems) => mergeTimelineItems(prevItems, normalizedItems));
+    }, [store.user.user_id]);
+
+    useEffect(() => {
+        const bounds = getTimelineBounds(chatItems);
+        setOldestSeq(bounds.oldestSeq);
+        setLatestSeq(bounds.latestSeq);
+        latestSeqRef.current = bounds.latestSeq;
+
+        if (pendingPrependScrollRef.current && messagesEndRef.current) {
+            const previousScroll = pendingPrependScrollRef.current;
+            pendingPrependScrollRef.current = null;
+            requestAnimationFrame(() => {
+                if (!messagesEndRef.current) {
+                    return;
+                }
+                messagesEndRef.current.scrollTop =
+                    messagesEndRef.current.scrollHeight -
+                    previousScroll.scrollHeight +
+                    previousScroll.scrollTop;
+            });
+            return;
+        }
+
+        if (shouldScrollBottomRef.current && messagesEndRef.current) {
+            shouldScrollBottomRef.current = false;
+            requestAnimationFrame(() => {
+                if (!messagesEndRef.current) {
+                    return;
+                }
+                messagesEndRef.current.scroll({
+                    top: messagesEndRef.current.scrollHeight,
+                    behavior: 'auto',
+                });
+            });
+        }
+    }, [chatItems]);
 
     useEffect(() => {
         const fetchChat = async () => {
@@ -102,17 +254,6 @@ function ChatDetails() {
     }, [chat.chat_id, markCurrentChatRead]);
 
     useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scroll({
-                top: messagesEndRef.current.scrollHeight,
-                behavior: isFirstRender ? 'auto' : 'smooth',
-            });
-
-            setIsFirstRender(false);
-        }
-    }, [isFirstRender, chatItems]);
-
-    useEffect(() => {
         const checkJoinedWrapper = async () => {
             try {
                 const chatId = params.chatId.slice(1);
@@ -142,10 +283,45 @@ function ChatDetails() {
         checkJoinedWrapper();
     }, [params.chatId, store.user, chat])
 
+    const loadOlderHistory = useCallback(async () => {
+        if (!chat.chat_id || oldestSeq == null || isLoadingHistory || !hasMoreHistory) {
+            return;
+        }
+
+        try {
+            setIsLoadingHistory(true);
+            const res = await ChatService.getChatHistory(chat.chat_id, {
+                before_seq: oldestSeq,
+                limit: HISTORY_PAGE_SIZE,
+            });
+
+            if (res.data.length < HISTORY_PAGE_SIZE) {
+                setHasMoreHistory(false);
+            }
+
+            applyHistoryItems(res.data, { prepend: true });
+        } catch (e) {
+            console.log(e);
+            setIsError(true);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    }, [applyHistoryItems, chat.chat_id, hasMoreHistory, isLoadingHistory, oldestSeq]);
+
+    const handleHistoryScroll = useCallback(() => {
+        if (messagesEndRef.current?.scrollTop === 0) {
+            loadOlderHistory();
+        }
+    }, [loadOlderHistory]);
+
     useEffect(() => {
         const getHistoryWrapper = async () => {
             try {
                 clearChat();
+                setOldestSeq(null);
+                setLatestSeq(null);
+                latestSeqRef.current = null;
+                setHasMoreHistory(true);
 
                 const chatId = params.chatId.slice(1);
                 if (!chatId) {
@@ -153,46 +329,12 @@ function ChatDetails() {
                     return;
                 }
 
-                const items = await ChatService.getChatHistory(chatId);
-                items.data.forEach(
-                    (item) => {
-                        if (item.item_type === "message") {
-                            addMessageToChat({
-                                messageId: item.message_id,
-                                clientMessageId: item.client_message_id,
-                                userId: item.user_id,
-                                content: item.content,
-                                username: item.user_id === store.user.user_id ? "You" : item.user.username,
-                                createdAt: item.created_at,
-                                avatarUrl: item.user?.avatar?.small_url || null,
-                                status: "sent",
-                            });
+                const items = await ChatService.getChatHistory(chatId, {
+                    limit: HISTORY_PAGE_SIZE,
+                });
 
-                        } else if (item.item_type === "event") {
-                            switch (item.event_type) {
-                                case "joined":
-                                    addEventToChat(item.event_type, item.user.username, null);
-                                    break;
-                                case "leaved":
-                                    addEventToChat(item.event_type, item.user.username, null);
-                                    break;
-                                case "created":
-                                    addEventToChat(item.event_type, item.user.username, null);
-                                    break;
-                                case "added":
-                                    addEventToChat(item.event_type, item.user.username, item.altered_user.username);
-                                    break;
-                                case "removed":
-                                    addEventToChat(item.event_type, item.user.username, item.altered_user.username);
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-                );
-
-                setIsFirstRender(true);
+                setHasMoreHistory(items.data.length >= HISTORY_PAGE_SIZE);
+                applyHistoryItems(items.data, { scrollToBottom: true });
             } catch (e) {
                 console.log(e);
                 setIsError(true);
@@ -200,7 +342,7 @@ function ChatDetails() {
         }
 
         getHistoryWrapper();
-    }, [params.chatId, chat, store.user]);
+    }, [applyHistoryItems, params.chatId]);
 
     useEffect(() => {
         if (!chat.chat_id) {
@@ -216,17 +358,37 @@ function ChatDetails() {
             },
         });
 
+        const syncMissedItems = async () => {
+            if (latestSeqRef.current == null) {
+                return;
+            }
+
+            try {
+                const res = await ChatService.getChatHistory(chat.chat_id, {
+                    after_seq: latestSeqRef.current,
+                    limit: HISTORY_PAGE_SIZE,
+                });
+                applyHistoryItems(res.data, { scrollToBottom: true });
+            } catch (e) {
+                console.log(e);
+            }
+        };
+
+        socket.current.on("connect", () => {
+            socket.current.emit("join", {
+                chat_id: chat.chat_id,
+            }, (response) => {
+                if (response && !response.ok) {
+                    console.log(response.error?.detail || "Failed to join chat");
+                    return;
+                }
+                syncMissedItems();
+            });
+        });
+
         socket.current.on("connect_error", (error) => {
             console.log(error);
             setIsError(true);
-        });
-
-        socket.current.emit("join", {
-            chat_id: chat.chat_id,
-        }, (response) => {
-            if (response && !response.ok) {
-                console.log(response.error?.detail || "Failed to join chat");
-            }
         });
 
         socket.current.on("message:created", (data) => {
@@ -234,6 +396,7 @@ function ChatDetails() {
             addMessageToChat({
                 messageId: msgData.message_id,
                 clientMessageId: msgData.client_message_id,
+                chatSeq: msgData.chat_seq,
                 userId: msgData.user_id,
                 content: msgData.content,
                 username: msgData.user_id === store.user.user_id ? "You" : msgData.username,
@@ -248,11 +411,12 @@ function ChatDetails() {
             socket.current.emit("leave", {
                 chat_id: chat.chat_id,
             });
+            socket.current.off("connect");
             socket.current.off("message:created");
             socket.current.off("connect_error");
             socket.current.disconnect();
         }
-    }, [chat, store.user, markCurrentChatRead]);
+    }, [applyHistoryItems, chat.chat_id, markCurrentChatRead, store.user.user_id]);
 
     const resizeTextarea = () => {
         let rowsTotalHeight = textareaRef.current.value.split("\n").length * 25;
@@ -279,33 +443,14 @@ function ChatDetails() {
     const addMessageToChat = (messageItem) => {
         const nextItem = {
             type: "message",
+            key: messageItem.messageId
+                ? `message-${messageItem.messageId}`
+                : `client-message-${messageItem.clientMessageId}`,
             ...messageItem,
         };
 
-        setChatItems(items => {
-            const existingIndex = items.findIndex((item) => (
-                item.type === "message" &&
-                (
-                    (nextItem.messageId && item.messageId === nextItem.messageId) ||
-                    (nextItem.clientMessageId && item.clientMessageId === nextItem.clientMessageId)
-                )
-            ));
-
-            if (existingIndex === -1) {
-                return [...items, nextItem];
-            }
-
-            return items.map((item, index) => index === existingIndex ? { ...item, ...nextItem } : item);
-        });
-    }
-
-    const addEventToChat = (action, username, addedUserUsername) => {
-        setChatItems(items => [...items, {
-            type: "event",
-            action: action,
-            username: username,
-            addedUserUsername: addedUserUsername
-        }]);
+        shouldScrollBottomRef.current = true;
+        setChatItems(items => mergeTimelineItems(items, [nextItem]));
     }
 
     const markMessageFailed = (clientMessageId) => {
@@ -332,6 +477,7 @@ function ChatDetails() {
             addMessageToChat({
                 messageId: msgData.message_id,
                 clientMessageId: msgData.client_message_id,
+                chatSeq: msgData.chat_seq,
                 userId: msgData.user_id,
                 content: msgData.content,
                 username: "You",
@@ -480,13 +626,17 @@ function ChatDetails() {
                 }
             </div>
 
-            <div className="chat-body" ref={messagesEndRef}>
+            <div className="chat-body" ref={messagesEndRef} onScroll={handleHistoryScroll}>
+                {
+                    isLoadingHistory &&
+                    <div className="history-loader">Loading history...</div>
+                }
                 {
                     chatItems.map((item, index) => {
                         if (item.type === "message") {
                             return (
                                 <Message
-                                    key={index}
+                                    key={item.key || index}
                                     userId={item.userId}
                                     username={item.username}
                                     content={item.content}
@@ -498,7 +648,7 @@ function ChatDetails() {
                             )
                         } else if (item.type === "event") {
                             return (
-                                <Event key={index} action={item.action} username={item.username} addedUserUsername={item.addedUserUsername} />
+                                <Event key={item.key || index} action={item.action} username={item.username} addedUserUsername={item.addedUserUsername} />
                             )
                         }
 

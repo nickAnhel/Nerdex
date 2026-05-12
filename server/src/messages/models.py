@@ -29,6 +29,11 @@ class MessageModel(Base):
 
     chat_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("chats.chat_id", ondelete="CASCADE"))
     chat: Mapped["ChatModel"] = relationship(back_populates="messages")
+    timeline_item: Mapped["ChatTimelineItemModel | None"] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.user_id", ondelete="CASCADE"))
     user: Mapped["UserModel"] = relationship(back_populates="messages")

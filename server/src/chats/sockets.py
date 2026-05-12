@@ -164,6 +164,7 @@ async def on_message(
         message_id=message.message_id,
         chat_id=message.chat_id,
         client_message_id=message.client_message_id,
+        chat_seq=message.chat_seq,
         username=message.user.username,
         user_id=message.user_id,
         avatar_small_url=avatar.small_url if avatar is not None else None,

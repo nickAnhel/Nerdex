@@ -16,3 +16,7 @@ class CantAddMembers(Exception):
 
 class CantRemoveMembers(Exception):
     """Raised when cannot remove members from chat"""
+
+
+class InvalidChatHistoryCursor(Exception):
+    """Raised when chat history cursor params are invalid"""

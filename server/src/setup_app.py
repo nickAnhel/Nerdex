@@ -61,6 +61,7 @@ from src.chats.exc_handlers import (
     cant_add_members_handler,
     cant_remove_members_handler,
     failed_to_leave_chat_handler,
+    invalid_chat_history_cursor_handler,
 )
 from src.chats.exceptions import (
     ChatNotFound,
@@ -68,6 +69,7 @@ from src.chats.exceptions import (
     CantAddMembers,
     CantRemoveMembers,
     FailedToLeaveChat,
+    InvalidChatHistoryCursor,
 )
 
 from src.messages.exc_handlers import (
@@ -148,6 +150,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(CantAddMembers, cant_add_members_handler)  # type: ignore
     app.add_exception_handler(CantRemoveMembers, cant_remove_members_handler)  # type: ignore
     app.add_exception_handler(FailedToLeaveChat, failed_to_leave_chat_handler)  # type: ignore
+    app.add_exception_handler(InvalidChatHistoryCursor, invalid_chat_history_cursor_handler)  # type: ignore
 
     app.add_exception_handler(CantDeleteMessage, cant_delete_message_handler)  # type: ignore
     app.add_exception_handler(CantUpdateMessage, cant_update_message_handler)  # type: ignore

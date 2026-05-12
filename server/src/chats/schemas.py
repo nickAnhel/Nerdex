@@ -58,7 +58,9 @@ class ChatUpdate(BaseSchema):
 
 class MessageHistoryItem(MessageGetWithUser):
     item_type: str = "message"
+    chat_seq: int
 
 
 class EventHistoryItem(EventGetWithUsers):
     item_type: str = "event"
+    chat_seq: int

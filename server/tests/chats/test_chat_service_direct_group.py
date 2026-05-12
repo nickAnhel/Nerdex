@@ -1,12 +1,19 @@
 import uuid
+import datetime
 from types import SimpleNamespace
 
 import pytest
 
 from src.chats.enums import ChatMemberRole, ChatType
-from src.chats.exceptions import CantAddMembers
+from src.chats.exceptions import CantAddMembers, InvalidChatHistoryCursor
 from src.chats.schemas import ChatCreate
 from src.chats.service import ChatService
+from src.common.model_registry import import_all_models
+from src.events.models import EventModel
+from src.messages.models import MessageModel
+from src.users.models import UserModel
+
+import_all_models()
 
 
 def _user(user_id: uuid.UUID, username: str):
@@ -49,6 +56,8 @@ class FakeChatRepository:
         self.created_chat_id = uuid.uuid4()
         self.dialogs = []
         self.marked_read = None
+        self.history_items = []
+        self.history_args = None
 
     async def get_by_direct_key(self, direct_key: str):
         if self.existing_direct and self.existing_direct.direct_key == direct_key:
@@ -92,6 +101,15 @@ class FakeChatRepository:
     async def mark_read(self, *, chat_id, user_id):
         self.marked_read = (chat_id, user_id)
         return uuid.uuid4()
+
+    async def history(self, *, chat_id, limit, before_seq=None, after_seq=None):
+        self.history_args = {
+            "chat_id": chat_id,
+            "limit": limit,
+            "before_seq": before_seq,
+            "after_seq": after_seq,
+        }
+        return self.history_items
 
 
 @pytest.mark.asyncio
@@ -272,3 +290,76 @@ async def test_mark_chat_read_updates_current_member() -> None:
     await service.mark_chat_read(chat_id=chat_id, user_id=user_id)
 
     assert repository.marked_read == (chat_id, user_id)
+
+
+@pytest.mark.asyncio
+async def test_chat_history_rejects_conflicting_cursors() -> None:
+    service = ChatService(FakeChatRepository())  # type: ignore[arg-type]
+
+    with pytest.raises(InvalidChatHistoryCursor):
+        await service.get_chat_history(
+            chat_id=uuid.uuid4(),
+            limit=10,
+            before_seq=2,
+            after_seq=1,
+        )
+
+
+@pytest.mark.asyncio
+async def test_chat_history_preserves_timeline_order_and_seq() -> None:
+    chat_id = uuid.uuid4()
+    author = UserModel(
+        user_id=uuid.uuid4(),
+        username="alice",
+        hashed_password="hashed",
+        is_admin=False,
+        subscribers_count=0,
+    )
+    message = MessageModel(
+        message_id=uuid.uuid4(),
+        chat_id=chat_id,
+        client_message_id=uuid.uuid4(),
+        content="hello",
+        user_id=author.user_id,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    message.user = author
+    event = EventModel(
+        event_id=uuid.uuid4(),
+        chat_id=chat_id,
+        event_type="joined",
+        user_id=author.user_id,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    event.user = author
+    event.altered_user = None
+    setattr(message, "chat_seq", 1)
+    setattr(event, "chat_seq", 2)
+
+    repository = FakeChatRepository()
+    repository.history_items = [
+        (SimpleNamespace(chat_seq=1), message),
+        (SimpleNamespace(chat_seq=2), event),
+    ]
+    service = ChatService(repository)  # type: ignore[arg-type]
+
+    history = await service.get_chat_history(chat_id=chat_id, limit=10)
+
+    assert [item.item_type for item in history] == ["message", "event"]
+    assert [item.chat_seq for item in history] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_chat_history_passes_cursor_to_repository() -> None:
+    chat_id = uuid.uuid4()
+    repository = FakeChatRepository()
+    service = ChatService(repository)  # type: ignore[arg-type]
+
+    await service.get_chat_history(chat_id=chat_id, limit=5, after_seq=42)
+
+    assert repository.history_args == {
+        "chat_id": chat_id,
+        "limit": 5,
+        "before_seq": None,
+        "after_seq": 42,
+    }
