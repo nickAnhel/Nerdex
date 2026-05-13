@@ -28,8 +28,6 @@ class FakeArticleDetails:
     word_count: int
     reading_time_minutes: int
     toc: list[dict[str, str | int]]
-    seo_title: str | None = None
-    seo_description: str | None = None
 
 
 @dataclass
@@ -107,27 +105,42 @@ class FakeArticleRepository:
         self.articles: dict[uuid.UUID, FakeArticle] = {}
         self.reactions: dict[tuple[uuid.UUID, uuid.UUID], ReactionTypeEnum] = {}
 
-    async def create(self, **kwargs):  # type: ignore[no-untyped-def]
+    async def create(
+        self,
+        *,
+        author_id: uuid.UUID,
+        title: str,
+        excerpt: str,
+        body_markdown: str,
+        slug: str,
+        word_count: int,
+        reading_time_minutes: int,
+        toc: list[dict[str, str | int]],
+        status: ContentStatusEnum,
+        visibility: ContentVisibilityEnum,
+        created_at: datetime.datetime,
+        updated_at: datetime.datetime,
+        published_at: datetime.datetime | None,
+        commit: bool = True,
+    ) -> FakeArticle:
         article = FakeArticle(
             content_id=uuid.uuid4(),
-            author_id=kwargs["author_id"],
-            author=self.users[kwargs["author_id"]],
-            title=kwargs["title"],
-            excerpt=kwargs["excerpt"],
+            author_id=author_id,
+            author=self.users[author_id],
+            title=title,
+            excerpt=excerpt,
             article_details=FakeArticleDetails(
-                slug=kwargs["slug"],
-                body_markdown=kwargs["body_markdown"],
-                word_count=kwargs["word_count"],
-                reading_time_minutes=kwargs["reading_time_minutes"],
-                toc=kwargs["toc"],
-                seo_title=kwargs["seo_title"],
-                seo_description=kwargs["seo_description"],
+                slug=slug,
+                body_markdown=body_markdown,
+                word_count=word_count,
+                reading_time_minutes=reading_time_minutes,
+                toc=toc,
             ),
-            status=kwargs["status"],
-            visibility=kwargs["visibility"],
-            created_at=kwargs["created_at"],
-            updated_at=kwargs["updated_at"],
-            published_at=kwargs["published_at"],
+            status=status,
+            visibility=visibility,
+            created_at=created_at,
+            updated_at=updated_at,
+            published_at=published_at,
         )
         self.articles[article.content_id] = article
         return self._decorate(article, viewer_id=article.author_id)
@@ -168,21 +181,35 @@ class FakeArticleRepository:
             articles = [article for article in articles if article.status == ContentStatusEnum.PUBLISHED and article.visibility == ContentVisibilityEnum.PUBLIC]
         return [self._decorate(article, viewer_id=viewer_id) for article in articles]
 
-    async def update_article(self, **kwargs):  # type: ignore[no-untyped-def]
-        article = self.articles[kwargs["content_id"]]
-        article.title = kwargs["title"]
-        article.excerpt = kwargs["excerpt"]
-        article.status = kwargs["status"]
-        article.visibility = kwargs["visibility"]
-        article.updated_at = kwargs["updated_at"]
-        article.published_at = kwargs["published_at"]
-        article.article_details.slug = kwargs["slug"]
-        article.article_details.body_markdown = kwargs["body_markdown"]
-        article.article_details.word_count = kwargs["word_count"]
-        article.article_details.reading_time_minutes = kwargs["reading_time_minutes"]
-        article.article_details.toc = kwargs["toc"]
-        article.article_details.seo_title = kwargs["seo_title"]
-        article.article_details.seo_description = kwargs["seo_description"]
+    async def update_article(
+        self,
+        *,
+        content_id: uuid.UUID,
+        title: str,
+        excerpt: str,
+        body_markdown: str,
+        slug: str,
+        word_count: int,
+        reading_time_minutes: int,
+        toc: list[dict[str, str | int]],
+        status: ContentStatusEnum,
+        visibility: ContentVisibilityEnum,
+        updated_at: datetime.datetime,
+        published_at: datetime.datetime | None,
+        commit: bool = True,
+    ) -> FakeArticle:
+        article = self.articles[content_id]
+        article.title = title
+        article.excerpt = excerpt
+        article.status = status
+        article.visibility = visibility
+        article.updated_at = updated_at
+        article.published_at = published_at
+        article.article_details.slug = slug
+        article.article_details.body_markdown = body_markdown
+        article.article_details.word_count = word_count
+        article.article_details.reading_time_minutes = reading_time_minutes
+        article.article_details.toc = toc
         return self._decorate(article, viewer_id=article.author_id)
 
     async def commit(self) -> None:

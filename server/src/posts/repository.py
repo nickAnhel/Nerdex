@@ -9,6 +9,10 @@ from sqlalchemy.orm import selectinload
 
 from src.assets.enums import AttachmentTypeEnum
 from src.assets.models import AssetModel, ContentAssetModel
+import src.articles.models  # noqa: F401
+import src.comments.models  # noqa: F401
+import src.moments.models  # noqa: F401
+import src.videos.models  # noqa: F401
 import src.tags.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel, ContentReactionModel

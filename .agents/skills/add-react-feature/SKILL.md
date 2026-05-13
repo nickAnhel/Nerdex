@@ -37,7 +37,7 @@ description: Implement or substantially change a React frontend feature in Nerde
 Когда затрагиваются feed, profile, cards, reactions, comments или content lists:
 - не overfit implementation под один конкретный content type,
 - предпочитай shared fields + type-specific rendering extensions,
-- не хардкодь assumptions, блокирующие articles/videos/courses later.
+- не хардкодь assumptions, блокирующие articles/videos later.
 
 ## Anti-patterns
 Не делай:

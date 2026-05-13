@@ -31,7 +31,7 @@ description: Design or change PostgreSQL-backed entities, relations, constraints
 - moderation / deletion / archive states, если релевантно.
 
 ## Content-specific rule
-Если entity связана с posts / articles / videos / courses / comments / reactions / tags / feed behavior, сначала реши, находится ли concern в shared `content` или в type-specific detail table.
+Если entity связана с posts / articles / videos / comments / reactions / tags / feed behavior, сначала реши, находится ли concern в shared `content` или в type-specific detail table.
 
 ## Deliverable format
 При предложении schema changes включай:

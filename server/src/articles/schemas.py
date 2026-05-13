@@ -42,8 +42,6 @@ class ArticleCreate(BaseSchema):
     tags: list[str] | None = None
     cover_asset_id: uuid.UUID | None = None
     slug: str | None = Field(default=None, max_length=180)
-    seo_title: str | None = Field(default=None, max_length=300)
-    seo_description: str | None = Field(default=None, max_length=320)
 
 
 class ArticleUpdate(BaseSchema):
@@ -54,8 +52,6 @@ class ArticleUpdate(BaseSchema):
     tags: list[str] | None = None
     cover_asset_id: uuid.UUID | None = None
     slug: str | None = Field(default=None, max_length=180)
-    seo_title: str | None = Field(default=None, max_length=300)
-    seo_description: str | None = Field(default=None, max_length=320)
 
 
 class ArticleCardGet(BaseSchema):
@@ -86,9 +82,6 @@ class ArticleGet(ArticleCardGet):
     body_markdown: str
     toc: list[ArticleTocItemGet] = Field(default_factory=list)
     referenced_assets: list[ArticleAssetGet] = Field(default_factory=list)
-    seo_title: str | None = None
-    seo_description: str | None = None
-    og_image_url: str | None = None
 
 
 class ArticleEditorGet(ArticleGet):

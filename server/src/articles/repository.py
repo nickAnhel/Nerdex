@@ -39,8 +39,6 @@ class ArticleRepository:
         word_count: int,
         reading_time_minutes: int,
         toc: list[dict[str, str | int]],
-        seo_title: str | None,
-        seo_description: str | None,
         status: ContentStatusEnum,
         visibility: ContentVisibilityEnum,
         created_at: datetime.datetime,
@@ -74,8 +72,6 @@ class ArticleRepository:
                 word_count=word_count,
                 reading_time_minutes=reading_time_minutes,
                 toc=toc,
-                seo_title=seo_title,
-                seo_description=seo_description,
             )
         )
         if commit:
@@ -176,8 +172,6 @@ class ArticleRepository:
         word_count: int,
         reading_time_minutes: int,
         toc: list[dict[str, str | int]],
-        seo_title: str | None,
-        seo_description: str | None,
         status: ContentStatusEnum,
         visibility: ContentVisibilityEnum,
         updated_at: datetime.datetime,
@@ -205,8 +199,6 @@ class ArticleRepository:
                 word_count=word_count,
                 reading_time_minutes=reading_time_minutes,
                 toc=toc,
-                seo_title=seo_title,
-                seo_description=seo_description,
             )
         )
         if commit:

@@ -83,22 +83,11 @@ async def build_article_get(
         if asset is not None:
             referenced_assets.append(asset)
 
-    og_image_url = card.cover.preview_url if card.cover is not None else None
-    if og_image_url is None:
-        first_image = next(
-            (asset for asset in referenced_assets if asset.asset_type == "image"),
-            None,
-        )
-        og_image_url = first_image.preview_url if first_image is not None else None
-
     return ArticleGet(
         **card.model_dump(),
         body_markdown=article.article_details.body_markdown,
         toc=article.article_details.toc,
         referenced_assets=referenced_assets,
-        seo_title=article.article_details.seo_title,
-        seo_description=article.article_details.seo_description,
-        og_image_url=og_image_url,
     )
 
 

@@ -37,7 +37,7 @@ Frontend владеет presentation, interaction flow, local UI state, request 
 - не overfit implementation под один конкретный content type,
 - выделяй shared fields и shared interaction patterns,
 - добавляй type-specific rendering extension points,
-- не хардкодь assumptions, которые заблокируют articles/videos/courses позже.
+- не хардкодь assumptions, которые заблокируют articles/videos позже.
 
 ## Media/UI guidance
 - Media rendering должно исходить из coherent backend media model.
