@@ -1,10 +1,15 @@
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, Index, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.models import Base
+from src.content.enums import ReactionTypeEnum
+
+
+def _enum_values(enum_cls):  # type: ignore[no-untyped-def]
+    return [item.value for item in enum_cls]
 
 
 class MessageModel(Base):
@@ -57,6 +62,11 @@ class MessageModel(Base):
         back_populates="messages",
         foreign_keys=[user_id],
     )
+    reactions: Mapped[list["MessageReactionModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="message",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     reply_to_message: Mapped["MessageModel | None"] = relationship(
         "MessageModel",
         remote_side=[message_id],
@@ -98,3 +108,31 @@ class MessageSharedContentModel(Base):
 
     message: Mapped[MessageModel] = relationship(back_populates="shared_content")
     content: Mapped["ContentModel"] = relationship()  # type: ignore[name-defined]
+
+
+class MessageReactionModel(Base):
+    __tablename__ = "message_reactions"
+    __table_args__ = (Index("ix_message_reactions_user_id", "user_id"),)
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("messages.message_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    reaction_type: Mapped[ReactionTypeEnum] = mapped_column(
+        Enum(ReactionTypeEnum, name="reaction_type_enum", values_callable=_enum_values),
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        server_default=func.now(),
+    )
+
+    message: Mapped[MessageModel] = relationship(back_populates="reactions")
+    user: Mapped["UserModel"] = relationship(  # type: ignore[name-defined]
+        back_populates="message_reactions",
+        passive_deletes=True,
+    )

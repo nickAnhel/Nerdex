@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import desc, func, insert, select, update
+from sqlalchemy import delete, desc, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,13 +14,26 @@ import src.moments.models  # noqa: F401
 import src.posts.models  # noqa: F401
 import src.tags.models  # noqa: F401
 import src.videos.models  # noqa: F401
-from src.messages.models import MessageModel, MessageSharedContentModel
+from src.content.enums import ReactionTypeEnum
+from src.messages.models import MessageModel, MessageReactionModel, MessageSharedContentModel
 from src.users.models import UserModel
 
 
 class MessageRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    def _message_load_options(self):
+        return [
+            selectinload(MessageModel.user).selectinload(UserModel.subscribers),
+            selectinload(MessageModel.user)
+            .selectinload(UserModel.avatar_asset)
+            .selectinload(AssetModel.variants),
+            selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+            selectinload(MessageModel.reactions),
+            self._asset_links_load(),
+            *self._shared_content_load(),
+        ]
 
     async def create(
         self,
@@ -32,15 +45,7 @@ class MessageRepository:
             insert(MessageModel)
             .values(**data)
             .returning(MessageModel)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
         result = await self._session.execute(stmt)
         message = result.scalar_one()
@@ -72,15 +77,7 @@ class MessageRepository:
                 constraint="uq_messages_chat_user_client_message_id",
             )
             .returning(MessageModel)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
         result = await self._session.execute(stmt)
         message = result.scalar_one_or_none()
@@ -119,15 +116,7 @@ class MessageRepository:
             select(MessageModel)
             .filter_by(**filters)
             .execution_options(populate_existing=True)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
 
         result = await self._session.execute(query)
@@ -147,15 +136,7 @@ class MessageRepository:
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
 
         result = await self._session.execute(query)
@@ -185,15 +166,7 @@ class MessageRepository:
             .filter_by(message_id=message_id, user_id=user_id)
             .where(MessageModel.deleted_at.is_(None))
             .returning(MessageModel)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
 
         result = await self._session.execute(stmt)
@@ -226,15 +199,7 @@ class MessageRepository:
             .filter_by(**filters)
             .where(MessageModel.deleted_at.is_(None))
             .returning(MessageModel)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
 
         result = await self._session.execute(stmt)
@@ -260,15 +225,7 @@ class MessageRepository:
             .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
-            .options(
-                selectinload(MessageModel.user).selectinload(UserModel.subscribers),
-                selectinload(MessageModel.user)
-                .selectinload(UserModel.avatar_asset)
-                .selectinload(AssetModel.variants),
-                selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
-                self._asset_links_load(),
-                *self._shared_content_load(),
-            )
+            .options(*self._message_load_options())
         )
 
         result = await self._session.execute(query)
@@ -287,6 +244,62 @@ class MessageRepository:
 
         result = await self._session.execute(query)
         return result.scalar_one()
+
+    async def set_reaction(
+        self,
+        *,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+        reaction_type: ReactionTypeEnum,
+    ) -> MessageModel:
+        existing = await self._session.execute(
+            select(MessageReactionModel)
+            .where(MessageReactionModel.message_id == message_id)
+            .where(MessageReactionModel.user_id == user_id)
+        )
+        current_reaction = existing.scalar_one_or_none()
+        if current_reaction is None:
+            await self._session.execute(
+                insert(MessageReactionModel).values(
+                    message_id=message_id,
+                    user_id=user_id,
+                    reaction_type=reaction_type,
+                )
+            )
+        elif current_reaction.reaction_type != reaction_type:
+            await self._session.execute(
+                update(MessageReactionModel)
+                .where(MessageReactionModel.message_id == message_id)
+                .where(MessageReactionModel.user_id == user_id)
+                .values(reaction_type=reaction_type)
+            )
+
+        await self._session.commit()
+        return await self.get_single(message_id=message_id)
+
+    async def remove_reaction(
+        self,
+        *,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+        reaction_type: ReactionTypeEnum,
+    ) -> MessageModel:
+        existing = await self._session.execute(
+            select(MessageReactionModel)
+            .where(MessageReactionModel.message_id == message_id)
+            .where(MessageReactionModel.user_id == user_id)
+        )
+        current_reaction = existing.scalar_one_or_none()
+        if current_reaction is None or current_reaction.reaction_type != reaction_type:
+            return await self.get_single(message_id=message_id)
+
+        await self._session.execute(
+            delete(MessageReactionModel)
+            .where(MessageReactionModel.message_id == message_id)
+            .where(MessageReactionModel.user_id == user_id)
+        )
+        await self._session.commit()
+        return await self.get_single(message_id=message_id)
 
     async def _insert_asset_links(
         self,

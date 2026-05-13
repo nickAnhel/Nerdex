@@ -5,7 +5,14 @@ import pytest
 from pydantic import ValidationError
 
 from src.assets.enums import AssetTypeEnum
-from src.messages.schemas import MessageAttachmentGet, MessageCreate, MessageGetWithUser, MessageReplyPreview
+from src.content.enums import ReactionTypeEnum
+from src.messages.schemas import (
+    MessageAttachmentGet,
+    MessageCreate,
+    MessageGetWithUser,
+    MessageReactionGet,
+    MessageReplyPreview,
+)
 from src.users.schemas import UserGet
 
 
@@ -33,6 +40,13 @@ def test_message_get_with_user_preserves_server_created_at() -> None:
             content_preview="reply preview",
             deleted=False,
         ),
+        reactions=[
+            MessageReactionGet(
+                reaction_type=ReactionTypeEnum.LIKE,
+                count=2,
+                reacted_by_me=True,
+            ),
+        ],
         user=UserGet(
             user_id=uuid.uuid4(),
             username="alice",
@@ -48,6 +62,8 @@ def test_message_get_with_user_preserves_server_created_at() -> None:
     assert message.reply_to_message_id == reply_to_message_id
     assert message.reply_preview is not None
     assert message.reply_preview.content_preview == "reply preview"
+    assert message.reactions[0].reaction_type == ReactionTypeEnum.LIKE
+    assert message.reactions[0].reacted_by_me is True
 
 
 def test_message_create_requires_text_or_attachment() -> None:
@@ -89,3 +105,15 @@ def test_message_get_with_user_allows_file_only_response() -> None:
 
     assert message.content == ""
     assert message.attachments[0].asset_id == asset_id
+
+
+def test_message_reaction_get_exposes_reaction_state() -> None:
+    reaction = MessageReactionGet(
+        reaction_type=ReactionTypeEnum.DISLIKE,
+        count=3,
+        reacted_by_me=False,
+    )
+
+    assert reaction.reaction_type == ReactionTypeEnum.DISLIKE
+    assert reaction.count == 3
+    assert reaction.reacted_by_me is False

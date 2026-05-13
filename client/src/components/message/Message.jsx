@@ -8,11 +8,11 @@ import DownloadIcon from "../icons/DownloadIcon";
 import FileTypeIcon from "../icons/FileTypeIcon";
 import { getAvatarUrl } from "../../utils/avatar";
 import { formatAttachmentSize } from "../../utils/postAttachments";
+import { getMessageReactionMeta } from "./messageReactions";
 
 
 function Message({
     messageId,
-    userId,
     username,
     content,
     createdAt,
@@ -23,6 +23,7 @@ function Message({
     replyPreview = null,
     attachments = [],
     sharedContent = null,
+    reactions = [],
     onContextMenu,
     onReplyPreviewClick,
     onRetry,
@@ -44,6 +45,7 @@ function Message({
 
     const isDeleted = Boolean(deletedAt);
     const visibleContent = isDeleted ? "Message deleted" : content;
+    const visibleReactions = reactions.filter((reaction) => reaction.count > 0 || reaction.reactedByMe);
 
     return (
         <>
@@ -85,6 +87,9 @@ function Message({
                     {!isDeleted && sharedContent && (
                         <MessageSharedContentPreview content={sharedContent} />
                     )}
+                    {visibleReactions.length > 0 && (
+                        <MessageReactions reactions={visibleReactions} />
+                    )}
                     {
                         status === "failed" && !isDeleted &&
                         <button className="msg-retry" type="button" onClick={onRetry}>Retry</button>
@@ -93,6 +98,29 @@ function Message({
             </div>
         </>
     )
+}
+
+function MessageReactions({ reactions = [] }) {
+    return (
+        <div className="msg-reactions" aria-label="Message reactions">
+            {reactions.map((reaction) => {
+                const meta = getMessageReactionMeta(reaction.reactionType);
+
+                return (
+                    <span
+                        key={reaction.reactionType}
+                        className={`msg-reaction-pill ${reaction.reactedByMe ? "msg-reaction-pill-active" : ""}`}
+                        aria-label={`${meta.ariaLabel} ${reaction.count}`}
+                    >
+                        <span className="msg-reaction-pill-emoji" aria-hidden="true">
+                            {meta.emoji}
+                        </span>
+                        <span className="msg-reaction-pill-count">{reaction.count}</span>
+                    </span>
+                );
+            })}
+        </div>
+    );
 }
 
 function MessageSharedContentPreview({ content }) {
@@ -228,9 +256,9 @@ function MessageAttachments({ attachments = [] }) {
                         )}
                     </div>
                 );
-            })}
-        </div>
-    );
+        })}
+    </div>
+);
 }
 
 export default Message

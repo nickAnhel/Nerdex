@@ -191,6 +191,38 @@
     -webkit-box-orient: vertical;
 }
 
+.msg-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    margin-top: .35rem;
+}
+
+.msg-reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .45rem;
+    border-radius: 999px;
+    color: #d7d7d7;
+    background-color: rgba(255, 255, 255, .08);
+    font-size: .78rem;
+}
+
+.msg-reaction-pill-active {
+    color: #fff;
+    background-color: rgba(157, 80, 255, .24);
+}
+
+.msg-reaction-pill-emoji {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.msg-reaction-pill-count {
+    font-weight: 700;
+}
+
 .msg-reply-preview {
     width: 100%;
     display: flex;

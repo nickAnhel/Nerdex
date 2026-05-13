@@ -15,11 +15,19 @@ from src.common.database import async_session_maker
 from src.common.exceptions import PermissionDenied
 from src.content.exceptions import ContentNotFound
 from src.messages.dependencies import get_message_service
-from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
+from src.messages.exceptions import (
+    CantDeleteMessage,
+    CantReactToMessage,
+    CantUpdateMessage,
+    InvalidMessageAssets,
+    InvalidMessageReply,
+)
 from src.messages.schemas import (
     MessageCreateWS,
     MessageDeleteWS,
     MessageGetWS,
+    MessageReactionEventWS,
+    MessageReactionWS,
     MessageUpdate,
     MessageUpdateWS,
 )
@@ -66,7 +74,7 @@ async def _get_socket_user_id(sid: str) -> uuid.UUID:
     return user_id
 
 
-async def _build_message_ws_payload(message) -> dict[str, Any]:
+async def _build_message_ws_payload(message, *, viewer_id: uuid.UUID | None = None) -> dict[str, Any]:
     avatar = message.user.avatar
     return MessageGetWS(
         message_id=message.message_id,
@@ -85,6 +93,24 @@ async def _build_message_ws_payload(message) -> dict[str, Any]:
         reply_preview=message.reply_preview,
         attachments=message.attachments,
         shared_content=message.shared_content,
+        reactions=message.reactions,
+    ).model_dump(mode="json")
+
+
+def _build_message_reaction_event_payload(
+    *,
+    message_id: uuid.UUID,
+    user_id: uuid.UUID,
+    reaction_type: Any,
+    previous_reaction_type: Any = None,
+    action: str,
+) -> dict[str, Any]:
+    return MessageReactionEventWS(
+        message_id=message_id,
+        user_id=user_id,
+        reaction_type=reaction_type,
+        previous_reaction_type=previous_reaction_type,
+        action=action,
     ).model_dump(mode="json")
 
 
@@ -274,3 +300,87 @@ async def on_message_delete(
         room=str(message.chat_id),
     )
     return _success_response(message_payload)
+
+
+@sio.on("message:reaction:set")
+async def on_message_reaction_set(
+    sid: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        user_id = await _get_socket_user_id(sid)
+        msg = MessageReactionWS.model_validate(data)
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return _error_response("bad_request", "Invalid message reaction payload")
+    except SocketAuthenticationError as exc:
+        return _error_response("unauthorized", str(exc))
+
+    async with async_session_maker() as session:
+        message_service = get_message_service(session)
+        try:
+            message, previous_reaction_type = await message_service.set_message_reaction(
+                message_id=msg.message_id,
+                user_id=user_id,
+                reaction_type=msg.reaction_type,
+            )
+        except PermissionDenied as exc:
+            return _error_response("forbidden", str(exc))
+        except CantReactToMessage as exc:
+            return _error_response("bad_request", str(exc))
+
+    message_payload = _build_message_reaction_event_payload(
+        message_id=message.message_id,
+        user_id=user_id,
+        reaction_type=msg.reaction_type,
+        previous_reaction_type=previous_reaction_type,
+        action="added",
+    )
+    await sio.emit(
+        "message:reaction:added",
+        message_payload,
+        room=str(message.chat_id),
+        skip_sid=sid,
+    )
+    return _success_response(await _build_message_ws_payload(message))
+
+
+@sio.on("message:reaction:remove")
+async def on_message_reaction_remove(
+    sid: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        user_id = await _get_socket_user_id(sid)
+        msg = MessageReactionWS.model_validate(data)
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return _error_response("bad_request", "Invalid message reaction payload")
+    except SocketAuthenticationError as exc:
+        return _error_response("unauthorized", str(exc))
+
+    async with async_session_maker() as session:
+        message_service = get_message_service(session)
+        try:
+            message, previous_reaction_type = await message_service.remove_message_reaction(
+                message_id=msg.message_id,
+                user_id=user_id,
+                reaction_type=msg.reaction_type,
+            )
+        except PermissionDenied as exc:
+            return _error_response("forbidden", str(exc))
+        except CantReactToMessage as exc:
+            return _error_response("bad_request", str(exc))
+
+    message_payload = _build_message_reaction_event_payload(
+        message_id=message.message_id,
+        user_id=user_id,
+        reaction_type=msg.reaction_type,
+        previous_reaction_type=previous_reaction_type,
+        action="removed",
+    )
+    await sio.emit(
+        "message:reaction:removed",
+        message_payload,
+        room=str(message.chat_id),
+        skip_sid=sid,
+    )
+    return _success_response(await _build_message_ws_payload(message))

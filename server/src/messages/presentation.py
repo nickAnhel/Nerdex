@@ -4,8 +4,14 @@ import typing as tp
 import uuid
 
 from src.assets.enums import AssetTypeEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
+from src.content.enums import ReactionTypeEnum
 from src.content.service import ContentService
-from src.messages.schemas import MessageAttachmentGet, MessageGetWithUser, MessageReplyPreview
+from src.messages.schemas import (
+    MessageAttachmentGet,
+    MessageGetWithUser,
+    MessageReactionGet,
+    MessageReplyPreview,
+)
 from src.users.presentation import build_user_get
 
 if tp.TYPE_CHECKING:
@@ -63,6 +69,7 @@ async def build_message_get_with_user(
             if deleted_at is not None or not include_attachments
             else await build_message_attachments(message, storage=storage)
         ),
+        reactions=build_message_reactions(message, viewer_id=viewer_id),
         shared_content=(
             None
             if deleted_at is not None
@@ -76,6 +83,33 @@ async def build_message_get_with_user(
         ),
         user=user,
     )
+
+
+def build_message_reactions(
+    message: tp.Any,
+    *,
+    viewer_id: uuid.UUID | None,
+) -> list[MessageReactionGet]:
+    counts = {reaction_type: 0 for reaction_type in ReactionTypeEnum}
+    reacted_by_me = {reaction_type: False for reaction_type in ReactionTypeEnum}
+
+    for reaction in getattr(message, "reactions", []):
+        reaction_type = getattr(reaction, "reaction_type", None)
+        if reaction_type not in counts:
+            continue
+
+        counts[reaction_type] += 1
+        if viewer_id is not None and getattr(reaction, "user_id", None) == viewer_id:
+            reacted_by_me[reaction_type] = True
+
+    return [
+        MessageReactionGet(
+            reaction_type=reaction_type,
+            count=counts[reaction_type],
+            reacted_by_me=reacted_by_me[reaction_type],
+        )
+        for reaction_type in ReactionTypeEnum
+    ]
 
 
 async def build_message_shared_content(

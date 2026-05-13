@@ -8,7 +8,13 @@ from src.common.exceptions import PermissionDenied
 from src.assets.enums import AssetStatusEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.schemas import ContentListItemGet
-from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
+from src.messages.exceptions import (
+    CantDeleteMessage,
+    CantReactToMessage,
+    CantUpdateMessage,
+    InvalidMessageAssets,
+    InvalidMessageReply,
+)
 from src.messages.schemas import MessageCreate, SharedContentMessagesCreate, MessageUpdate
 from src.messages.service import DELETED_MESSAGE_STUB, MessageService
 from src.users.schemas import UserGet
@@ -33,6 +39,7 @@ class _Message:
         deleted_at=None,
         reply_to_message=None,
         shared_content=None,
+        reactions=None,
     ) -> None:
         self.message_id = uuid.uuid4()
         self.chat_id = chat_id or uuid.uuid4()
@@ -51,10 +58,17 @@ class _Message:
         self.reply_to_message = reply_to_message
         self.asset_links = []
         self.shared_content = shared_content
+        self.reactions = reactions or []
 
     @property
     def content_ellipsis(self) -> str:
         return self.content
+
+
+class _Reaction:
+    def __init__(self, *, user_id, reaction_type) -> None:
+        self.user_id = user_id
+        self.reaction_type = reaction_type
 
 
 class _Repository:
@@ -63,6 +77,7 @@ class _Repository:
         self.raises = raises
         self.created_asset_ids = None
         self.created_messages = []
+        self.reaction_calls = []
 
     async def update(self, **_kwargs):
         if self.raises is not None:
@@ -91,6 +106,48 @@ class _Repository:
         if self.raises is not None:
             raise self.raises
         return self.message.reply_to_message
+
+    async def get_single(self, **_kwargs):
+        if self.raises is not None:
+            raise self.raises
+        return self.message
+
+    async def set_reaction(self, **kwargs):
+        if self.raises is not None:
+            raise self.raises
+        self.reaction_calls.append(("set", kwargs))
+        existing = next(
+            (
+                reaction
+                for reaction in self.message.reactions
+                if reaction.user_id == kwargs["user_id"]
+            ),
+            None,
+        )
+        if existing is None:
+            self.message.reactions.append(
+                _Reaction(
+                    user_id=kwargs["user_id"],
+                    reaction_type=kwargs["reaction_type"],
+                )
+            )
+        else:
+            existing.reaction_type = kwargs["reaction_type"]
+        return self.message
+
+    async def remove_reaction(self, **kwargs):
+        if self.raises is not None:
+            raise self.raises
+        self.reaction_calls.append(("remove", kwargs))
+        self.message.reactions = [
+            reaction
+            for reaction in self.message.reactions
+            if not (
+                reaction.user_id == kwargs["user_id"]
+                and reaction.reaction_type == kwargs["reaction_type"]
+            )
+        ]
+        return self.message
 
 
 class _Variant:
@@ -252,6 +309,105 @@ async def test_delete_message_rejects_missing_or_already_deleted_message() -> No
         await service.delete_message(
             message_id=uuid.uuid4(),
             user_id=uuid.uuid4(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_message_reaction_returns_aggregated_reactions() -> None:
+    chat_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    message = _Message(
+        chat_id=chat_id,
+        reactions=[
+            _Reaction(user_id=uuid.uuid4(), reaction_type=ReactionTypeEnum.LIKE),
+        ],
+    )
+    repository = _Repository(message)
+    service = MessageService(
+        repository,  # type: ignore[arg-type]
+        chat_repository=_ChatRepository([chat_id]),  # type: ignore[arg-type]
+    )
+
+    result, previous_reaction_type = await service.set_message_reaction(
+        message_id=message.message_id,
+        user_id=user_id,
+        reaction_type=ReactionTypeEnum.DISLIKE,
+    )
+
+    assert previous_reaction_type is None
+    assert repository.reaction_calls[0][0] == "set"
+    assert result.reactions[0].reaction_type == ReactionTypeEnum.LIKE
+    assert result.reactions[0].count == 1
+    assert result.reactions[0].reacted_by_me is False
+    assert result.reactions[1].reaction_type == ReactionTypeEnum.DISLIKE
+    assert result.reactions[1].count == 1
+    assert result.reactions[1].reacted_by_me is True
+
+
+@pytest.mark.asyncio
+async def test_remove_message_reaction_clears_reaction_state() -> None:
+    chat_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    message = _Message(
+        chat_id=chat_id,
+        reactions=[
+            _Reaction(user_id=user_id, reaction_type=ReactionTypeEnum.LIKE),
+        ],
+    )
+    repository = _Repository(message)
+    service = MessageService(
+        repository,  # type: ignore[arg-type]
+        chat_repository=_ChatRepository([chat_id]),  # type: ignore[arg-type]
+    )
+
+    result, previous_reaction_type = await service.remove_message_reaction(
+        message_id=message.message_id,
+        user_id=user_id,
+        reaction_type=ReactionTypeEnum.LIKE,
+    )
+
+    assert previous_reaction_type == ReactionTypeEnum.LIKE
+    assert repository.reaction_calls[0][0] == "remove"
+    assert result.reactions[0].count == 0
+    assert result.reactions[0].reacted_by_me is False
+    assert result.reactions[1].count == 0
+    assert result.reactions[1].reacted_by_me is False
+
+
+@pytest.mark.asyncio
+async def test_set_message_reaction_rejects_deleted_message() -> None:
+    chat_id = uuid.uuid4()
+    message = _Message(
+        chat_id=chat_id,
+        deleted_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    service = MessageService(
+        _Repository(message),  # type: ignore[arg-type]
+        chat_repository=_ChatRepository([chat_id]),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(CantReactToMessage):
+        await service.set_message_reaction(
+            message_id=message.message_id,
+            user_id=message.user_id,
+            reaction_type=ReactionTypeEnum.LIKE,
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_message_reaction_rejects_non_member_user() -> None:
+    chat_id = uuid.uuid4()
+    message = _Message(chat_id=chat_id)
+    service = MessageService(
+        _Repository(message),  # type: ignore[arg-type]
+        chat_repository=_ChatRepository([]),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(PermissionDenied):
+        await service.set_message_reaction(
+            message_id=message.message_id,
+            user_id=uuid.uuid4(),
+            reaction_type=ReactionTypeEnum.LIKE,
         )
 
 

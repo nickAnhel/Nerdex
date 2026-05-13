@@ -11,7 +11,12 @@ import ChatService from "../../service/ChatService";
 import NotFound from "../not-found/NotFound";
 
 import Message from "../message/Message";
+import { MESSAGE_REACTIONS } from "../message/messageReactions";
 import Event from "../event/Event";
+import {
+    applyReactionEventToMessage,
+    normalizeMessageReactions,
+} from "./messageReactionState";
 
 import ChatModal from "../chat-modal/ChatModal";
 import Modal from "../modal/Modal";
@@ -66,6 +71,7 @@ function normalizeTimelineItem(item, currentUserId) {
             avatarUrl: item.user?.avatar?.small_url || null,
             attachments: normalizeMessageAttachments(item.attachments),
             sharedContent: normalizeSharedContent(item.shared_content),
+            reactions: normalizeMessageReactions(item.reactions),
             status: "sent",
         };
     }
@@ -175,6 +181,7 @@ function normalizeMessagePayload(msgData, currentUserId) {
         avatarUrl: msgData.avatar_small_url || null,
         attachments: normalizeMessageAttachments(msgData.attachments),
         sharedContent: normalizeSharedContent(msgData.shared_content),
+        reactions: normalizeMessageReactions(msgData.reactions),
         status: "sent",
     };
 }
@@ -292,6 +299,14 @@ function ChatDetails() {
 
         shouldScrollBottomRef.current = scrollToBottom;
         setChatItems((prevItems) => mergeTimelineItems(prevItems, normalizedItems));
+    }, [store.user.user_id]);
+
+    const applyReactionEvent = useCallback((reactionEvent) => {
+        setChatItems((items) => items.map((item) => applyReactionEventToMessage(
+            item,
+            reactionEvent,
+            store.user.user_id,
+        )));
     }, [store.user.user_id]);
 
     const updateMessageInChat = useCallback((messageItem) => {
@@ -530,6 +545,16 @@ function ChatDetails() {
             updateMessageInChat(normalizeMessagePayload(msgData, store.user.user_id));
         })
 
+        socket.current.on("message:reaction:added", (data) => {
+            const reactionEvent = parseSocketPayload(data);
+            applyReactionEvent(reactionEvent);
+        })
+
+        socket.current.on("message:reaction:removed", (data) => {
+            const reactionEvent = parseSocketPayload(data);
+            applyReactionEvent(reactionEvent);
+        })
+
         return () => {
             socket.current.emit("leave", {
                 chat_id: chat.chat_id,
@@ -538,10 +563,12 @@ function ChatDetails() {
             socket.current.off("message:created");
             socket.current.off("message:updated");
             socket.current.off("message:deleted");
+            socket.current.off("message:reaction:added");
+            socket.current.off("message:reaction:removed");
             socket.current.off("connect_error");
             socket.current.disconnect();
         }
-    }, [applyHistoryItems, chat.chat_id, markCurrentChatRead, store.user.user_id, updateMessageInChat]);
+    }, [applyHistoryItems, applyReactionEvent, chat.chat_id, markCurrentChatRead, store.user.user_id, updateMessageInChat]);
 
     const resizeTextarea = () => {
         let rowsTotalHeight = textareaRef.current.value.split("\n").length * 25;
@@ -889,6 +916,39 @@ function ChatDetails() {
         });
     }
 
+    const handleMessageReaction = (messageItem, reactionType) => {
+        if (!messageItem?.messageId || messageItem.status !== "sent" || messageItem.deletedAt) {
+            return;
+        }
+
+        const currentReaction = messageItem.reactions?.find((reaction) => reaction.reactedByMe)?.reactionType || null;
+        const eventName = currentReaction === reactionType
+            ? "message:reaction:remove"
+            : "message:reaction:set";
+
+        socket.current.timeout(10000).emit(eventName, {
+            message_id: messageItem.messageId,
+            reaction_type: reactionType,
+        }, (error, response) => {
+            if (error || !response || !response.ok) {
+                console.log(response?.error?.detail || "Failed to update message reaction");
+                return;
+            }
+
+            updateMessageInChat(normalizeMessagePayload(response.data, store.user.user_id));
+        });
+    }
+
+    const handleMessageContextReaction = (reactionType) => {
+        if (!messageMenu?.message) {
+            return;
+        }
+
+        const selectedMessage = messageMenu.message;
+        setMessageMenu(null);
+        handleMessageReaction(selectedMessage, reactionType);
+    }
+
     const setTitle = (newTitle) => {
         setChat((prev) => ({
             ...prev,
@@ -958,7 +1018,6 @@ function ChatDetails() {
                                 <Message
                                     key={item.key || index}
                                     messageId={item.messageId}
-                                    userId={item.userId}
                                     username={item.username}
                                     content={item.content}
                                     createdAt={item.createdAt}
@@ -969,6 +1028,7 @@ function ChatDetails() {
                                     replyPreview={item.replyPreview}
                                     attachments={item.attachments}
                                     sharedContent={item.sharedContent}
+                                    reactions={item.reactions}
                                     onContextMenu={(event) => openMessageMenu(event, item)}
                                     onReplyPreviewClick={scrollToMessage}
                                     onRetry={() => retryMessage(item.clientMessageId)}
@@ -991,14 +1051,41 @@ function ChatDetails() {
                     style={{ left: messageMenu.x, top: messageMenu.y }}
                     onClick={(event) => event.stopPropagation()}
                 >
-                    <button type="button" onClick={startReplyingToMessage}>Reply</button>
-                    {
-                        messageMenu.message.userId === store.user.user_id && !messageMenu.message.deletedAt &&
+                    {!messageMenu.message.deletedAt && (
                         <>
-                            <button type="button" onClick={startEditingMessage}>Edit</button>
-                            <button type="button" className="danger" onClick={requestDeleteSelectedMessage}>Delete</button>
+                            <div className="message-context-menu-reactions" role="toolbar" aria-label="Message reactions">
+                                {MESSAGE_REACTIONS.map((reaction) => {
+                                    const isActive = messageMenu.message?.reactions?.some((item) => (
+                                        item.reactedByMe && item.reactionType === reaction.reactionType
+                                    ));
+
+                                    return (
+                                        <button
+                                            key={reaction.reactionType}
+                                            type="button"
+                                            className={`message-context-menu-reaction ${isActive ? "active" : ""}`}
+                                            aria-label={reaction.ariaLabel}
+                                            title={reaction.ariaLabel}
+                                            onClick={() => handleMessageContextReaction(reaction.reactionType)}
+                                        >
+                                            <span aria-hidden="true">{reaction.emoji}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="message-context-menu-divider" />
                         </>
-                    }
+                    )}
+                    <div className="message-context-menu-actions">
+                        <button type="button" onClick={startReplyingToMessage}>Reply</button>
+                        {
+                            messageMenu.message.userId === store.user.user_id && !messageMenu.message.deletedAt &&
+                            <>
+                                <button type="button" onClick={startEditingMessage}>Edit</button>
+                                <button type="button" className="danger" onClick={requestDeleteSelectedMessage}>Delete</button>
+                            </>
+                        }
+                    </div>
                 </div>
             }
             <Modal active={Boolean(deleteMessageCandidate)} setActive={closeDeleteMessageModal}>

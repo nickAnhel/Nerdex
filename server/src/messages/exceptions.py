@@ -12,3 +12,7 @@ class InvalidMessageReply(Exception):
 
 class InvalidMessageAssets(Exception):
     """Raised when message attachments are invalid or unavailable"""
+
+
+class CantReactToMessage(Exception):
+    """Raised when trying to react to a deleted or unavailable message"""

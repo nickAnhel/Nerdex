@@ -1,12 +1,20 @@
 import datetime
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from src.assets.enums import AssetTypeEnum
 from src.common.schemas import BaseSchema
+from src.content.enums import ReactionTypeEnum
 from src.content.schemas import ContentListItemGet
 from src.users.schemas import UserGet
+
+
+class MessageReactionGet(BaseSchema):
+    reaction_type: ReactionTypeEnum
+    count: int = Field(ge=0)
+    reacted_by_me: bool = False
 
 
 class MessageCreateWS(BaseModel):
@@ -68,6 +76,20 @@ class MessageGetWS(BaseModel):
     avatar_small_url: str | None = None
     attachments: list[MessageAttachmentGet] = Field(default_factory=list)
     shared_content: ContentListItemGet | None = None
+    reactions: list[MessageReactionGet] = Field(default_factory=list)
+
+
+class MessageReactionWS(BaseModel):
+    message_id: uuid.UUID
+    reaction_type: ReactionTypeEnum
+
+
+class MessageReactionEventWS(BaseModel):
+    message_id: uuid.UUID
+    user_id: uuid.UUID
+    reaction_type: ReactionTypeEnum
+    previous_reaction_type: ReactionTypeEnum | None = None
+    action: Literal["added", "removed"]
 
 
 class MessageUpdateWS(BaseModel):
@@ -110,6 +132,7 @@ class MessageGet(MessageCreate):
     reply_preview: MessageReplyPreview | None = None
     attachments: list[MessageAttachmentGet] = Field(default_factory=list)
     shared_content: ContentListItemGet | None = None
+    reactions: list[MessageReactionGet] = Field(default_factory=list)
 
 
 class MessageGetWithUser(MessageGet):

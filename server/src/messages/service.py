@@ -10,14 +10,20 @@ from src.assets.repository import AssetRepository
 from src.chats.exceptions import ChatNotFound
 from src.chats.repository import ChatRepository
 from src.common.exceptions import PermissionDenied
+from src.content.enums import ReactionTypeEnum
 from src.content.schemas import ContentListItemGet
 from src.content.service import ContentService
-from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
+from src.messages.exceptions import (
+    CantDeleteMessage,
+    CantReactToMessage,
+    CantUpdateMessage,
+    InvalidMessageAssets,
+    InvalidMessageReply,
+)
 from src.messages.presentation import DELETED_MESSAGE_STUB, build_message_get_with_user
 from src.messages.repository import MessageRepository
 from src.messages.schemas import (
     MessageCreate,
-    MessageGet,
     MessageGetWithUser,
     MessageReplyPreview,
     SharedContentMessagesCreate,
@@ -197,6 +203,56 @@ class MessageService:
 
         return await self._build_message_with_user(message)
 
+    async def set_message_reaction(
+        self,
+        *,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+        reaction_type: ReactionTypeEnum,
+    ) -> tuple[MessageGetWithUser, ReactionTypeEnum | None]:
+        message = await self._get_reactable_message(
+            message_id=message_id,
+            user_id=user_id,
+        )
+        previous_reaction_type = self._get_user_reaction_type(message, user_id=user_id)
+        reacted_message = await self._repository.set_reaction(
+            message_id=message.message_id,
+            user_id=user_id,
+            reaction_type=reaction_type,
+        )
+        return (
+            await self._build_message_with_user(
+                reacted_message,
+                viewer_id=user_id,
+            ),
+            previous_reaction_type,
+        )
+
+    async def remove_message_reaction(
+        self,
+        *,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+        reaction_type: ReactionTypeEnum,
+    ) -> tuple[MessageGetWithUser, ReactionTypeEnum | None]:
+        message = await self._get_reactable_message(
+            message_id=message_id,
+            user_id=user_id,
+        )
+        previous_reaction_type = self._get_user_reaction_type(message, user_id=user_id)
+        reacted_message = await self._repository.remove_reaction(
+            message_id=message.message_id,
+            user_id=user_id,
+            reaction_type=reaction_type,
+        )
+        return (
+            await self._build_message_with_user(
+                reacted_message,
+                viewer_id=user_id,
+            ),
+            previous_reaction_type,
+        )
+
     async def udpate_message(
         self,
         *,
@@ -229,6 +285,41 @@ class MessageService:
             raise InvalidMessageReply(
                 f"Reply target message with id '{reply_to_message_id}' belongs to another chat"
             )
+
+    async def _get_reactable_message(
+        self,
+        *,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ):
+        if self._chat_repository is None:
+            raise PermissionDenied("Chat access checks are not configured")
+
+        try:
+            message = await self._repository.get_single(message_id=message_id)
+        except NoResultFound as exc:
+            raise CantReactToMessage(f"Message with id '{message_id}' not found") from exc
+
+        if message.deleted_at is not None:
+            raise CantReactToMessage(f"Message with id '{message_id}' is deleted")
+
+        if not await self._chat_repository.is_member(chat_id=message.chat_id, user_id=user_id):
+            raise PermissionDenied(
+                f"User with id '{user_id}' is not a member of chat with id '{message.chat_id}'"
+            )
+
+        return message
+
+    def _get_user_reaction_type(
+        self,
+        message,
+        *,
+        user_id: uuid.UUID,
+    ) -> ReactionTypeEnum | None:
+        for reaction in getattr(message, "reactions", []):
+            if getattr(reaction, "user_id", None) == user_id:
+                return getattr(reaction, "reaction_type", None)
+        return None
 
     async def search_messages(
         self,

@@ -1,4 +1,4 @@
-from src.messages.models import MessageModel, MessageSharedContentModel
+from src.messages.models import MessageModel, MessageReactionModel, MessageSharedContentModel
 
 
 def test_message_client_message_id_idempotency_constraint_is_registered() -> None:
@@ -51,3 +51,22 @@ def test_message_shared_content_table_is_registered() -> None:
     assert [column.name for column in indexes["ix_message_shared_content_content_id"].columns] == [
         "content_id",
     ]
+
+
+def test_message_reaction_table_is_registered() -> None:
+    columns = MessageReactionModel.__table__.columns
+    indexes = {index.name: index for index in MessageReactionModel.__table__.indexes}
+
+    assert [column.name for column in MessageReactionModel.__table__.primary_key.columns] == [
+        "message_id",
+        "user_id",
+    ]
+    assert "reaction_type" in columns
+    assert "created_at" in columns
+    assert [column.name for column in indexes["ix_message_reactions_user_id"].columns] == [
+        "user_id",
+    ]
+
+
+def test_message_has_reactions_relationship() -> None:
+    assert "reactions" in MessageModel.__mapper__.relationships

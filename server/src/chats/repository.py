@@ -151,6 +151,7 @@ class ChatRepository:
                     .selectinload(UserModel.avatar_asset)
                     .selectinload(AssetModel.variants),
                     selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                    selectinload(MessageModel.reactions),
                     self._message_asset_links_load(),
                     *self._message_shared_content_load(),
                 )
@@ -525,6 +526,7 @@ class ChatRepository:
                 .selectinload(UserModel.avatar_asset)
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
+                selectinload(MessageModel.reactions),
                 self._message_asset_links_load(),
                 *self._message_shared_content_load(),
             )
