@@ -1,4 +1,5 @@
 import datetime
+import asyncio
 import uuid
 
 import pytest
@@ -15,7 +16,11 @@ from src.messages.exceptions import (
     InvalidMessageAssets,
     InvalidMessageReply,
 )
-from src.messages.schemas import MessageCreate, SharedContentMessagesCreate, MessageUpdate
+from src.messages.schemas import (
+    MessageCreate,
+    MessageUpdate,
+    SharedContentMessagesCreate,
+)
 from src.messages.service import DELETED_MESSAGE_STUB, MessageService
 from src.users.schemas import UserGet
 
@@ -78,6 +83,7 @@ class _Repository:
         self.created_asset_ids = None
         self.created_messages = []
         self.reaction_calls = []
+        self.search_calls = []
 
     async def update(self, **_kwargs):
         if self.raises is not None:
@@ -111,6 +117,12 @@ class _Repository:
         if self.raises is not None:
             raise self.raises
         return self.message
+
+    async def search(self, **kwargs):
+        if self.raises is not None:
+            raise self.raises
+        self.search_calls.append(kwargs)
+        return [self.message], 3
 
     async def set_reaction(self, **kwargs):
         if self.raises is not None:
@@ -658,3 +670,28 @@ async def test_shared_content_preview_uses_viewer_reaction_from_content_service(
     assert content_service.checked == [(content_id, viewer_id)]
     assert result.shared_content is not None
     assert result.shared_content.my_reaction == ReactionTypeEnum.LIKE
+
+
+def test_search_messages_trims_query_before_querying_repository() -> None:
+    chat_id = uuid.uuid4()
+    message = _Message(chat_id=chat_id)
+    repository = _Repository(message)
+    service = MessageService(repository)  # type: ignore[arg-type]
+
+    result = asyncio.run(
+        service.search_messages(
+            chat_id=chat_id,
+            viewer_id=message.user_id,
+            query="  hello world  ",
+            order="created_at",
+            order_desc=True,
+            offset=0,
+            limit=20,
+        )
+    )
+
+    assert result.total == 3
+    assert result.offset == 0
+    assert result.limit == 20
+    assert result.items[0].message_id == message.message_id
+    assert repository.search_calls[0]["query_text"] == "hello world"

@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import typing as tp
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm.attributes import NO_VALUE
 
 from src.assets.enums import AssetVariantStatusEnum, AssetVariantTypeEnum
-from src.assets.storage import AssetStorage
 from src.config import settings
 from src.users.schemas import UserAvatarCrop, UserAvatarGet, UserGet
+
+if TYPE_CHECKING:
+    from src.assets.storage import AssetStorage
 
 
 _avatar_storage: AssetStorage | None = None
@@ -19,6 +22,8 @@ _avatar_storage: AssetStorage | None = None
 def get_avatar_storage() -> AssetStorage:
     global _avatar_storage
     if _avatar_storage is None:
+        from src.assets.storage import AssetStorage
+
         _avatar_storage = AssetStorage(settings.storage)
     return _avatar_storage
 

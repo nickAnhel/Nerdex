@@ -3,13 +3,12 @@ from __future__ import annotations
 import datetime
 import math
 import uuid
+from typing import TYPE_CHECKING
 
-from src.assets.storage import AssetStorage
 from src.content.access import can_view_content
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ReactionTypeEnum
 from src.content.enums_list import ContentOrder
 from src.content.exceptions import ContentNotFound, InvalidContentAction
-from src.content.projectors import ContentProjectorRegistry
 from src.content.repository import ContentRepository
 from src.content.schemas import (
     ContentHistoryItemGet,
@@ -22,6 +21,10 @@ from src.content.schemas import (
 )
 from src.users.schemas import UserGet
 from src.videos.enums import VideoProcessingStatusEnum
+
+if TYPE_CHECKING:
+    from src.assets.storage import AssetStorage
+    from src.content.projectors import ContentProjectorRegistry
 
 
 class ContentService:

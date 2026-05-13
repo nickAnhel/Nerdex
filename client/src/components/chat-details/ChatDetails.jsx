@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, useContext } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
 
 import "./ChatDetails.css"
@@ -26,6 +26,10 @@ import {
     formatAttachmentSize,
     resolveAssetTypeForFile,
 } from "../../utils/postAttachments";
+import {
+    buildSearchSnippet,
+    splitHighlightedText,
+} from "./searchHelpers";
 import {
     getTypingIndicatorText,
     removeTypingUser,
@@ -251,13 +255,109 @@ function buildReplyPreviewFromMessage(messageItem) {
     };
 }
 
+function normalizeSearchResult(item, currentUserId) {
+    return {
+        messageId: item.message_id,
+        chatSeq: item.chat_seq,
+        userId: item.user_id,
+        username: item.user_id === currentUserId ? "You" : item.user?.username || "Unknown",
+        content: item.content,
+        editedAt: item.edited_at,
+        deletedAt: item.deleted_at,
+        createdAt: item.created_at,
+        avatarUrl: item.user?.avatar?.small_url || null,
+    };
+}
+
+function MessageSearchNavigator({
+    item,
+    query,
+    total,
+    offset,
+    isJumping,
+    currentUserAvatarUrl,
+    onJump,
+    onNavigateNewer,
+    onNavigateOlder,
+}) {
+    const createdAtTime = item?.createdAt
+        ? new Date(item.createdAt).toLocaleString()
+        : "";
+    const avatarSrc = item?.avatarUrl
+        || (item?.username === "You" ? currentUserAvatarUrl || "/assets/profile.svg" : "/assets/profile.svg");
+    const snippet = buildSearchSnippet(item?.content, query);
+    const currentIndex = total > 0 ? Math.min(offset + 1, total) : 0;
+    const hasNewer = offset > 0;
+    const hasOlder = offset + 1 < total;
+
+    return (
+        <div className="chat-search-result">
+            <button
+                type="button"
+                className={`chat-search-result-main${isJumping ? " loading" : ""}`}
+                onClick={() => onJump(item)}
+                disabled={isJumping}
+            >
+                <img
+                    className="chat-search-result-avatar"
+                    src={avatarSrc}
+                    alt=""
+                    onError={(event) => {
+                        event.currentTarget.src = "/assets/profile.svg";
+                    }}
+                />
+                <div className="chat-search-result-body">
+                    <div className="chat-search-result-meta">
+                        <span className="chat-search-result-user">{item?.username}</span>
+                        <span className="chat-search-result-time">{createdAtTime}</span>
+                    </div>
+                    <div className="chat-search-result-snippet">
+                        {splitHighlightedText(snippet, query).map((part, index) => (
+                            part.highlighted ? (
+                                <mark key={`${part.text}-${index}`}>{part.text}</mark>
+                            ) : (
+                                <span key={`${part.text}-${index}`}>{part.text}</span>
+                            )
+                        ))}
+                    </div>
+                </div>
+            </button>
+            <div className="chat-search-navigation">
+                <button
+                    type="button"
+                    className="chat-search-button"
+                    onClick={onNavigateNewer}
+                    disabled={!hasNewer || isJumping}
+                >
+                    Newer
+                </button>
+                <div className="chat-search-counter">
+                    {currentIndex ? `${currentIndex} / ${total}` : "0 / 0"}
+                </div>
+                <button
+                    type="button"
+                    className="chat-search-button"
+                    onClick={onNavigateOlder}
+                    disabled={!hasOlder || isJumping}
+                >
+                    Older
+                </button>
+            </div>
+        </div>
+    );
+}
+
 
 function ChatDetails() {
     const { store } = useContext(StoreContext);
 
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const params = useParams();
+    const activeSearchQuery = searchParams.get("messageSearch")?.trim() || "";
+    const rawSearchOffset = Number.parseInt(searchParams.get("messageSearchOffset") || "0", 10);
+    const searchOffset = Number.isNaN(rawSearchOffset) ? 0 : rawSearchOffset;
 
     const [isEditChatModalActive, setIsEditChatModalActive] = useState(false);
 
@@ -278,12 +378,24 @@ function ChatDetails() {
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [typingUsers, setTypingUsers] = useState([]);
+    const [searchInput, setSearchInput] = useState(activeSearchQuery);
+    const [isSearchPanelOpen, setIsSearchPanelOpen] = useState(Boolean(activeSearchQuery));
+    const [searchResult, setSearchResult] = useState(null);
+    const [searchTotal, setSearchTotal] = useState(0);
+    const [isSearchLoading, setIsSearchLoading] = useState(false);
+    const [searchError, setSearchError] = useState("");
+    const [focusedSearchMessageId, setFocusedSearchMessageId] = useState(null);
+    const [jumpingToSearchMessageId, setJumpingToSearchMessageId] = useState(null);
 
     const socket = useRef(null);
     const messagesEndRef = useRef(null);
     const textareaRef = useRef(null);
     const fileInputRef = useRef(null);
+    const searchInputRef = useRef(null);
     const latestSeqRef = useRef(null);
+    const previousChatIdRef = useRef(null);
+    const searchRequestIdRef = useRef(0);
+    const chatItemsRef = useRef([]);
     const pendingPrependScrollRef = useRef(null);
     const shouldScrollBottomRef = useRef(false);
     const typingTimeoutsRef = useRef(new Map());
@@ -297,6 +409,8 @@ function ChatDetails() {
     const chatTitle = directMember?.username || chat.title;
     const chatImage = directMember ? getAvatarUrl(directMember, "small") : "../../../assets/chat.svg";
     const typingIndicatorText = getTypingIndicatorText(typingUsers, chat.chat_type);
+    const currentUserAvatarUrl = getAvatarUrl(store.user, "small");
+    const currentChatId = params.chatId?.startsWith("@") ? params.chatId.slice(1) : null;
 
     const markCurrentChatRead = useCallback(async (chatId) => {
         try {
@@ -329,6 +443,138 @@ function ChatDetails() {
             store.user.user_id,
         )));
     }, [store.user.user_id]);
+
+    const clearSearchState = useCallback(() => {
+        searchRequestIdRef.current += 1;
+        setSearchResult(null);
+        setSearchTotal(0);
+        setSearchError("");
+        setFocusedSearchMessageId(null);
+        setJumpingToSearchMessageId(null);
+        setIsSearchLoading(false);
+    }, []);
+
+    const scrollToMessage = useCallback((messageId) => {
+        const target = document.getElementById(`message-${messageId}`);
+        if (!target) {
+            return;
+        }
+
+        target.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+        });
+    }, []);
+
+    const focusSearchResult = useCallback(async (item) => {
+        if (!chat.chat_id || !item?.messageId) {
+            return;
+        }
+
+        setFocusedSearchMessageId(item.messageId);
+
+        const isAlreadyLoaded = chatItemsRef.current.some((chatItem) => (
+            chatItem.type === "message" && chatItem.messageId === item.messageId
+        ));
+
+        if (isAlreadyLoaded) {
+            requestAnimationFrame(() => {
+                scrollToMessage(item.messageId);
+            });
+            return;
+        }
+
+        if (item.chatSeq == null) {
+            return;
+        }
+
+        setJumpingToSearchMessageId(item.messageId);
+        const requestId = searchRequestIdRef.current;
+
+        try {
+            const afterSeq = Math.max(item.chatSeq - Math.floor(HISTORY_PAGE_SIZE / 2), 0);
+            const res = await ChatService.getChatHistory(chat.chat_id, {
+                after_seq: afterSeq,
+                limit: HISTORY_PAGE_SIZE,
+            });
+
+            if (requestId !== searchRequestIdRef.current) {
+                return;
+            }
+
+            applyHistoryItems(res.data);
+            window.setTimeout(() => {
+                if (requestId === searchRequestIdRef.current) {
+                    scrollToMessage(item.messageId);
+                }
+            }, 0);
+        } catch (e) {
+            console.log(e);
+        } finally {
+            if (requestId === searchRequestIdRef.current) {
+                setJumpingToSearchMessageId(null);
+            }
+        }
+    }, [applyHistoryItems, chat.chat_id, scrollToMessage]);
+
+    const syncSearchParams = useCallback((nextQuery, nextOffset = 0) => {
+        const nextParams = new URLSearchParams(searchParams);
+        if (nextQuery) {
+            nextParams.set("messageSearch", nextQuery);
+            nextParams.set("messageSearchOffset", String(nextOffset));
+        } else {
+            nextParams.delete("messageSearch");
+            nextParams.delete("messageSearchOffset");
+        }
+        setSearchParams(nextParams, { replace: true });
+    }, [searchParams, setSearchParams]);
+
+    const handleSearchSubmit = useCallback(() => {
+        const nextQuery = searchInput.trim();
+        setIsSearchPanelOpen(true);
+        if (!nextQuery) {
+            setSearchInput("");
+            clearSearchState();
+            syncSearchParams("", 0);
+            return;
+        }
+
+        setSearchInput(nextQuery);
+        if (nextQuery === activeSearchQuery && searchOffset === 0) {
+            return;
+        }
+
+        clearSearchState();
+        syncSearchParams(nextQuery, 0);
+    }, [activeSearchQuery, clearSearchState, searchInput, searchOffset, syncSearchParams]);
+
+    const handleSearchClear = useCallback(() => {
+        setSearchInput("");
+        clearSearchState();
+        syncSearchParams("", 0);
+        searchInputRef.current?.focus();
+    }, [clearSearchState, syncSearchParams]);
+
+    const handleSearchInputKeyDown = useCallback((event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            handleSearchSubmit();
+        }
+    }, [handleSearchSubmit]);
+
+    const handleSearchMoveNewer = useCallback(() => {
+        if (!activeSearchQuery || searchOffset <= 0) {
+            return;
+        }
+        syncSearchParams(activeSearchQuery, searchOffset - 1);
+    }, [activeSearchQuery, searchOffset, syncSearchParams]);
+
+    const handleSearchMoveOlder = useCallback(() => {
+        if (!activeSearchQuery || searchTotal <= 0 || searchOffset + 1 >= searchTotal) {
+            return;
+        }
+        syncSearchParams(activeSearchQuery, searchOffset + 1);
+    }, [activeSearchQuery, searchOffset, searchTotal, syncSearchParams]);
 
     const updateMessageInChat = useCallback((messageItem) => {
         setChatItems(items => items.map((item) => (
@@ -420,6 +666,116 @@ function ChatDetails() {
         setTypingUsers((users) => removeTypingUser(users, typingData.user_id));
     }, [chat.chat_id, store.user.user_id]);
 
+    useEffect(() => {
+        setSearchInput(activeSearchQuery);
+        if (activeSearchQuery) {
+            setIsSearchPanelOpen(true);
+        }
+    }, [activeSearchQuery]);
+
+    useEffect(() => {
+        if (previousChatIdRef.current && previousChatIdRef.current !== currentChatId) {
+            clearSearchState();
+            setSearchInput("");
+            setIsSearchPanelOpen(false);
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete("messageSearch");
+            nextParams.delete("messageSearchOffset");
+            setSearchParams(nextParams, { replace: true });
+        }
+
+        previousChatIdRef.current = currentChatId;
+    }, [clearSearchState, currentChatId, searchParams, setSearchParams]);
+
+    useEffect(() => {
+        if (!chat.chat_id) {
+            setSearchResult(null);
+            setSearchTotal(0);
+            setSearchError("");
+            setIsSearchLoading(false);
+            return;
+        }
+
+        if (!activeSearchQuery) {
+            setSearchResult(null);
+            setSearchTotal(0);
+            setSearchError("");
+            setIsSearchLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        const normalizedQuery = activeSearchQuery;
+        const requestId = ++searchRequestIdRef.current;
+        setSearchResult(null);
+        setFocusedSearchMessageId(null);
+        setJumpingToSearchMessageId(null);
+
+        setIsSearchLoading(true);
+        setSearchError("");
+
+        const loadSearchResults = async () => {
+            try {
+                const res = await ChatService.searchChatMessages(chat.chat_id, {
+                    query: normalizedQuery,
+                    offset: searchOffset,
+                    limit: 1,
+                });
+                if (cancelled) {
+                    return;
+                }
+
+                const total = res.data.total || 0;
+                if (total > 0 && searchOffset >= total) {
+                    syncSearchParams(normalizedQuery, total - 1);
+                    return;
+                }
+
+                const nextSearchResult = res.data.items?.[0]
+                    ? normalizeSearchResult(res.data.items[0], store.user.user_id)
+                    : null;
+                if (requestId !== searchRequestIdRef.current) {
+                    return;
+                }
+
+                setSearchTotal(total);
+                setSearchResult(nextSearchResult);
+                setFocusedSearchMessageId(nextSearchResult?.messageId || null);
+
+                if (nextSearchResult) {
+                    await focusSearchResult(nextSearchResult);
+                } else {
+                    setJumpingToSearchMessageId(null);
+                }
+            } catch (e) {
+                if (!cancelled && requestId === searchRequestIdRef.current) {
+                    console.log(e);
+                    setSearchError("Failed to search messages");
+                    setSearchResult(null);
+                    setSearchTotal(0);
+                }
+            } finally {
+                if (!cancelled && requestId === searchRequestIdRef.current) {
+                    setIsSearchLoading(false);
+                }
+            }
+        };
+
+        loadSearchResults();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSearchQuery, chat.chat_id, focusSearchResult, searchOffset, store.user.user_id, syncSearchParams]);
+
+    useEffect(() => {
+        if (isSearchPanelOpen) {
+            requestAnimationFrame(() => {
+                searchInputRef.current?.focus();
+            });
+        }
+    }, [isSearchPanelOpen]);
+
     const emitTypingStart = useCallback((value) => {
         if (!socket.current?.connected || !chat.chat_id || editingMessage) {
             return;
@@ -447,6 +803,7 @@ function ChatDetails() {
 
     useEffect(() => {
         const bounds = getTimelineBounds(chatItems);
+        chatItemsRef.current = chatItems;
         setOldestSeq(bounds.oldestSeq);
         setLatestSeq(bounds.latestSeq);
         latestSeqRef.current = bounds.latestSeq;
@@ -1041,18 +1398,6 @@ function ChatDetails() {
         });
     }
 
-    const scrollToMessage = (messageId) => {
-        const target = document.getElementById(`message-${messageId}`);
-        if (!target) {
-            return;
-        }
-
-        target.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-        });
-    }
-
     const closeDeleteMessageModal = () => {
         if (!isDeletingMessage) {
             setDeleteMessageCandidate(null);
@@ -1146,6 +1491,15 @@ function ChatDetails() {
                 </div>
 
                 <div className="header-actions">
+                    <button
+                        type="button"
+                        className={`header-action-button${isSearchPanelOpen ? " active" : ""}`}
+                        aria-label="Toggle message search"
+                        aria-expanded={isSearchPanelOpen}
+                        onClick={() => setIsSearchPanelOpen((current) => !current)}
+                    >
+                        <img src="../../../assets/search.svg" alt="" />
+                    </button>
                     <img id="options-btn" src="../../../assets/options.svg" alt="Options" onClick={optionsHandler} />
                 </div>
             </div>
@@ -1173,6 +1527,82 @@ function ChatDetails() {
                 }
             </div>
 
+            {isSearchPanelOpen && (
+                <div className="chat-search-panel">
+                    <div className="chat-search-bar">
+                        <input
+                            ref={searchInputRef}
+                            type="text"
+                            className="chat-search-input"
+                            placeholder="Search messages in this chat"
+                            value={searchInput}
+                            maxLength={200}
+                            onChange={(event) => setSearchInput(event.target.value)}
+                            onKeyDown={handleSearchInputKeyDown}
+                        />
+                        <button
+                            type="button"
+                            className="chat-search-button primary"
+                            onClick={handleSearchSubmit}
+                            disabled={!searchInput.trim()}
+                        >
+                            Search
+                        </button>
+                        <button
+                            type="button"
+                            className="chat-search-button"
+                            onClick={handleSearchClear}
+                            disabled={!searchInput.trim() && !activeSearchQuery}
+                        >
+                            Clear
+                        </button>
+                        <button
+                            type="button"
+                            className="chat-search-button"
+                            onClick={() => setIsSearchPanelOpen(false)}
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    {searchError && <div className="chat-search-status error">{searchError}</div>}
+                    {!activeSearchQuery && !searchError && (
+                        <div className="chat-search-status">Search messages, then use Newer and Older to move between matches.</div>
+                    )}
+                    {activeSearchQuery && (
+                        <>
+                            {isSearchLoading && (
+                                <div className="chat-search-status">Searching messages...</div>
+                            )}
+                            {!isSearchLoading && searchTotal === 0 && !searchError && (
+                                <div className="chat-search-status">No messages found.</div>
+                            )}
+                            {!isSearchLoading && searchResult && (
+                                <MessageSearchNavigator
+                                    item={searchResult}
+                                    query={activeSearchQuery}
+                                    total={searchTotal}
+                                    offset={searchOffset}
+                                    isJumping={jumpingToSearchMessageId === searchResult.messageId}
+                                    currentUserAvatarUrl={currentUserAvatarUrl}
+                                    onJump={focusSearchResult}
+                                    onNavigateNewer={handleSearchMoveNewer}
+                                    onNavigateOlder={handleSearchMoveOlder}
+                                />
+                            )}
+                            {!isSearchLoading && searchTotal > 0 && !searchResult && !searchError && (
+                                <div className="chat-search-status">Search result is unavailable.</div>
+                            )}
+                            {searchTotal > 0 && (
+                                <div className="chat-search-status chat-search-status-meta">
+                                    Newest messages first
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+
             <div className="chat-body" ref={messagesEndRef} onScroll={handleHistoryScroll}>
                 {
                     isLoadingHistory &&
@@ -1196,6 +1626,7 @@ function ChatDetails() {
                                     attachments={item.attachments}
                                     sharedContent={item.sharedContent}
                                     reactions={item.reactions}
+                                    isHighlighted={focusedSearchMessageId === item.messageId}
                                     onContextMenu={(event) => openMessageMenu(event, item)}
                                     onReplyPreviewClick={scrollToMessage}
                                     onRetry={() => retryMessage(item.clientMessageId)}

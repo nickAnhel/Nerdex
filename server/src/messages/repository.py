@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, desc, func, insert, select, update
+from sqlalchemy import delete, desc, func, insert, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -208,28 +208,44 @@ class MessageRepository:
 
     async def search(
         self,
-        q: str,
+        query_text: str,
         order: str,
         order_desc: bool,
         offset: int,
         limit: int,
         **filters,
-    ) -> list[MessageModel]:
+    ) -> tuple[list[MessageModel], int]:
+        search_vector = func.to_tsvector(
+            literal_column("'simple'"),
+            func.coalesce(MessageModel.content, literal_column("''")),
+        )
+        search_query = func.websearch_to_tsquery(literal_column("'simple'"), query_text)
+        where_clauses = (
+            MessageModel.deleted_at.is_(None),
+            search_vector.op("@@")(search_query),
+        )
         query = (
             select(MessageModel)
             .filter_by(**filters)
-            .where(
-                MessageModel.content.ilike(f"%{q}%"),
-                MessageModel.deleted_at.is_(None),
+            .where(*where_clauses)
+            .order_by(
+                desc(MessageModel.created_at),
+                desc(MessageModel.message_id),
             )
-            .order_by(desc(order) if order_desc else order)
             .offset(offset)
             .limit(limit)
             .options(*self._message_load_options())
         )
+        count_query = (
+            select(func.count())
+            .select_from(MessageModel)
+            .filter_by(**filters)
+            .where(*where_clauses)
+        )
 
         result = await self._session.execute(query)
-        return list(result.scalars().all())
+        count_result = await self._session.execute(count_query)
+        return list(result.scalars().all()), int(count_result.scalar_one())
 
     async def get_reply_target(
         self,

@@ -26,6 +26,7 @@ from src.messages.schemas import (
     MessageCreate,
     MessageGetWithUser,
     MessageReplyPreview,
+    MessageSearchGet,
     SharedContentMessagesCreate,
     MessageUpdate,
 )
@@ -331,19 +332,29 @@ class MessageService:
         order_desc: bool,
         offset: int,
         limit: int,
-    ) -> list[MessageGetWithUser]:
-        messages = await self._repository.search(
-            q=query,
+    ) -> MessageSearchGet:
+        normalized_query = query.strip()
+        if not normalized_query:
+            return MessageSearchGet(items=[], total=0, offset=offset, limit=limit)
+
+        messages, total = await self._repository.search(
+            query_text=normalized_query,
             order=order,
             order_desc=order_desc,
             offset=offset,
             limit=limit,
             chat_id=chat_id,
         )
-        return [
+        items = [
             await self._build_message_with_user(message, viewer_id=viewer_id)
             for message in messages
         ]
+        return MessageSearchGet(
+            items=items,
+            total=total,
+            offset=offset,
+            limit=limit,
+        )
 
     async def _build_message_with_user(
         self,

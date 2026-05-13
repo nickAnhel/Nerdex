@@ -6,6 +6,11 @@
     max-width: 60%;
 }
 
+.msg-highlighted .msg-info {
+    outline: 2px solid rgba(247, 213, 105, .7);
+    box-shadow: 0 0 0 .2rem rgba(247, 213, 105, .12);
+}
+
 .msg img {
     width: 2.5rem;
     aspect-ratio: 1/1;

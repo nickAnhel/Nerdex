@@ -24,6 +24,7 @@ function Message({
     attachments = [],
     sharedContent = null,
     reactions = [],
+    isHighlighted = false,
     onContextMenu,
     onReplyPreviewClick,
     onRetry,
@@ -51,7 +52,7 @@ function Message({
         <>
             <div
                 id={messageId ? `message-${messageId}` : undefined}
-                className={`${username === "You" ? "msg you" : "msg"} ${status !== "sent" ? `msg-${status}` : ""} ${isDeleted ? "msg-deleted" : ""}`}
+                className={`${username === "You" ? "msg you" : "msg"} ${status !== "sent" ? `msg-${status}` : ""} ${isDeleted ? "msg-deleted" : ""} ${isHighlighted ? "msg-highlighted" : ""}`}
                 onContextMenu={onContextMenu}
             >
                 <Link to={`/people/@${username === "You" ? store.user.username : username}`}>

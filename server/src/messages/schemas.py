@@ -139,6 +139,13 @@ class MessageGetWithUser(MessageGet):
     user: UserGet
 
 
+class MessageSearchGet(BaseModel):
+    items: list[MessageGetWithUser] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1)
+
+
 class MessageUpdate(BaseSchema):
     content: str | None = None
 

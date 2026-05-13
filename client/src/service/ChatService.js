@@ -30,6 +30,15 @@ export default class ChatService {
         return api.get(`/chats/${chatId}/history`, { params });
     }
 
+    static async searchChatMessages(chatId, params) {
+        return api.get("/messages/search", {
+            params: {
+                chat_id: chatId,
+                ...params,
+            },
+        });
+    }
+
     static async getUserJoinedChats(params) {
         return api.get("/chats/user", { params });
     }
