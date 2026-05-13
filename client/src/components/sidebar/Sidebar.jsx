@@ -7,7 +7,6 @@ import "./Sidebar.css"
 import { StoreContext } from "../..";
 import ArticleIcon from "../icons/ArticleIcon";
 import ChatIcon from "../icons/ChatIcon";
-import CourseIcon from "../icons/CourseIcon";
 import FeedIcon from "../icons/FeedIcon";
 import LoginIcon from "../icons/LoginIcon";
 import MomentsIcon from "../icons/MomentsIcon";
@@ -43,10 +42,6 @@ function Sidebar() {
                 <NavLink to="/moments" className="sidebar-item">
                     <MomentsIcon />
                     Moments
-                </NavLink>
-                <NavLink to="/courses" className="sidebar-item">
-                    <CourseIcon />
-                    Courses
                 </NavLink>
                 <NavLink to="/chats" className="sidebar-item">
                     <ChatIcon />

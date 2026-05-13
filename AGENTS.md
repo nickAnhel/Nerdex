@@ -103,7 +103,6 @@ Repository layout:
 - maintainability,
 - clean boundaries,
 - scalability of the content system,
-- practical extension to articles/videos/courses,
+- practical extension to articles/videos,
 - predictable developer workflow.
-
 

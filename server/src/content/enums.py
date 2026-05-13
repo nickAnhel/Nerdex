@@ -6,7 +6,6 @@ class ContentTypeEnum(str, Enum):
     ARTICLE = "article"
     VIDEO = "video"
     MOMENT = "moment"
-    COURSE = "course"
 
 
 class ContentStatusEnum(str, Enum):
