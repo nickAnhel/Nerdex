@@ -5,11 +5,17 @@ from sqlalchemy import delete, desc, func, insert, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 
-from src.assets.models import AssetModel, MessageAssetModel
+from src.assets.models import AssetModel, ContentAssetModel, MessageAssetModel
 from src.chats.enums import ChatMemberRole, ChatType
 from src.chats.models import ChatModel, ChatTimelineItemModel, MembershipModel
+from src.content.models import ContentModel
+import src.articles.models  # noqa: F401
+import src.moments.models  # noqa: F401
+import src.posts.models  # noqa: F401
+import src.tags.models  # noqa: F401
+import src.videos.models  # noqa: F401
 from src.events.models import EventModel
-from src.messages.models import MessageModel
+from src.messages.models import MessageModel, MessageSharedContentModel
 from src.users.models import UserModel
 
 
@@ -146,6 +152,7 @@ class ChatRepository:
                     .selectinload(AssetModel.variants),
                     selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                     self._message_asset_links_load(),
+                    *self._message_shared_content_load(),
                 )
             )
             messages = (await self._session.execute(messages_query)).scalars().all()
@@ -519,6 +526,7 @@ class ChatRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._message_asset_links_load(),
+                *self._message_shared_content_load(),
             )
         )
 
@@ -580,4 +588,24 @@ class ChatRepository:
             selectinload(MessageModel.asset_links)
             .selectinload(MessageAssetModel.asset)
             .selectinload(AssetModel.variants)
+        )
+
+    def _message_shared_content_load(self):
+        content_load = selectinload(MessageModel.shared_content).selectinload(
+            MessageSharedContentModel.content
+        )
+        return (
+            content_load.selectinload(ContentModel.author).selectinload(UserModel.subscribers),
+            content_load.selectinload(ContentModel.author)
+            .selectinload(UserModel.avatar_asset)
+            .selectinload(AssetModel.variants),
+            content_load.selectinload(ContentModel.post_details),
+            content_load.selectinload(ContentModel.article_details),
+            content_load.selectinload(ContentModel.video_details),
+            content_load.selectinload(ContentModel.moment_details),
+            content_load.selectinload(ContentModel.video_playback_details),
+            content_load.selectinload(ContentModel.tags),
+            content_load.selectinload(ContentModel.asset_links)
+            .selectinload(ContentAssetModel.asset)
+            .selectinload(AssetModel.variants),
         )

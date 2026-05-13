@@ -3,11 +3,12 @@ import uuid
 from fastapi import APIRouter, Depends
 
 from src.auth.dependencies import get_current_user
+from src.chats.sockets import _build_message_ws_payload, sio
 from src.chats.dependencies import get_chat_service
 from src.chats.service import ChatService
 from src.messages.dependencies import get_message_service
 from src.messages.enums import MessagesOrder
-from src.messages.schemas import MessageGetWithUser, MessageUpdate
+from src.messages.schemas import MessageGetWithUser, MessageUpdate, SharedContentMessagesCreate
 from src.messages.service import MessageService
 from src.common.schemas import Status
 from src.users.schemas import UserGet
@@ -31,6 +32,7 @@ async def get_chat_messages(
     await chat_service.ensure_user_is_chat_member(chat_id=chat_id, user_id=user.user_id)
     return await service.get_messages(
         chat_id=chat_id,
+        viewer_id=user.user_id,
         order=order,
         order_desc=True,
         offset=offset,
@@ -52,12 +54,32 @@ async def search_chat_messages(
     await chat_service.ensure_user_is_chat_member(chat_id=chat_id, user_id=user.user_id)
     return await service.search_messages(
         chat_id=chat_id,
+        viewer_id=user.user_id,
         query=query,
         order=order,
         order_desc=True,
         offset=offset,
         limit=limit,
     )
+
+
+@router.post("/share-content")
+async def share_content_to_chats(
+    data: SharedContentMessagesCreate,
+    user: UserGet = Depends(get_current_user),
+    service: MessageService = Depends(get_message_service),
+) -> list[MessageGetWithUser]:
+    messages = await service.share_content_to_chats(
+        data=data,
+        user_id=user.user_id,
+    )
+    for message in messages:
+        await sio.emit(
+            "message:created",
+            await _build_message_ws_payload(message),
+            room=str(message.chat_id),
+        )
+    return messages
 
 
 @router.delete("/")

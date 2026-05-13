@@ -48,6 +48,14 @@ function buildLastMessagePreview(lastMessage) {
         };
     }
 
+    if (lastMessage.shared_content) {
+        const shared = lastMessage.shared_content;
+        return {
+            text: `Shared ${shared.content_type || "content"}: ${shared.title || shared.excerpt || shared.post_content || ""}`,
+            isAttachmentOnly: true,
+        };
+    }
+
     return {
         text: "No messages yet",
         isAttachmentOnly: false,

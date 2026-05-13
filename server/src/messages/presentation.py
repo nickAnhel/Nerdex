@@ -4,6 +4,7 @@ import typing as tp
 import uuid
 
 from src.assets.enums import AssetTypeEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
+from src.content.service import ContentService
 from src.messages.schemas import MessageAttachmentGet, MessageGetWithUser, MessageReplyPreview
 from src.users.presentation import build_user_get
 
@@ -28,10 +29,14 @@ async def build_message_get_with_user(
     message: tp.Any,
     *,
     storage: AssetStorage | None = None,
+    content_service: ContentService | None = None,
+    viewer_id: uuid.UUID | None = None,
+    shared_content_preview: tp.Any | None = None,
     include_attachments: bool = True,
 ) -> MessageGetWithUser:
     reply_to_message = getattr(message, "reply_to_message", None)
     deleted_at = getattr(message, "deleted_at", None)
+    user = await build_user_get(message.user, storage=storage)
     return MessageGetWithUser(
         message_id=message.message_id,
         chat_id=message.chat_id,
@@ -58,7 +63,40 @@ async def build_message_get_with_user(
             if deleted_at is not None or not include_attachments
             else await build_message_attachments(message, storage=storage)
         ),
-        user=await build_user_get(message.user, storage=storage),
+        shared_content=(
+            None
+            if deleted_at is not None
+            else await build_message_shared_content(
+                message,
+                storage=storage,
+                content_service=content_service,
+                viewer_id=viewer_id,
+                shared_content_preview=shared_content_preview,
+            )
+        ),
+        user=user,
+    )
+
+
+async def build_message_shared_content(
+    message: tp.Any,
+    *,
+    storage: AssetStorage | None,
+    content_service: ContentService | None,
+    viewer_id: uuid.UUID | None,
+    shared_content_preview: tp.Any | None = None,
+):
+    if shared_content_preview is not None:
+        return shared_content_preview
+
+    shared_content = getattr(message, "shared_content", None)
+    content_id = getattr(shared_content, "content_id", None)
+    if content_id is None or content_service is None or viewer_id is None:
+        return None
+
+    return await content_service.get_shareable_content(
+        content_id=content_id,
+        viewer_id=viewer_id,
     )
 
 

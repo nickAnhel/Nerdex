@@ -67,6 +67,12 @@ class MessageModel(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    shared_content: Mapped["MessageSharedContentModel | None"] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
 
     @property
     def content_ellipsis(self) -> str:
@@ -74,3 +80,21 @@ class MessageModel(Base):
             return self.content
 
         return " ".join(self.content.split()[:5]) + "..."
+
+
+class MessageSharedContentModel(Base):
+    __tablename__ = "message_shared_content"
+    __table_args__ = (
+        Index("ix_message_shared_content_content_id", "content_id"),
+    )
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("messages.message_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content.content_id", ondelete="RESTRICT"),
+    )
+
+    message: Mapped[MessageModel] = relationship(back_populates="shared_content")
+    content: Mapped["ContentModel"] = relationship()  # type: ignore[name-defined]

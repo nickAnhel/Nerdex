@@ -1,4 +1,4 @@
-from src.messages.models import MessageModel
+from src.messages.models import MessageModel, MessageSharedContentModel
 
 
 def test_message_client_message_id_idempotency_constraint_is_registered() -> None:
@@ -39,4 +39,15 @@ def test_message_reply_to_message_column_and_index_are_registered() -> None:
     assert [column.name for column in index.columns] == [
         "chat_id",
         "reply_to_message_id",
+    ]
+
+
+def test_message_shared_content_table_is_registered() -> None:
+    columns = MessageSharedContentModel.__table__.columns
+    indexes = {index.name: index for index in MessageSharedContentModel.__table__.indexes}
+
+    assert "message_id" in columns
+    assert "content_id" in columns
+    assert [column.name for column in indexes["ix_message_shared_content_content_id"].columns] == [
+        "content_id",
     ]

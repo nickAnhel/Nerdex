@@ -6,9 +6,15 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.assets.models import AssetModel, MessageAssetModel
+from src.assets.models import AssetModel, ContentAssetModel, MessageAssetModel
 from src.chats.timeline import create_message_timeline_item, get_message_chat_seq
-from src.messages.models import MessageModel
+from src.content.models import ContentModel
+import src.articles.models  # noqa: F401
+import src.moments.models  # noqa: F401
+import src.posts.models  # noqa: F401
+import src.tags.models  # noqa: F401
+import src.videos.models  # noqa: F401
+from src.messages.models import MessageModel, MessageSharedContentModel
 from src.users.models import UserModel
 
 
@@ -20,6 +26,7 @@ class MessageRepository:
         self,
         data: dict[str, Any],
         asset_ids: list[uuid.UUID] | None = None,
+        shared_content_id: uuid.UUID | None = None,
     ) -> MessageModel:
         stmt = (
             insert(MessageModel)
@@ -32,11 +39,16 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
         result = await self._session.execute(stmt)
         message = result.scalar_one()
         await self._insert_asset_links(message_id=message.message_id, asset_ids=asset_ids or [])
+        await self._insert_shared_content(
+            message_id=message.message_id,
+            content_id=shared_content_id,
+        )
         chat_seq = await create_message_timeline_item(
             session=self._session,
             chat_id=message.chat_id,
@@ -51,6 +63,7 @@ class MessageRepository:
         self,
         data: dict[str, Any],
         asset_ids: list[uuid.UUID] | None = None,
+        shared_content_id: uuid.UUID | None = None,
     ) -> MessageModel:
         stmt = (
             pg_insert(MessageModel)
@@ -66,6 +79,7 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
         result = await self._session.execute(stmt)
@@ -82,6 +96,10 @@ class MessageRepository:
             )
         else:
             await self._insert_asset_links(message_id=message.message_id, asset_ids=asset_ids or [])
+            await self._insert_shared_content(
+                message_id=message.message_id,
+                content_id=shared_content_id,
+            )
             chat_seq = await create_message_timeline_item(
                 session=self._session,
                 chat_id=message.chat_id,
@@ -108,6 +126,7 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
 
@@ -135,6 +154,7 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
 
@@ -172,6 +192,7 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
 
@@ -212,6 +233,7 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
 
@@ -245,6 +267,7 @@ class MessageRepository:
                 .selectinload(AssetModel.variants),
                 selectinload(MessageModel.reply_to_message).selectinload(MessageModel.user),
                 self._asset_links_load(),
+                *self._shared_content_load(),
             )
         )
 
@@ -287,9 +310,45 @@ class MessageRepository:
             )
         )
 
+    async def _insert_shared_content(
+        self,
+        *,
+        message_id: uuid.UUID,
+        content_id: uuid.UUID | None,
+    ) -> None:
+        if content_id is None:
+            return
+
+        await self._session.execute(
+            insert(MessageSharedContentModel).values(
+                message_id=message_id,
+                content_id=content_id,
+            )
+        )
+
     def _asset_links_load(self):
         return (
             selectinload(MessageModel.asset_links)
             .selectinload(MessageAssetModel.asset)
             .selectinload(AssetModel.variants)
+        )
+
+    def _shared_content_load(self):
+        content_load = selectinload(MessageModel.shared_content).selectinload(
+            MessageSharedContentModel.content
+        )
+        return (
+            content_load.selectinload(ContentModel.author).selectinload(UserModel.subscribers),
+            content_load.selectinload(ContentModel.author)
+            .selectinload(UserModel.avatar_asset)
+            .selectinload(AssetModel.variants),
+            content_load.selectinload(ContentModel.post_details),
+            content_load.selectinload(ContentModel.article_details),
+            content_load.selectinload(ContentModel.video_details),
+            content_load.selectinload(ContentModel.moment_details),
+            content_load.selectinload(ContentModel.video_playback_details),
+            content_load.selectinload(ContentModel.tags),
+            content_load.selectinload(ContentModel.asset_links)
+            .selectinload(ContentAssetModel.asset)
+            .selectinload(AssetModel.variants),
         )

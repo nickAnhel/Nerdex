@@ -65,6 +65,7 @@ function normalizeTimelineItem(item, currentUserId) {
             createdAt: item.created_at,
             avatarUrl: item.user?.avatar?.small_url || null,
             attachments: normalizeMessageAttachments(item.attachments),
+            sharedContent: normalizeSharedContent(item.shared_content),
             status: "sent",
         };
     }
@@ -173,7 +174,30 @@ function normalizeMessagePayload(msgData, currentUserId) {
         createdAt: msgData.created_at,
         avatarUrl: msgData.avatar_small_url || null,
         attachments: normalizeMessageAttachments(msgData.attachments),
+        sharedContent: normalizeSharedContent(msgData.shared_content),
         status: "sent",
+    };
+}
+
+function normalizeSharedContent(content) {
+    if (!content) {
+        return null;
+    }
+
+    return {
+        content_id: content.content_id,
+        content_type: content.content_type,
+        title: content.title,
+        excerpt: content.excerpt,
+        post_content: content.post_content,
+        description: content.description,
+        caption: content.caption,
+        canonical_path: content.canonical_path,
+        cover: content.cover,
+        media_attachments: content.media_attachments || [],
+        user: content.user,
+        published_at: content.published_at,
+        created_at: content.created_at,
     };
 }
 
@@ -715,6 +739,7 @@ function ChatDetails() {
                 username: "You",
                 createdAt: new Date().toISOString(),
                 avatarUrl: store.user?.avatar?.small_url || null,
+                sharedContent: null,
                 status: "pending",
             };
 
@@ -943,6 +968,7 @@ function ChatDetails() {
                                     deletedAt={item.deletedAt}
                                     replyPreview={item.replyPreview}
                                     attachments={item.attachments}
+                                    sharedContent={item.sharedContent}
                                     onContextMenu={(event) => openMessageMenu(event, item)}
                                     onReplyPreviewClick={scrollToMessage}
                                     onRetry={() => retryMessage(item.clientMessageId)}

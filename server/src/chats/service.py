@@ -24,6 +24,7 @@ from src.chats.schemas import (
     MessageHistoryItem,
 )
 from src.common.exceptions import PermissionDenied
+from src.content.service import ContentService
 from src.messages.models import MessageModel
 from src.messages.presentation import build_message_get_with_user, build_reply_preview
 from src.messages.schemas import MessageGetWithUser, MessageReplyPreview
@@ -35,9 +36,15 @@ if TYPE_CHECKING:
 
 
 class ChatService:
-    def __init__(self, repository: ChatRepository, storage: AssetStorage | None = None) -> None:
+    def __init__(
+        self,
+        repository: ChatRepository,
+        storage: AssetStorage | None = None,
+        content_service: ContentService | None = None,
+    ) -> None:
         self._repository = repository
         self._storage = storage
+        self._content_service = content_service
 
     async def create_chat(
         self,
@@ -201,6 +208,7 @@ class ChatService:
             if isinstance(item, MessageModel):
                 message = await self._build_message_get_with_user(
                     item,
+                    viewer_id=user_id,
                     include_attachments=can_access_message_assets,
                 )
                 items.append(MessageHistoryItem(**message.model_dump()))
@@ -453,7 +461,7 @@ class ChatService:
             display_title=direct_member.username if direct_member is not None else chat.title,
             display_avatar=direct_member.avatar if direct_member is not None else None,
             last_message=(
-                await self._build_message_get_with_user(last_message)
+                await self._build_message_get_with_user(last_message, viewer_id=user_id)
                 if last_message is not None
                 else None
             ),
@@ -475,11 +483,14 @@ class ChatService:
         self,
         message,
         *,
+        viewer_id: uuid.UUID | None = None,
         include_attachments: bool = True,
     ) -> MessageGetWithUser:
         return await build_message_get_with_user(
             message,
             storage=self._storage,
+            content_service=self._content_service,
+            viewer_id=viewer_id,
             include_attachments=include_attachments,
         )
 

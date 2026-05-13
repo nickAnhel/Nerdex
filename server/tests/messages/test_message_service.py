@@ -4,10 +4,14 @@ import uuid
 import pytest
 from sqlalchemy.exc import NoResultFound
 
+from src.common.exceptions import PermissionDenied
 from src.assets.enums import AssetStatusEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
+from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
+from src.content.schemas import ContentListItemGet
 from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
-from src.messages.schemas import MessageCreate, MessageUpdate
+from src.messages.schemas import MessageCreate, SharedContentMessagesCreate, MessageUpdate
 from src.messages.service import DELETED_MESSAGE_STUB, MessageService
+from src.users.schemas import UserGet
 
 
 class _User:
@@ -22,7 +26,14 @@ class _User:
 
 
 class _Message:
-    def __init__(self, *, chat_id=None, deleted_at=None, reply_to_message=None) -> None:
+    def __init__(
+        self,
+        *,
+        chat_id=None,
+        deleted_at=None,
+        reply_to_message=None,
+        shared_content=None,
+    ) -> None:
         self.message_id = uuid.uuid4()
         self.chat_id = chat_id or uuid.uuid4()
         self.client_message_id = uuid.uuid4()
@@ -39,6 +50,7 @@ class _Message:
         )
         self.reply_to_message = reply_to_message
         self.asset_links = []
+        self.shared_content = shared_content
 
     @property
     def content_ellipsis(self) -> str:
@@ -50,6 +62,7 @@ class _Repository:
         self.message = message
         self.raises = raises
         self.created_asset_ids = None
+        self.created_messages = []
 
     async def update(self, **_kwargs):
         if self.raises is not None:
@@ -65,6 +78,7 @@ class _Repository:
         if self.raises is not None:
             raise self.raises
         self.created_asset_ids = kwargs.get("asset_ids")
+        self.created_messages.append((kwargs.get("data"), kwargs.get("shared_content_id")))
         return self.message
 
     async def create_idempotent(self, **kwargs):
@@ -111,6 +125,80 @@ class _AssetRepository:
             if (asset := self.assets.get(asset_id)) is not None
             and (owner_id is None or asset.owner_id == owner_id)
         ]
+
+
+class _ChatRepository:
+    def __init__(self, member_chat_ids) -> None:
+        self.member_chat_ids = set(member_chat_ids)
+
+    async def is_member(self, *, chat_id, user_id):
+        return chat_id in self.member_chat_ids
+
+
+class _SharedContent:
+    def __init__(self, content_id) -> None:
+        self.content_id = content_id
+        self.content = type(
+            "Content",
+            (),
+            {
+                "content_id": content_id,
+            },
+        )()
+
+
+class _SharedContentWithoutLoadedContent:
+    def __init__(self, content_id) -> None:
+        self.content_id = content_id
+
+    @property
+    def content(self):
+        raise AssertionError("Shared content preview must not lazy-load content relationship")
+
+
+class _ContentService:
+    def __init__(self, result=None) -> None:
+        self.checked = []
+        self.result = result
+
+    async def get_shareable_content(self, *, content_id, viewer_id):
+        self.checked.append((content_id, viewer_id))
+        if self.result is not None:
+            return self.result
+        return make_content_item(content_id=content_id, my_reaction=None)
+
+
+def make_content_item(
+    *,
+    content_id,
+    my_reaction: ReactionTypeEnum | None,
+) -> ContentListItemGet:
+    return ContentListItemGet(
+        content_id=content_id,
+        content_type=ContentTypeEnum.POST,
+        status=ContentStatusEnum.PUBLISHED,
+        visibility=ContentVisibilityEnum.PUBLIC,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
+        published_at=datetime.datetime.now(datetime.timezone.utc),
+        comments_count=0,
+        likes_count=0,
+        dislikes_count=0,
+        views_count=0,
+        user=UserGet(
+            user_id=_User.user_id,
+            username=_User.username,
+            is_admin=False,
+            subscribers_count=0,
+            avatar=None,
+            avatar_asset_id=None,
+            is_subscribed=False,
+        ),
+        tags=[],
+        my_reaction=my_reaction,
+        is_owner=False,
+        post_content="shared post",
+    )
 
 
 @pytest.mark.asyncio
@@ -290,3 +378,127 @@ async def test_reply_preview_uses_deleted_stub() -> None:
     assert result.reply_preview is not None
     assert result.reply_preview.deleted is True
     assert result.reply_preview.content_preview == DELETED_MESSAGE_STUB
+
+
+@pytest.mark.asyncio
+async def test_share_content_to_chats_creates_message_per_chat() -> None:
+    chat_ids = [uuid.uuid4(), uuid.uuid4()]
+    content_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    message = _Message(chat_id=chat_ids[0])
+    repository = _Repository(message)
+    content_service = _ContentService()
+    service = MessageService(
+        repository,  # type: ignore[arg-type]
+        chat_repository=_ChatRepository(chat_ids),  # type: ignore[arg-type]
+        content_service=content_service,  # type: ignore[arg-type]
+    )
+
+    result = await service.share_content_to_chats(
+        data=SharedContentMessagesCreate(content_id=content_id, chat_ids=chat_ids),
+        user_id=user_id,
+    )
+
+    assert len(result) == 2
+    assert content_service.checked == [(content_id, user_id)]
+    assert [data["chat_id"] for data, _content_id in repository.created_messages] == chat_ids
+    assert [shared_content_id for _data, shared_content_id in repository.created_messages] == [
+        content_id,
+        content_id,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_message_reuses_validated_shared_content_preview() -> None:
+    content_id = uuid.uuid4()
+    message = _Message(shared_content=_SharedContentWithoutLoadedContent(content_id))
+    content_service = _ContentService(
+        make_content_item(content_id=content_id, my_reaction=ReactionTypeEnum.LIKE)
+    )
+    service = MessageService(
+        _Repository(message),  # type: ignore[arg-type]
+        content_service=content_service,  # type: ignore[arg-type]
+    )
+
+    result = await service.create_message(
+        MessageCreate(
+            chat_id=message.chat_id,
+            user_id=message.user_id,
+            content=message.content,
+            shared_content_id=content_id,
+        )
+    )
+
+    assert content_service.checked == [(content_id, message.user_id)]
+    assert result.shared_content is not None
+    assert result.shared_content.my_reaction == ReactionTypeEnum.LIKE
+
+
+@pytest.mark.asyncio
+async def test_share_content_to_chats_reuses_single_shared_content_preview() -> None:
+    chat_ids = [uuid.uuid4(), uuid.uuid4()]
+    content_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    message = _Message(
+        chat_id=chat_ids[0],
+        shared_content=_SharedContentWithoutLoadedContent(content_id),
+    )
+    content_service = _ContentService(
+        make_content_item(content_id=content_id, my_reaction=ReactionTypeEnum.LIKE)
+    )
+    service = MessageService(
+        _Repository(message),  # type: ignore[arg-type]
+        chat_repository=_ChatRepository(chat_ids),  # type: ignore[arg-type]
+        content_service=content_service,  # type: ignore[arg-type]
+    )
+
+    result = await service.share_content_to_chats(
+        data=SharedContentMessagesCreate(content_id=content_id, chat_ids=chat_ids),
+        user_id=user_id,
+    )
+
+    assert content_service.checked == [(content_id, user_id)]
+    assert [message.shared_content for message in result] == [
+        content_service.result,
+        content_service.result,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_share_content_to_chats_rejects_non_member_chat() -> None:
+    allowed_chat_id = uuid.uuid4()
+    denied_chat_id = uuid.uuid4()
+    service = MessageService(
+        _Repository(_Message()),  # type: ignore[arg-type]
+        chat_repository=_ChatRepository([allowed_chat_id]),  # type: ignore[arg-type]
+        content_service=_ContentService(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(PermissionDenied):
+        await service.share_content_to_chats(
+            data=SharedContentMessagesCreate(
+                content_id=uuid.uuid4(),
+                chat_ids=[allowed_chat_id, denied_chat_id],
+            ),
+            user_id=uuid.uuid4(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_shared_content_preview_uses_viewer_reaction_from_content_service() -> None:
+    content_id = uuid.uuid4()
+    viewer_id = uuid.uuid4()
+    message = _Message(shared_content=_SharedContentWithoutLoadedContent(content_id))
+    content_service = _ContentService(
+        make_content_item(content_id=content_id, my_reaction=ReactionTypeEnum.LIKE)
+    )
+    service = MessageService(
+        _Repository(message),  # type: ignore[arg-type]
+        content_service=content_service,  # type: ignore[arg-type]
+    )
+
+    result = await service._build_message_with_user(message, viewer_id=viewer_id)
+
+    assert content_service.checked == [(content_id, viewer_id)]
+    assert result.shared_content is not None
+    assert result.shared_content.my_reaction == ReactionTypeEnum.LIKE

@@ -9,6 +9,7 @@ import MomentService from "../../service/MomentService";
 import { getAvatarUrl } from "../../utils/avatar";
 import { formatDuration } from "../video-card/VideoCard";
 import CommentIcon from "../icons/CommentIcon";
+import ContentShareButton from "../content-share-button/ContentShareButton";
 import DeleteIcon from "../icons/DeleteIcon";
 import DislikeIcon from "../icons/DislikeIcon";
 import EditIcon from "../icons/EditIcon";
@@ -174,6 +175,10 @@ const MomentCard = forwardRef(({ moment, removeItem }, ref) => {
                     <DislikeIcon />
                     <span>{card.dislikes_count || 0}</span>
                 </button>
+                <ContentShareButton
+                    contentId={momentId}
+                    contentTitle={card.caption || "moment"}
+                />
             </div>
         </article>
     );

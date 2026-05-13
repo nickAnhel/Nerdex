@@ -18,6 +18,7 @@ import PostGalleryViewer from "../post-gallery-viewer/PostGalleryViewer";
 import PostMediaBlock from "../post-media-block/PostMediaBlock";
 import TagChip from "../tag-chip/TagChip";
 import CommentIcon from "../icons/CommentIcon";
+import ContentShareButton from "../content-share-button/ContentShareButton";
 import DislikeIcon from "../icons/DislikeIcon";
 import LikeIcon from "../icons/LikeIcon";
 import { getAvatarUrl } from "../../utils/avatar";
@@ -272,6 +273,10 @@ const PostListItem = forwardRef((props, ref) => {
                     <DislikeIcon />
                     <span>{post.dislikes_count}</span>
                 </button>
+                <ContentShareButton
+                    contentId={post.content_id || post.post_id}
+                    contentTitle={post.content?.slice(0, 80) || "post"}
+                />
             </div>
 
             <PostModal

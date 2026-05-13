@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from src.assets.enums import AssetTypeEnum
 from src.common.schemas import BaseSchema
+from src.content.schemas import ContentListItemGet
 from src.users.schemas import UserGet
 
 
@@ -14,11 +15,12 @@ class MessageCreateWS(BaseModel):
     content: str = Field(default="", max_length=4096)
     reply_to_message_id: uuid.UUID | None = None
     asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
+    shared_content_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def validate_content_or_assets(self) -> "MessageCreateWS":
-        if not self.content.strip() and not self.asset_ids:
-            raise ValueError("Message must contain text or attachments")
+        if not self.content.strip() and not self.asset_ids and self.shared_content_id is None:
+            raise ValueError("Message must contain text, attachments, or shared content")
         return self
 
 
@@ -65,6 +67,7 @@ class MessageGetWS(BaseModel):
     user_id: uuid.UUID
     avatar_small_url: str | None = None
     attachments: list[MessageAttachmentGet] = Field(default_factory=list)
+    shared_content: ContentListItemGet | None = None
 
 
 class MessageUpdateWS(BaseModel):
@@ -83,11 +86,17 @@ class MessageCreate(BaseSchema):
     user_id: uuid.UUID
     reply_to_message_id: uuid.UUID | None = None
     asset_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
+    shared_content_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def validate_content_or_assets(self) -> "MessageCreate":
-        if type(self) is MessageCreate and not self.content.strip() and not self.asset_ids:
-            raise ValueError("Message must contain text or attachments")
+        if (
+            type(self) is MessageCreate
+            and not self.content.strip()
+            and not self.asset_ids
+            and self.shared_content_id is None
+        ):
+            raise ValueError("Message must contain text, attachments, or shared content")
         return self
 
 
@@ -100,6 +109,7 @@ class MessageGet(MessageCreate):
     chat_seq: int | None = None
     reply_preview: MessageReplyPreview | None = None
     attachments: list[MessageAttachmentGet] = Field(default_factory=list)
+    shared_content: ContentListItemGet | None = None
 
 
 class MessageGetWithUser(MessageGet):
@@ -108,3 +118,9 @@ class MessageGetWithUser(MessageGet):
 
 class MessageUpdate(BaseSchema):
     content: str | None = None
+
+
+class SharedContentMessagesCreate(BaseModel):
+    content_id: uuid.UUID
+    chat_ids: list[uuid.UUID] = Field(min_length=1, max_length=25)
+    content: str = Field(default="", max_length=4096)

@@ -22,6 +22,7 @@ function Message({
     deletedAt = null,
     replyPreview = null,
     attachments = [],
+    sharedContent = null,
     onContextMenu,
     onReplyPreviewClick,
     onRetry,
@@ -81,6 +82,9 @@ function Message({
                     {!isDeleted && attachments.length > 0 && (
                         <MessageAttachments attachments={attachments} />
                     )}
+                    {!isDeleted && sharedContent && (
+                        <MessageSharedContentPreview content={sharedContent} />
+                    )}
                     {
                         status === "failed" && !isDeleted &&
                         <button className="msg-retry" type="button" onClick={onRetry}>Retry</button>
@@ -89,6 +93,71 @@ function Message({
             </div>
         </>
     )
+}
+
+function MessageSharedContentPreview({ content }) {
+    const path = resolveContentPath(content);
+    const imageUrl = resolveContentImage(content);
+    const title = content.title || resolveContentTypeLabel(content.content_type);
+    const body = content.excerpt || content.description || content.caption || content.post_content || "";
+
+    return (
+        <Link className="msg-shared-content" to={path}>
+            {imageUrl && (
+                <img
+                    className="msg-shared-content-image"
+                    src={imageUrl}
+                    alt={title}
+                />
+            )}
+            <span className="msg-shared-content-body">
+                <span className="msg-shared-content-type">{resolveContentTypeLabel(content.content_type)}</span>
+                <span className="msg-shared-content-title">{title}</span>
+                {body && <span className="msg-shared-content-excerpt">{body}</span>}
+                {content.user?.username && (
+                    <span className="msg-shared-content-author">@{content.user.username}</span>
+                )}
+            </span>
+        </Link>
+    );
+}
+
+function resolveContentImage(content) {
+    if (content.cover?.preview_url || content.cover?.poster_url || content.cover?.original_url) {
+        return content.cover.preview_url || content.cover.poster_url || content.cover.original_url;
+    }
+
+    const firstMedia = content.media_attachments?.[0];
+    return firstMedia?.preview_url || firstMedia?.original_url || null;
+}
+
+function resolveContentPath(content) {
+    if (content.canonical_path) {
+        return content.canonical_path;
+    }
+    if (content.content_type === "post") {
+        return `/feed?p=${content.content_id}`;
+    }
+    if (content.content_type === "article") {
+        return `/articles/${content.content_id}`;
+    }
+    if (content.content_type === "video") {
+        return `/videos/${content.content_id}`;
+    }
+    if (content.content_type === "moment") {
+        return `/moments?moment=${content.content_id}`;
+    }
+    return "/feed";
+}
+
+function resolveContentTypeLabel(contentType) {
+    const labels = {
+        post: "Post",
+        article: "Article",
+        video: "Video",
+        moment: "Moment",
+    };
+    return labels[contentType] || "Content";
 }
 
 function MessageAttachments({ attachments = [] }) {

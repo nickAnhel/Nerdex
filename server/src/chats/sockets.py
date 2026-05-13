@@ -13,6 +13,7 @@ from src.chats.socket_messages import build_socket_message_create
 from src.config import settings
 from src.common.database import async_session_maker
 from src.common.exceptions import PermissionDenied
+from src.content.exceptions import ContentNotFound
 from src.messages.dependencies import get_message_service
 from src.messages.exceptions import CantDeleteMessage, CantUpdateMessage, InvalidMessageAssets, InvalidMessageReply
 from src.messages.schemas import (
@@ -83,6 +84,7 @@ async def _build_message_ws_payload(message) -> dict[str, Any]:
         reply_to_message_id=message.reply_to_message_id,
         reply_preview=message.reply_preview,
         attachments=message.attachments,
+        shared_content=message.shared_content,
     ).model_dump(mode="json")
 
 
@@ -191,6 +193,8 @@ async def on_message(
             return _error_response("bad_request", str(exc))
         except InvalidMessageAssets as exc:
             return _error_response("bad_request", str(exc))
+        except ContentNotFound as exc:
+            return _error_response("forbidden", str(exc))
     message_payload = await _build_message_ws_payload(message)
 
     await sio.emit(

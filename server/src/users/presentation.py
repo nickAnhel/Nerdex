@@ -3,6 +3,10 @@ from __future__ import annotations
 import typing as tp
 import uuid
 
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.exc import NoInspectionAvailable
+from sqlalchemy.orm.attributes import NO_VALUE
+
 from src.assets.enums import AssetVariantStatusEnum, AssetVariantTypeEnum
 from src.assets.storage import AssetStorage
 from src.config import settings
@@ -34,7 +38,10 @@ async def build_user_get(
         is_admin=user.is_admin,
         is_subscribed=(
             viewer_id is not None
-            and viewer_id in [subscriber.user_id for subscriber in getattr(user, "subscribers", [])]
+            and viewer_id in [
+                subscriber.user_id
+                for subscriber in _loaded_relationship_or_default(user, "subscribers", [])
+            ]
         ),
     )
 
@@ -59,7 +66,7 @@ async def build_user_avatar_get(
     if getattr(user, "avatar_asset_id", None) is None or getattr(user, "avatar_crop", None) is None:
         return None
 
-    avatar_asset = getattr(user, "avatar_asset", None)
+    avatar_asset = _loaded_relationship_or_default(user, "avatar_asset", None)
     if avatar_asset is None:
         return None
 
@@ -68,7 +75,7 @@ async def build_user_avatar_get(
     small_url = None
     medium_url = None
 
-    for variant in getattr(avatar_asset, "variants", []):
+    for variant in _loaded_relationship_or_default(avatar_asset, "variants", []):
         if variant.status != AssetVariantStatusEnum.READY:
             continue
         if variant.asset_variant_type == AssetVariantTypeEnum.AVATAR_SMALL:
@@ -87,3 +94,23 @@ async def build_user_avatar_get(
         medium_url=medium_url,
         crop=crop,
     )
+
+
+def _loaded_relationship_or_default(
+    instance: tp.Any,
+    name: str,
+    default: tp.Any,
+) -> tp.Any:
+    try:
+        state = sa_inspect(instance)
+    except NoInspectionAvailable:
+        return getattr(instance, name, default)
+
+    try:
+        loaded_value = state.attrs[name].loaded_value
+    except KeyError:
+        return getattr(instance, name, default)
+
+    if loaded_value is NO_VALUE:
+        return default
+    return loaded_value

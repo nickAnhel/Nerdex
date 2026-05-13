@@ -6,6 +6,7 @@ import "./VideoCard.css";
 import { StoreContext } from "../..";
 import ContentService from "../../service/ContentService";
 import CommentIcon from "../icons/CommentIcon";
+import ContentShareButton from "../content-share-button/ContentShareButton";
 import DislikeIcon from "../icons/DislikeIcon";
 import LikeIcon from "../icons/LikeIcon";
 import TagChip from "../tag-chip/TagChip";
@@ -146,6 +147,10 @@ const VideoCard = forwardRef(({ video }, ref) => {
                     <DislikeIcon />
                     <span>{card.dislikes_count}</span>
                 </button>
+                <ContentShareButton
+                    contentId={card.content_id || card.video_id}
+                    contentTitle={card.title || "video"}
+                />
             </div>
         </article>
     );
