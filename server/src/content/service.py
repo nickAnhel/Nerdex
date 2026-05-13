@@ -3,13 +3,12 @@ from __future__ import annotations
 import datetime
 import math
 import uuid
+from typing import TYPE_CHECKING
 
-from src.assets.storage import AssetStorage
 from src.content.access import can_view_content
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ReactionTypeEnum
 from src.content.enums_list import ContentOrder
 from src.content.exceptions import ContentNotFound, InvalidContentAction
-from src.content.projectors import ContentProjectorRegistry
 from src.content.repository import ContentRepository
 from src.content.schemas import (
     ContentHistoryItemGet,
@@ -22,6 +21,10 @@ from src.content.schemas import (
 )
 from src.users.schemas import UserGet
 from src.videos.enums import VideoProcessingStatusEnum
+
+if TYPE_CHECKING:
+    from src.assets.storage import AssetStorage
+    from src.content.projectors import ContentProjectorRegistry
 
 
 class ContentService:
@@ -213,6 +216,110 @@ class ContentService:
             )
             for item, session in rows
         ]
+
+    async def get_shareable_content(
+        self,
+        *,
+        content_id: uuid.UUID,
+        viewer_id: uuid.UUID,
+    ) -> ContentListItemGet:
+        content = await self._get_reactable_content(content_id=content_id, viewer_id=viewer_id)
+        return await self._build_message_share_preview_item(content, viewer_id=viewer_id)
+
+    async def _build_message_share_preview_item(
+        self,
+        item,
+        *,
+        viewer_id: uuid.UUID,
+    ) -> ContentListItemGet:
+        payload = {
+            "content_id": item.content_id,
+            "content_type": item.content_type,
+            "status": item.status,
+            "visibility": item.visibility,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+            "published_at": item.published_at,
+            "comments_count": item.comments_count,
+            "likes_count": item.likes_count,
+            "dislikes_count": item.dislikes_count,
+            "views_count": getattr(item, "views_count", 0),
+            "user": await self._build_share_preview_author(item, viewer_id=viewer_id),
+            "tags": item.tags,
+            "my_reaction": item.my_reaction,
+            "is_owner": item.author_id == viewer_id,
+        }
+
+        if item.content_type == ContentTypeEnum.POST:
+            return ContentListItemGet(
+                **payload,
+                post_content=item.post_details.body_text if item.post_details is not None else "",
+            )
+
+        if item.content_type == ContentTypeEnum.ARTICLE:
+            return ContentListItemGet(
+                **payload,
+                title=item.title,
+                excerpt=item.excerpt,
+                slug=item.article_details.slug if item.article_details is not None else None,
+                canonical_path=f"/articles/{item.content_id}",
+                reading_time_minutes=(
+                    item.article_details.reading_time_minutes
+                    if item.article_details is not None
+                    else None
+                ),
+                word_count=(
+                    item.article_details.word_count
+                    if item.article_details is not None
+                    else None
+                ),
+            )
+
+        if item.content_type == ContentTypeEnum.VIDEO:
+            playback = item.video_playback_details
+            details = item.video_details
+            return ContentListItemGet(
+                **payload,
+                title=item.title,
+                description=details.description if details is not None else None,
+                excerpt=item.excerpt,
+                canonical_path=f"/videos/{item.content_id}",
+                duration_seconds=playback.duration_seconds if playback is not None else None,
+                orientation=playback.orientation if playback is not None else None,
+                processing_status=playback.processing_status if playback is not None else None,
+                processing_error=playback.processing_error if playback is not None else None,
+            )
+
+        if item.content_type == ContentTypeEnum.MOMENT:
+            playback = item.video_playback_details
+            details = item.moment_details
+            caption = details.caption if details is not None else None
+            return ContentListItemGet(
+                **payload,
+                caption=caption,
+                excerpt=caption,
+                canonical_path=f"/moments?moment={item.content_id}",
+                duration_seconds=playback.duration_seconds if playback is not None else None,
+                orientation=playback.orientation if playback is not None else None,
+                processing_status=playback.processing_status if playback is not None else None,
+                processing_error=playback.processing_error if playback is not None else None,
+            )
+
+        return ContentListItemGet(**payload)
+
+    async def _build_share_preview_author(
+        self,
+        item,
+        *,
+        viewer_id: uuid.UUID,
+    ) -> UserGet:
+        from src.users.presentation import build_user_get
+
+        return await build_user_get(
+            item.author,
+            viewer_id=viewer_id,
+            storage=None,
+        )
 
     async def _build_feed_item(
         self,

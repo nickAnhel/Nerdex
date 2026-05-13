@@ -43,4 +43,12 @@ export default class ContentService {
     static async finishViewSession(contentId, sessionId, data) {
         return api.post(`/contents/${contentId}/view-session/${sessionId}/finish`, data);
     }
+
+    static async shareToChats(contentId, chatIds, content = "") {
+        return api.post("/messages/share-content", {
+            content_id: contentId,
+            chat_ids: chatIds,
+            content,
+        });
+    }
 }

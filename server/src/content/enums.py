@@ -25,3 +25,11 @@ class ContentVisibilityEnum(str, Enum):
 class ReactionTypeEnum(str, Enum):
     LIKE = "like"
     DISLIKE = "dislike"
+    HEART = "heart"
+    FIRE = "fire"
+    JOY = "joy"
+    CRY = "cry"
+    THINKING = "thinking"
+    EXPLODING_HEAD = "exploding_head"
+    CLAP = "clap"
+    PRAY = "pray"

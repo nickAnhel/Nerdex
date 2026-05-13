@@ -6,6 +6,11 @@
     max-width: 60%;
 }
 
+.msg-highlighted .msg-info {
+    outline: 2px solid rgba(247, 213, 105, .7);
+    box-shadow: 0 0 0 .2rem rgba(247, 213, 105, .12);
+}
+
 .msg img {
     width: 2.5rem;
     aspect-ratio: 1/1;
@@ -38,6 +43,241 @@
     word-wrap: break-word;
 }
 
+.msg-attachments {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    margin-top: .25rem;
+}
+
+.msg-attachment-media {
+    display: block;
+    max-width: min(22rem, 60vw);
+    overflow: hidden;
+    border-radius: .5rem;
+    background-color: rgba(0, 0, 0, .18);
+}
+
+.msg .msg-attachment-media img {
+    width: 100%;
+    max-height: 18rem;
+    aspect-ratio: auto;
+    display: block;
+    object-fit: contain;
+    border-radius: 0;
+}
+
+.msg-attachment-video {
+    width: min(22rem, 60vw);
+    max-height: 18rem;
+    border-radius: .5rem;
+    background-color: #000;
+}
+
+.msg-attachment-file {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: min(17rem, 58vw);
+    padding: .5rem;
+    border-radius: .5rem;
+    background-color: rgba(255, 255, 255, .1);
+}
+
+.msg-attachment-file-icon {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+}
+
+.msg-attachment-file-icon svg {
+    width: 1.4rem;
+    height: 1.4rem;
+}
+
+.msg-attachment-file-body {
+    min-width: 0;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+}
+
+.msg-attachment-file-name,
+.msg-attachment-file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.msg-attachment-file-name {
+    font-size: .9rem;
+}
+
+.msg-attachment-file-meta {
+    color: #c7c7c7;
+    font-size: .72rem;
+}
+
+.msg-attachment-download {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: .35rem;
+    color: #fff;
+    background-color: rgba(255, 255, 255, .14);
+}
+
+.msg-attachment-download svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.msg-shared-content {
+    width: min(24rem, 58vw);
+    display: grid;
+    grid-template-columns: 5rem minmax(0, 1fr);
+    gap: .65rem;
+    margin-top: .25rem;
+    padding: .55rem;
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: .55rem;
+    background-color: rgba(0, 0, 0, .18);
+    color: #fff;
+    text-decoration: none;
+}
+
+.msg-shared-content:hover {
+    background-color: rgba(255, 255, 255, .1);
+}
+
+.msg .msg-shared-content-image {
+    width: 5rem;
+    height: 4rem;
+    aspect-ratio: auto;
+    border-radius: .4rem;
+    object-fit: cover;
+}
+
+.msg-shared-content-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .16rem;
+}
+
+.msg-shared-content-type,
+.msg-shared-content-author {
+    color: #cfcfcf;
+    font-size: .72rem;
+}
+
+.msg-shared-content-title,
+.msg-shared-content-excerpt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.msg-shared-content-title {
+    font-size: .92rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.msg-shared-content-excerpt {
+    display: -webkit-box;
+    color: #e2e2e2;
+    font-size: .8rem;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.msg-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    margin-top: .35rem;
+}
+
+.msg-reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .45rem;
+    border-radius: 999px;
+    color: #d7d7d7;
+    background-color: rgba(255, 255, 255, .08);
+    font-size: .78rem;
+}
+
+.msg-reaction-pill-active {
+    color: #fff;
+    background-color: rgba(157, 80, 255, .24);
+}
+
+.msg-reaction-pill-emoji {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.msg-reaction-pill-count {
+    font-weight: 700;
+}
+
+.msg-reply-preview {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    margin: .15rem 0 .25rem;
+    padding: .35rem .5rem;
+    border: 0;
+    border-left: .2rem solid #9D50FF;
+    border-radius: .4rem;
+    color: #dbdbdb;
+    background-color: rgba(255, 255, 255, .08);
+    text-align: left;
+    cursor: pointer;
+}
+
+.you .msg-reply-preview {
+    border-left-color: #fff;
+    background-color: rgba(0, 0, 0, .14);
+}
+
+.msg-reply-preview span {
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.msg-reply-preview p {
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #bdbdbd;
+    font-size: .85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.msg-reply-preview-deleted p {
+    color: #9c9c9c;
+    font-style: italic;
+}
+
+.msg-deleted .msg-text {
+    color: #9c9c9c;
+    font-style: italic;
+}
+
+.msg-deleted .msg-info {
+    opacity: .8;
+}
+
 .you {
     flex-direction: row-reverse;
     align-self: flex-end;
@@ -45,6 +285,28 @@
 
 .you .msg-info {
     background-color: #9D50FF;
+}
+
+.msg-pending .msg-info {
+    opacity: .72;
+}
+
+.msg-failed .msg-info {
+    background-color: #6f1d2a;
+}
+
+.msg-retry {
+    align-self: flex-end;
+    border: 0;
+    border-radius: .35rem;
+    padding: .25rem .5rem;
+    color: #fff;
+    background-color: rgba(255, 255, 255, .18);
+    cursor: pointer;
+}
+
+.msg-retry:hover {
+    background-color: rgba(255, 255, 255, .28);
 }
 
 .you .msg-label {

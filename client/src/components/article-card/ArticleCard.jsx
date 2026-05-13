@@ -8,6 +8,7 @@ import ArticleService from "../../service/ArticleService";
 
 import TagChip from "../tag-chip/TagChip";
 import CommentIcon from "../icons/CommentIcon";
+import ContentShareButton from "../content-share-button/ContentShareButton";
 import DislikeIcon from "../icons/DislikeIcon";
 import LikeIcon from "../icons/LikeIcon";
 import { getAvatarUrl } from "../../utils/avatar";
@@ -125,6 +126,10 @@ const ArticleCard = forwardRef(({ article }, ref) => {
                     <DislikeIcon />
                     <span>{card.dislikes_count}</span>
                 </button>
+                <ContentShareButton
+                    contentId={card.content_id || card.article_id}
+                    contentTitle={card.title || "article"}
+                />
             </div>
         </article>
     );

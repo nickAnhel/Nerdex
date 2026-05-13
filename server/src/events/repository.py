@@ -5,6 +5,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.chats.timeline import create_event_timeline_item
 from src.events.models import EventModel
 
 
@@ -24,8 +25,15 @@ class EventRepository:
         )
 
         result = await self._session.execute(stmt)
+        event = result.scalar_one()
+        chat_seq = await create_event_timeline_item(
+            session=self._session,
+            chat_id=event.chat_id,
+            event_id=event.event_id,
+        )
         await self._session.commit()
-        return result.scalar_one()
+        setattr(event, "chat_seq", chat_seq)
+        return event
 
     async def get_multi(
         self,

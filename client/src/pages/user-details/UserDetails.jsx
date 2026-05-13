@@ -10,6 +10,7 @@ import PostService from "../../service/PostService";
 import ArticleService from "../../service/ArticleService";
 import VideoService from "../../service/VideoService";
 import MomentService from "../../service/MomentService";
+import ChatService from "../../service/ChatService";
 
 import NotFound from "../../components/not-found/NotFound";
 import Loader from "../../components/loader/Loader";
@@ -51,6 +52,7 @@ function UserDetails() {
     const [userNotFound, setUserNotFound] = useState(false);
 
     const [isLoadingSubscribe, setIsLoadingSubscribe] = useState(false);
+    const [isLoadingDirectChat, setIsLoadingDirectChat] = useState(false);
     const [isSubscribed, setIsSubsctribed] = useState(false);
     const [subsCount, setSubsCount] = useState(0);
 
@@ -129,6 +131,22 @@ function UserDetails() {
         // })
     }
 
+    const handleStartDirectChat = async () => {
+        setIsLoadingDirectChat(true);
+
+        try {
+            const res = await ChatService.createChat({
+                chat_type: "direct",
+                member_id: user.user_id,
+            });
+            navigate(`/chats/@${res.data.chat_id}`);
+        } catch (e) {
+            console.log(e);
+        } finally {
+            setIsLoadingDirectChat(false);
+        }
+    }
+
     if (userNotFound) {
         return (
             <div id="user-details">
@@ -159,28 +177,42 @@ function UserDetails() {
 
                 {
                     store.user.user_id !== user.user_id && (
-                        isSubscribed ?
+                        <>
                             <button
-                                className="btn btn-outline-primary unsubscribe"
+                                className="btn btn-outline-primary message-user"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    handleUnsubscribe();
+                                    handleStartDirectChat();
                                 }}
-                                disabled={!store.isAuthenticated}
+                                disabled={!store.isAuthenticated || isLoadingDirectChat}
                             >
-                                {isLoadingSubscribe ? <Loader /> : "Unsubscribe"}
+                                {isLoadingDirectChat ? <Loader /> : "Message"}
                             </button>
-                            :
-                            <button
-                                className="btn btn-primary"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    handleSubscribe();
-                                }}
-                                disabled={!store.isAuthenticated || store.user.user_id === user.user_id}
-                            >
-                                {isLoadingSubscribe ? <Loader /> : "Subscribe"}
-                            </button>
+                            {
+                                isSubscribed ?
+                                    <button
+                                        className="btn btn-outline-primary unsubscribe"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            handleUnsubscribe();
+                                        }}
+                                        disabled={!store.isAuthenticated}
+                                    >
+                                        {isLoadingSubscribe ? <Loader /> : "Unsubscribe"}
+                                    </button>
+                                    :
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            handleSubscribe();
+                                        }}
+                                        disabled={!store.isAuthenticated || store.user.user_id === user.user_id}
+                                    >
+                                        {isLoadingSubscribe ? <Loader /> : "Subscribe"}
+                                    </button>
+                            }
+                        </>
                     )
                 }
             </div>

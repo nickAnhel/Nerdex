@@ -2,8 +2,8 @@ import api from "../http";
 
 
 export default class ChatService {
-    static async createChat(chatId, data) {
-        return api.post("/chats", data);
+    static async createChat(chatIdOrData, data) {
+        return api.post("/chats", data || chatIdOrData);
     }
 
     static async getChatById(chatId) {
@@ -26,12 +26,25 @@ export default class ChatService {
         return api.delete(`/chats/${chatId}/leave`);
     }
 
-    static async getChatHistory(chatId) {
-        return api.get(`/chats/${chatId}/history`);
+    static async getChatHistory(chatId, params) {
+        return api.get(`/chats/${chatId}/history`, { params });
+    }
+
+    static async searchChatMessages(chatId, params) {
+        return api.get("/messages/search", {
+            params: {
+                chat_id: chatId,
+                ...params,
+            },
+        });
     }
 
     static async getUserJoinedChats(params) {
         return api.get("/chats/user", { params });
+    }
+
+    static async markChatRead(chatId) {
+        return api.post(`/chats/${chatId}/read`);
     }
 
     static async deleteChat(chatId) {

@@ -5,9 +5,10 @@ from sqlalchemy.exc import IntegrityError
 
 from src.auth.dependencies import get_current_user
 from src.chats.dependencies import get_chat_service
-from src.chats.enums import ChatOrder
+from src.chats.enums import ChatOrder, ChatType
 from src.chats.schemas import (
     ChatCreate,
+    ChatDialogGet,
     ChatGet,
     ChatUpdate,
     EventHistoryItem,
@@ -39,13 +40,14 @@ async def create_chat(
         data=data,
     )
 
-    await event_service.create_event(
-        data=EventCreate(
-            chat_id=chat.chat_id,
-            event_type=EventType.CREATE,
-            user_id=user.user_id,
+    if chat.chat_type == ChatType.GROUP:
+        await event_service.create_event(
+            data=EventCreate(
+                chat_id=chat.chat_id,
+                event_type=EventType.CREATE,
+                user_id=user.user_id,
+            )
         )
-    )
 
     return chat
 
@@ -91,7 +93,7 @@ async def get_joined_chats(
     limit: int = 100,
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
-) -> list[ChatGet]:
+) -> list[ChatDialogGet]:
     return await service.get_user_joined_chats(
         user=user,
         order=order,
@@ -101,13 +103,23 @@ async def get_joined_chats(
     )
 
 
+@router.post("/{chat_id}/read")
+async def mark_chat_read(
+    chat_id: uuid.UUID,
+    user: UserGet = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+) -> Status:
+    await service.mark_chat_read(chat_id=chat_id, user_id=user.user_id)
+    return Status(detail="Successfully marked chat as read")
+
+
 @router.get("/{chat_id}")
 async def get_chat(
     chat_id: uuid.UUID,
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ) -> ChatGet:
-    return await service.get_chat(chat_id=chat_id)
+    return await service.get_chat(chat_id=chat_id, user_id=user.user_id)
 
 
 @router.get("/{chat_id}/members")
@@ -116,21 +128,26 @@ async def get_chat_members(
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ) -> list[UserGet]:
-    return await service.get_chat_members(chat_id=chat_id)
+    return await service.get_chat_members(chat_id=chat_id, user_id=user.user_id)
 
 
 @router.get("/{chat_id}/history")
 async def get_chat_history(
     chat_id: uuid.UUID,
-    offset: int = 0,
     limit: int = 100,
+    before_seq: int | None = None,
+    after_seq: int | None = None,
+    offset: int | None = None,
     user: UserGet = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ) -> list[MessageHistoryItem | EventHistoryItem]:
+    _ = offset
     return await service.get_chat_history(
         chat_id=chat_id,
-        offset=offset,
+        user_id=user.user_id,
         limit=limit,
+        before_seq=before_seq,
+        after_seq=after_seq,
     )
 
 

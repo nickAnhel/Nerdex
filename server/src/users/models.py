@@ -71,6 +71,11 @@ class UserModel(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    message_reactions: Mapped[list["MessageReactionModel"]] = relationship(  # type: ignore[name-defined]
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     created_chats: Mapped[list["ChatModel"]] = relationship(  # type: ignore
         back_populates="owner",
         cascade="all, delete-orphan",
@@ -96,6 +101,7 @@ class UserModel(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        foreign_keys="MessageModel.user_id",
     )
     owned_assets: Mapped[list["AssetModel"]] = relationship(  # type: ignore[name-defined]
         back_populates="owner",
