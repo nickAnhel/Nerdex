@@ -56,6 +56,10 @@ class ChatUpdate(BaseSchema):
     is_private: bool | None = None
 
 
+class ChatTypingWS(BaseSchema):
+    chat_id: uuid.UUID
+
+
 class MessageHistoryItem(MessageGetWithUser):
     item_type: str = "message"
     chat_seq: int

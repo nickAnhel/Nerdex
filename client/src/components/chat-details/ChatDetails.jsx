@@ -26,17 +26,31 @@ import {
     formatAttachmentSize,
     resolveAssetTypeForFile,
 } from "../../utils/postAttachments";
+import {
+    getTypingIndicatorText,
+    removeTypingUser,
+    TYPING_START_THROTTLE_MS,
+    TYPING_STATUS_TIMEOUT_MS,
+    upsertTypingUser,
+} from "./typingState";
 
 
 const HISTORY_PAGE_SIZE = 50;
 
 
 function getMaxCharsInLine(textarea, content) {
+    if (!content) {
+        return 1;
+    }
+
     const context = document.createElement('canvas').getContext('2d');
+    if (!context) {
+        return 1;
+    }
     const computedStyle = window.getComputedStyle(textarea);
     context.font = computedStyle.font;
     const width = context.measureText(content).width / content.length;
-    return Math.floor(textarea.clientWidth / width);
+    return Math.max(Math.floor(textarea.clientWidth / width), 1);
 }
 
 function createClientMessageId() {
@@ -263,6 +277,7 @@ function ChatDetails() {
     const [, setLatestSeq] = useState(null);
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [typingUsers, setTypingUsers] = useState([]);
 
     const socket = useRef(null);
     const messagesEndRef = useRef(null);
@@ -271,11 +286,17 @@ function ChatDetails() {
     const latestSeqRef = useRef(null);
     const pendingPrependScrollRef = useRef(null);
     const shouldScrollBottomRef = useRef(false);
+    const typingTimeoutsRef = useRef(new Map());
+    const typingStateRef = useRef({
+        isTyping: false,
+        lastSentAt: 0,
+    });
     const directMember = chat.chat_type === "direct"
         ? chat.members?.find((member) => member.user_id !== store.user.user_id)
         : null;
     const chatTitle = directMember?.username || chat.title;
     const chatImage = directMember ? getAvatarUrl(directMember, "small") : "../../../assets/chat.svg";
+    const typingIndicatorText = getTypingIndicatorText(typingUsers, chat.chat_type);
 
     const markCurrentChatRead = useCallback(async (chatId) => {
         try {
@@ -322,9 +343,107 @@ function ChatDetails() {
                         ...item,
                         replyPreview: buildReplyPreviewFromMessage(messageItem),
                     }
-                    : item
+                : item
         )));
     }, []);
+
+    const clearTypingTimers = useCallback(() => {
+        typingTimeoutsRef.current.forEach((timeoutId) => {
+            window.clearTimeout(timeoutId);
+        });
+        typingTimeoutsRef.current.clear();
+    }, []);
+
+    const resetTypingState = useCallback(() => {
+        clearTypingTimers();
+        typingStateRef.current.isTyping = false;
+        typingStateRef.current.lastSentAt = 0;
+        setTypingUsers([]);
+    }, [clearTypingTimers]);
+
+    const stopTyping = useCallback(() => {
+        if (!typingStateRef.current.isTyping) {
+            return;
+        }
+
+        typingStateRef.current.isTyping = false;
+        typingStateRef.current.lastSentAt = 0;
+
+        if (!socket.current?.connected || !chat.chat_id) {
+            return;
+        }
+
+        socket.current.emit("typing:stop", {
+            chat_id: chat.chat_id,
+        });
+    }, [chat.chat_id]);
+
+    const scheduleTypingTimeout = useCallback((userId, expiresInSeconds = TYPING_STATUS_TIMEOUT_MS / 1000) => {
+        const existingTimeout = typingTimeoutsRef.current.get(userId);
+        if (existingTimeout) {
+            window.clearTimeout(existingTimeout);
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            typingTimeoutsRef.current.delete(userId);
+            setTypingUsers((users) => removeTypingUser(users, userId));
+        }, Math.max(expiresInSeconds, 1) * 1000);
+
+        typingTimeoutsRef.current.set(userId, timeoutId);
+    }, []);
+
+    const handleTypingStartEvent = useCallback((data) => {
+        const typingData = parseSocketPayload(data);
+        if (typingData.chat_id !== chat.chat_id || typingData.user_id === store.user.user_id) {
+            return;
+        }
+
+        setTypingUsers((users) => upsertTypingUser(users, {
+            userId: typingData.user_id,
+            username: typingData.username,
+        }));
+        scheduleTypingTimeout(typingData.user_id, typingData.expires_in_seconds);
+    }, [chat.chat_id, scheduleTypingTimeout, store.user.user_id]);
+
+    const handleTypingStopEvent = useCallback((data) => {
+        const typingData = parseSocketPayload(data);
+        if (typingData.chat_id !== chat.chat_id || typingData.user_id === store.user.user_id) {
+            return;
+        }
+
+        const existingTimeout = typingTimeoutsRef.current.get(typingData.user_id);
+        if (existingTimeout) {
+            window.clearTimeout(existingTimeout);
+            typingTimeoutsRef.current.delete(typingData.user_id);
+        }
+
+        setTypingUsers((users) => removeTypingUser(users, typingData.user_id));
+    }, [chat.chat_id, store.user.user_id]);
+
+    const emitTypingStart = useCallback((value) => {
+        if (!socket.current?.connected || !chat.chat_id || editingMessage) {
+            return;
+        }
+
+        if (!value.trim()) {
+            return;
+        }
+
+        const now = Date.now();
+        if (
+            typingStateRef.current.isTyping
+            && now - typingStateRef.current.lastSentAt < TYPING_START_THROTTLE_MS
+        ) {
+            return;
+        }
+
+        typingStateRef.current.isTyping = true;
+        typingStateRef.current.lastSentAt = now;
+
+        socket.current.emit("typing:start", {
+            chat_id: chat.chat_id,
+        });
+    }, [chat.chat_id, editingMessage]);
 
     useEffect(() => {
         const bounds = getTimelineBounds(chatItems);
@@ -487,6 +606,7 @@ function ChatDetails() {
             return;
         }
 
+        resetTypingState();
         socket.current = io(process.env.REACT_APP_WS_HOST, {
             path: "/ws",
             transports: ["websocket"],
@@ -555,7 +675,12 @@ function ChatDetails() {
             applyReactionEvent(reactionEvent);
         })
 
+        socket.current.on("typing:start", handleTypingStartEvent);
+        socket.current.on("typing:stop", handleTypingStopEvent);
+
         return () => {
+            stopTyping();
+            resetTypingState();
             socket.current.emit("leave", {
                 chat_id: chat.chat_id,
             });
@@ -565,15 +690,32 @@ function ChatDetails() {
             socket.current.off("message:deleted");
             socket.current.off("message:reaction:added");
             socket.current.off("message:reaction:removed");
+            socket.current.off("typing:start");
+            socket.current.off("typing:stop");
             socket.current.off("connect_error");
             socket.current.disconnect();
         }
-    }, [applyHistoryItems, applyReactionEvent, chat.chat_id, markCurrentChatRead, store.user.user_id, updateMessageInChat]);
+    }, [
+        applyHistoryItems,
+        applyReactionEvent,
+        chat.chat_id,
+        handleTypingStartEvent,
+        handleTypingStopEvent,
+        markCurrentChatRead,
+        resetTypingState,
+        stopTyping,
+        store.user.user_id,
+        updateMessageInChat,
+    ]);
 
-    const resizeTextarea = () => {
-        let rowsTotalHeight = textareaRef.current.value.split("\n").length * 25;
+    const resizeTextarea = (value = textareaRef.current?.value || "") => {
+        if (!textareaRef.current) {
+            return;
+        }
+
+        let rowsTotalHeight = value.split("\n").length * 25;
         let symbolsTotalLength = Math.max(
-            Math.ceil(textareaRef.current.value.length / getMaxCharsInLine(textareaRef.current, textareaRef.current.value)), 1
+            Math.ceil(value.length / getMaxCharsInLine(textareaRef.current, value)), 1
         ) * 25;
 
         textareaRef.current.style.height = `${Math.min(
@@ -582,7 +724,7 @@ function ChatDetails() {
         )
             }px`;
 
-        messagesEndRef.current.scroll({
+        messagesEndRef.current?.scroll({
             top: messagesEndRef.current.scrollHeight,
             behavior: 'smooth',
         });
@@ -648,6 +790,7 @@ function ChatDetails() {
     }
 
     const clearComposer = () => {
+        stopTyping();
         setMessage("");
         setAttachments([]);
         setEditingMessage(null);
@@ -790,6 +933,27 @@ function ChatDetails() {
         }
     };
 
+    const handleMessageChange = (event) => {
+        const nextValue = event.target.value;
+        setMessage(nextValue);
+        resizeTextarea(nextValue);
+
+        if (editingMessage) {
+            return;
+        }
+
+        if (nextValue.trim()) {
+            emitTypingStart(nextValue);
+            return;
+        }
+
+        stopTyping();
+    };
+
+    const handleMessageBlur = () => {
+        stopTyping();
+    };
+
     const handleChatJoin = async () => {
         try {
             await ChatService.joinChat(chat.chat_id);
@@ -802,6 +966,7 @@ function ChatDetails() {
 
     const handleChatLeave = async () => {
         try {
+            stopTyping();
             await ChatService.leaveChat(chat.chat_id);
             navigate("/chats");
 
@@ -817,6 +982,7 @@ function ChatDetails() {
 
     const handleChatDelete = async () => {
         try {
+            stopTyping();
             await ChatService.deleteChat(chat.chat_id);
             navigate("/chats");
         } catch (e) {
@@ -842,6 +1008,7 @@ function ChatDetails() {
             return;
         }
 
+        stopTyping();
         setEditingMessage(messageMenu.message);
         setReplyingToMessage(null);
         setMessage(messageMenu.message.content);
@@ -1163,6 +1330,12 @@ function ChatDetails() {
                         ))}
                     </div>
                 }
+                {
+                    typingIndicatorText &&
+                    <div className="typing-indicator" aria-live="polite">
+                        {typingIndicatorText}
+                    </div>
+                }
                 <div className="msg-box">
                     <button
                         type="button"
@@ -1185,7 +1358,8 @@ function ChatDetails() {
                         ref={textareaRef}
                         value={message}
                         placeholder={editingMessage ? "Edit message" : "Type a message"}
-                        onChange={(e) => { setMessage(e.target.value); resizeTextarea() }}
+                        onChange={handleMessageChange}
+                        onBlur={handleMessageBlur}
                         id="message-input"
                         onKeyDown={handleKeyDown}
                     >

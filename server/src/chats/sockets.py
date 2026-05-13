@@ -9,7 +9,10 @@ from src.assets.dependencies import get_asset_service, get_asset_storage
 from src.auth.socket import SocketAuthenticationError, authenticate_socket_user
 from src.chats.dependencies import get_chat_service
 from src.chats.exceptions import ChatNotFound
+from src.chats import typing_state
+from src.chats.schemas import ChatTypingWS
 from src.chats.socket_messages import build_socket_message_create
+from src.chats.socket_messages import build_socket_typing_status
 from src.config import settings
 from src.common.database import async_session_maker
 from src.common.exceptions import PermissionDenied
@@ -66,12 +69,18 @@ def _error_response(code: str, detail: str) -> dict[str, Any]:
 
 
 async def _get_socket_user_id(sid: str) -> uuid.UUID:
+    user_id, _username = await _get_socket_user_context(sid)
+    return user_id
+
+
+async def _get_socket_user_context(sid: str) -> tuple[uuid.UUID, str]:
     session = await sio.get_session(sid)
     user_id = session.get("user_id")
-    if not isinstance(user_id, uuid.UUID):
+    username = session.get("username")
+    if not isinstance(user_id, uuid.UUID) or not isinstance(username, str) or not username:
         raise SocketAuthenticationError("Unauthorized")
 
-    return user_id
+    return user_id, username
 
 
 async def _build_message_ws_payload(message, *, viewer_id: uuid.UUID | None = None) -> dict[str, Any]:
@@ -134,7 +143,13 @@ async def connect(
         except SocketAuthenticationError as exc:
             raise socketio.exceptions.ConnectionRefusedError("Unauthorized") from exc
 
-    await sio.save_session(sid, {"user_id": user.user_id})
+    await sio.save_session(
+        sid,
+        {
+            "user_id": user.user_id,
+            "username": user.username,
+        },
+    )
 
 
 @sio.on("join")
@@ -177,6 +192,96 @@ async def on_leave(
         return _error_response("bad_request", "Invalid chat_id")
 
     await sio.leave_room(sid, str(chat_id))
+    return _success_response()
+
+
+@sio.on("typing:start")
+async def on_typing_start(
+    sid: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        msg = ChatTypingWS.model_validate(data)
+        user_id, username = await _get_socket_user_context(sid)
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return _error_response("bad_request", "Invalid typing payload")
+    except SocketAuthenticationError as exc:
+        return _error_response("unauthorized", str(exc))
+
+    async with async_session_maker() as session:
+        service = get_chat_service(session)
+        try:
+            await service.ensure_user_is_chat_member(
+                chat_id=msg.chat_id,
+                user_id=user_id,
+            )
+        except ChatNotFound as exc:
+            return _error_response("not_found", str(exc))
+        except PermissionDenied as exc:
+            return _error_response("forbidden", str(exc))
+
+    await typing_state.mark_chat_typing(
+        chat_id=msg.chat_id,
+        user_id=user_id,
+        username=username,
+    )
+    payload = build_socket_typing_status(
+        chat_id=msg.chat_id,
+        user_id=user_id,
+        username=username,
+        expires_in_seconds=typing_state.TYPING_STATUS_EXPIRES_IN_SECONDS,
+    )
+    await sio.emit(
+        "typing:start",
+        payload,
+        room=str(msg.chat_id),
+        skip_sid=sid,
+    )
+    return _success_response(
+        {"expires_in_seconds": typing_state.TYPING_STATUS_EXPIRES_IN_SECONDS}
+    )
+
+
+@sio.on("typing:stop")
+async def on_typing_stop(
+    sid: str,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        msg = ChatTypingWS.model_validate(data)
+        user_id, username = await _get_socket_user_context(sid)
+    except (KeyError, TypeError, ValueError, ValidationError):
+        return _error_response("bad_request", "Invalid typing payload")
+    except SocketAuthenticationError as exc:
+        return _error_response("unauthorized", str(exc))
+
+    async with async_session_maker() as session:
+        service = get_chat_service(session)
+        try:
+            await service.ensure_user_is_chat_member(
+                chat_id=msg.chat_id,
+                user_id=user_id,
+            )
+        except ChatNotFound as exc:
+            return _error_response("not_found", str(exc))
+        except PermissionDenied as exc:
+            return _error_response("forbidden", str(exc))
+
+    await typing_state.clear_chat_typing(
+        chat_id=msg.chat_id,
+        user_id=user_id,
+    )
+    await sio.emit(
+        "typing:stop",
+        build_socket_typing_status(
+            chat_id=msg.chat_id,
+            user_id=user_id,
+            username=username,
+            expires_in_seconds=typing_state.TYPING_STATUS_EXPIRES_IN_SECONDS,
+        ),
+        room=str(msg.chat_id),
+        skip_sid=sid,
+    )
     return _success_response()
 
 

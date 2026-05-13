@@ -172,6 +172,15 @@
     gap: .5rem;
 }
 
+.typing-indicator {
+    width: 100%;
+    padding: 0 1rem;
+    color: #8f8f8f;
+    font-size: .88rem;
+    font-style: italic;
+    line-height: 1.2;
+}
+
 .composer-attachment {
     max-width: 18rem;
     display: flex;
