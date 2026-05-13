@@ -290,8 +290,15 @@ class ContentRepository:
         content_id: uuid.UUID,
         viewer_id: uuid.UUID,
         started_at: datetime.datetime,
-        position_seconds: int,
+        last_position_seconds: int,
+        max_position_seconds: int,
+        watched_seconds: int,
         progress_percent: int,
+        last_seen_at: datetime.datetime | None = None,
+        is_counted: bool = False,
+        counted_at: datetime.datetime | None = None,
+        counted_date: datetime.date | None = None,
+        increment_views: bool = False,
         source: str | None,
         metadata: dict,
     ) -> ContentViewSessionModel:
@@ -301,15 +308,25 @@ class ContentRepository:
                 content_id=content_id,
                 viewer_id=viewer_id,
                 started_at=started_at,
-                last_seen_at=started_at,
-                last_position_seconds=position_seconds,
-                max_position_seconds=position_seconds,
+                last_seen_at=last_seen_at or started_at,
+                last_position_seconds=last_position_seconds,
+                max_position_seconds=max_position_seconds,
+                watched_seconds=watched_seconds,
                 progress_percent=progress_percent,
+                is_counted=is_counted,
+                counted_at=counted_at,
+                counted_date=counted_date,
                 source=source,
                 view_metadata=metadata,
             )
             .returning(ContentViewSessionModel.view_session_id)
         )
+        if increment_views:
+            await self._session.execute(
+                update(ContentModel)
+                .where(ContentModel.content_id == content_id)
+                .values(views_count=ContentModel.views_count + 1)
+            )
         await self._session.commit()
         session = await self.get_view_session(
             view_session_id=result.scalar_one(),
@@ -413,6 +430,12 @@ class ContentRepository:
             )
         )
         return bool(result)
+
+    async def get_views_count(self, *, content_id: uuid.UUID) -> int:
+        views_count = await self._session.scalar(
+            select(ContentModel.views_count).where(ContentModel.content_id == content_id)
+        )
+        return int(views_count or 0)
 
     def _build_content_query(self, viewer_id: uuid.UUID | None):
         reaction_subquery = self._reaction_subquery(viewer_id=viewer_id)

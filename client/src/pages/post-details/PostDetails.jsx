@@ -1,16 +1,19 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import "./PostDetails.css";
 
+import { StoreContext } from "../..";
 import Loader from "../../components/loader/Loader";
 import CommentSection from "../../components/comment-section/CommentSection";
 import Modal from "../../components/modal/Modal";
 import PostListItem from "../../components/post-list-item/PostListItem";
+import ContentService from "../../service/ContentService";
 import PostService from "../../service/PostService";
 
 
 function PostDetails() {
+    const { store } = useContext(StoreContext);
     const [searchParams, setSearchParams] = useSearchParams();
     const postId = searchParams.get("p");
     const mediaParam = searchParams.get("media");
@@ -77,6 +80,20 @@ function PostDetails() {
 
         fetchPost();
     }, [postId]);
+
+    useEffect(() => {
+        if (!store.isAuthenticated || !post?.post_id) {
+            return;
+        }
+
+        ContentService.startViewSession(post.post_id, {
+            source: "post_detail",
+            initial_progress_percent: 100,
+            metadata: { surface: "post_details_modal" },
+        }).catch((error) => {
+            console.log(error);
+        });
+    }, [post?.post_id, store.isAuthenticated]);
 
     if (!postId) {
         return null;

@@ -3,6 +3,7 @@ import uuid
 from dataclasses import dataclass, field
 
 import pytest
+from pydantic import ValidationError
 
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.exceptions import ContentNotFound
@@ -95,20 +96,43 @@ class FakeRepository:
             self.content.dislikes_count -= 1
         del self.reactions[(content_id, user_id)]
 
-    async def create_view_session(self, *, content_id, viewer_id, started_at, position_seconds, progress_percent, source, metadata):  # type: ignore[no-untyped-def]
+    async def create_view_session(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        content_id,
+        viewer_id,
+        started_at,
+        last_position_seconds,
+        max_position_seconds,
+        watched_seconds,
+        progress_percent,
+        last_seen_at=None,
+        is_counted=False,
+        counted_at=None,
+        counted_date=None,
+        increment_views=False,
+        source,
+        metadata,
+    ):
         session = FakeSession(
             view_session_id=uuid.uuid4(),
             content_id=content_id,
             viewer_id=viewer_id,
             started_at=started_at,
-            last_seen_at=started_at,
-            last_position_seconds=position_seconds,
-            max_position_seconds=position_seconds,
+            last_seen_at=last_seen_at or started_at,
+            last_position_seconds=last_position_seconds,
+            max_position_seconds=max_position_seconds,
+            watched_seconds=watched_seconds,
             progress_percent=progress_percent,
+            is_counted=is_counted,
+            counted_at=counted_at,
+            counted_date=counted_date,
             source=source,
             view_metadata=metadata,
         )
         self.sessions[session.view_session_id] = session
+        if increment_views:
+            self.content.views_count += 1
         return session
 
     async def get_view_session(self, *, view_session_id, content_id, viewer_id):  # type: ignore[no-untyped-def]
@@ -137,6 +161,9 @@ class FakeRepository:
             and session.is_counted
             for session in self.sessions.values()
         )
+
+    async def get_views_count(self, *, content_id):  # type: ignore[no-untyped-def]
+        return self.content.views_count
 
     async def get_history_sessions(self, *, viewer_id, content_type=None, offset, limit):  # type: ignore[no-untyped-def]
         return [(self.content, session) for session in list(self.sessions.values())[offset:offset + limit] if session.viewer_id == viewer_id]
@@ -215,6 +242,176 @@ async def test_processing_video_does_not_accept_generic_reaction(service_bundle)
 
     with pytest.raises(ContentNotFound):
         await service.set_reaction(content_id=content.content_id, user=viewer, reaction_type=ReactionTypeEnum.LIKE)
+
+
+@pytest.mark.anyio
+async def test_post_view_session_counts_on_start_once_per_day(service_bundle) -> None:
+    service, repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.POST
+    content.video_playback_details = None
+
+    first = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="post_detail", initial_progress_percent=100),
+    )
+    second = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="post_detail", initial_progress_percent=100),
+    )
+
+    assert first.is_counted is True
+    assert first.progress_percent == 100
+    assert first.views_count == 1
+    assert second.is_counted is False
+    assert second.views_count == 1
+    assert content.views_count == 1
+    assert len(repository.sessions) == 2
+
+
+@pytest.mark.anyio
+async def test_article_start_persists_restored_latest_progress(service_bundle) -> None:
+    service, repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.ARTICLE
+    content.video_playback_details = None
+
+    first = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="article_detail", initial_progress_percent=40),
+    )
+    repository.sessions[first.view_session_id].watched_seconds = 6
+    second = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="article_detail", initial_progress_percent=15),
+    )
+    persisted = repository.sessions[second.view_session_id]
+
+    assert second.progress_percent == 40
+    assert persisted.progress_percent == 40
+    assert persisted.watched_seconds == 6
+
+
+@pytest.mark.anyio
+async def test_article_heartbeat_accepts_missing_position_and_keeps_progress_monotonic(service_bundle) -> None:
+    service, repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.ARTICLE
+    content.video_playback_details = None
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="article_detail", initial_progress_percent=20),
+    )
+    updated = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(progress_percent=15, watched_seconds_delta=3),
+    )
+    persisted = repository.sessions[started.view_session_id]
+
+    assert updated.progress_percent == 20
+    assert updated.watched_seconds == 3
+    assert persisted.last_position_seconds == 0
+    assert persisted.max_position_seconds == 0
+
+
+@pytest.mark.anyio
+async def test_article_view_session_counts_at_progress_threshold(service_bundle) -> None:
+    service, repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.ARTICLE
+    content.video_playback_details = None
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="article_detail"),
+    )
+    result = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(progress_percent=25, watched_seconds_delta=1),
+    )
+    persisted = repository.sessions[started.view_session_id]
+
+    assert result.is_counted is True
+    assert persisted.is_counted is True
+    assert persisted.counted_at is not None
+    assert persisted.counted_date is not None
+    assert content.views_count == 1
+
+
+@pytest.mark.anyio
+async def test_article_view_session_counts_at_read_seconds_threshold(service_bundle) -> None:
+    service, _repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.ARTICLE
+    content.video_playback_details = None
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="article_detail"),
+    )
+    result = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(progress_percent=5, watched_seconds_delta=10),
+    )
+
+    assert result.is_counted is True
+    assert result.views_count == 1
+    assert content.views_count == 1
+
+
+@pytest.mark.anyio
+async def test_article_view_session_below_threshold_does_not_count(service_bundle) -> None:
+    service, _repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.ARTICLE
+    content.video_playback_details = None
+
+    started = await service.start_view_session(
+        content_id=content.content_id,
+        user=viewer,
+        data=ContentViewSessionStart(source="article_detail"),
+    )
+    result = await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(progress_percent=24, watched_seconds_delta=9),
+    )
+
+    assert result.is_counted is False
+    assert result.views_count == 0
+    assert content.views_count == 0
+
+
+@pytest.mark.anyio
+async def test_view_session_rejects_unpublished_content(service_bundle) -> None:
+    service, _repository, content, _author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.POST
+    content.status = ContentStatusEnum.DRAFT
+
+    with pytest.raises(ContentNotFound):
+        await service.start_view_session(
+            content_id=content.content_id,
+            user=viewer,
+            data=ContentViewSessionStart(source="post_detail"),
+        )
+
+
+def test_view_session_heartbeat_position_is_optional_and_progress_validates() -> None:
+    heartbeat = ContentViewSessionHeartbeat(progress_percent=25, watched_seconds_delta=1)
+
+    assert heartbeat.position_seconds is None
+    assert heartbeat.progress_percent == 25
+    with pytest.raises(ValidationError):
+        ContentViewSessionHeartbeat(progress_percent=101)
 
 
 @pytest.mark.anyio

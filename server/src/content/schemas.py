@@ -64,13 +64,15 @@ class ContentReactionGet(BaseSchema):
 class ContentViewSessionStart(BaseSchema):
     source: str | None = Field(default=None, max_length=64)
     initial_position_seconds: int | None = Field(default=None, ge=0)
+    initial_progress_percent: int | None = Field(default=None, ge=0, le=100)
     metadata: dict = Field(default_factory=dict)
 
 
 class ContentViewSessionHeartbeat(BaseSchema):
-    position_seconds: int = Field(ge=0)
+    position_seconds: int | None = Field(default=None, ge=0)
     duration_seconds: int | None = Field(default=None, ge=0)
     watched_seconds_delta: int | None = Field(default=None, ge=0)
+    progress_percent: int | None = Field(default=None, ge=0, le=100)
     source: str | None = Field(default=None, max_length=64)
     metadata: dict = Field(default_factory=dict)
     ended: bool = False

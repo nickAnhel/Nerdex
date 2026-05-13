@@ -1,10 +1,11 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import "./ArticleDetails.css";
 
 import { StoreContext } from "../..";
 import ArticleService from "../../service/ArticleService";
+import ContentService from "../../service/ContentService";
 
 import Loader from "../../components/loader/Loader";
 import Modal from "../../components/modal/Modal";
@@ -24,6 +25,15 @@ function ArticleDetails() {
     const { articleId } = useParams();
     const pageRef = useRef(null);
     const commentsRef = useRef(null);
+    const viewSessionIdRef = useRef(null);
+    const viewSessionPromiseRef = useRef(null);
+    const heartbeatInFlightRef = useRef(false);
+    const pendingHeartbeatRef = useRef(false);
+    const heartbeatTimerRef = useRef(null);
+    const latestReadingProgressRef = useRef(0);
+    const lastSentProgressRef = useRef(0);
+    const readSecondsAccumulatorRef = useRef(0);
+    const lastReadTickRef = useRef(null);
 
     const [article, setArticle] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -39,6 +49,14 @@ function ArticleDetails() {
         if (!articleId) {
             return;
         }
+        viewSessionIdRef.current = null;
+        viewSessionPromiseRef.current = null;
+        heartbeatInFlightRef.current = false;
+        pendingHeartbeatRef.current = false;
+        latestReadingProgressRef.current = 0;
+        lastSentProgressRef.current = 0;
+        readSecondsAccumulatorRef.current = 0;
+        lastReadTickRef.current = null;
 
         const fetchArticle = async () => {
             setIsLoading(true);
@@ -75,6 +93,7 @@ function ArticleDetails() {
             const top = pageNode.scrollTop;
             const height = pageNode.scrollHeight - pageNode.clientHeight;
             const ratio = height > 0 ? Math.min(100, Math.max(0, (top / height) * 100)) : 0;
+            latestReadingProgressRef.current = ratio;
             setReadingProgress(ratio);
         };
 
@@ -82,6 +101,171 @@ function ArticleDetails() {
         handleScroll();
         return () => pageNode.removeEventListener("scroll", handleScroll);
     }, [isLoading, isUnavailable, article?.article_id]);
+
+    const ensureViewSession = useCallback(async () => {
+        if (!store.isAuthenticated || !article?.article_id) {
+            return null;
+        }
+        if (viewSessionIdRef.current) {
+            return viewSessionIdRef.current;
+        }
+        if (!viewSessionPromiseRef.current) {
+            viewSessionPromiseRef.current = ContentService.startViewSession(article.article_id, {
+                source: "article_detail",
+                initial_progress_percent: Math.floor(latestReadingProgressRef.current || 0),
+                metadata: { surface: "article_details" },
+            })
+                .then((res) => {
+                    viewSessionIdRef.current = res.data.view_session_id;
+                    lastSentProgressRef.current = Math.max(
+                        lastSentProgressRef.current,
+                        res.data.progress_percent || 0,
+                    );
+                    return res.data.view_session_id;
+                })
+                .catch((error) => {
+                    console.log(error);
+                    return null;
+                })
+                .finally(() => {
+                    viewSessionPromiseRef.current = null;
+                });
+        }
+        return viewSessionPromiseRef.current;
+    }, [article?.article_id, store.isAuthenticated]);
+
+    const sendArticleHeartbeat = useCallback(async ({ ended = false } = {}) => {
+        if (!store.isAuthenticated || !article?.article_id) {
+            return;
+        }
+        if (heartbeatInFlightRef.current) {
+            pendingHeartbeatRef.current = true;
+            return;
+        }
+
+        heartbeatInFlightRef.current = true;
+        try {
+            const sessionId = await ensureViewSession();
+            if (!sessionId) {
+                return;
+            }
+
+            const progressPercent = Math.floor(latestReadingProgressRef.current || 0);
+            const readSecondsDelta = Math.floor(readSecondsAccumulatorRef.current);
+            if (
+                !ended
+                && readSecondsDelta <= 0
+                && progressPercent <= lastSentProgressRef.current
+            ) {
+                return;
+            }
+
+            readSecondsAccumulatorRef.current = Math.max(0, readSecondsAccumulatorRef.current - readSecondsDelta);
+            const payload = {
+                progress_percent: progressPercent,
+                watched_seconds_delta: readSecondsDelta,
+                source: "article_detail",
+                metadata: { surface: "article_details" },
+                ended,
+            };
+            const res = ended
+                ? await ContentService.finishViewSession(article.article_id, sessionId, payload)
+                : await ContentService.heartbeatViewSession(article.article_id, sessionId, payload);
+            lastSentProgressRef.current = Math.max(
+                lastSentProgressRef.current,
+                res.data.progress_percent || progressPercent,
+            );
+        } catch (error) {
+            console.log(error);
+        } finally {
+            heartbeatInFlightRef.current = false;
+            if (pendingHeartbeatRef.current) {
+                pendingHeartbeatRef.current = false;
+                window.setTimeout(() => {
+                    void sendArticleHeartbeat();
+                }, 0);
+            }
+        }
+    }, [article?.article_id, ensureViewSession, store.isAuthenticated]);
+
+    const scheduleArticleHeartbeat = useCallback(() => {
+        if (heartbeatTimerRef.current) {
+            return;
+        }
+        heartbeatTimerRef.current = window.setTimeout(() => {
+            heartbeatTimerRef.current = null;
+            void sendArticleHeartbeat();
+        }, 1500);
+    }, [sendArticleHeartbeat]);
+
+    useEffect(() => {
+        if (!store.isAuthenticated || !article?.article_id || article.status !== "published") {
+            return undefined;
+        }
+
+        void ensureViewSession();
+        lastReadTickRef.current = Date.now();
+
+        const tickReadTime = () => {
+            const now = Date.now();
+            const previous = lastReadTickRef.current || now;
+            lastReadTickRef.current = now;
+            if (document.visibilityState !== "visible") {
+                return;
+            }
+            const deltaSeconds = Math.max(0, Math.min(5, (now - previous) / 1000));
+            readSecondsAccumulatorRef.current += deltaSeconds;
+            if (readSecondsAccumulatorRef.current >= 10) {
+                scheduleArticleHeartbeat();
+            }
+        };
+
+        const intervalId = window.setInterval(tickReadTime, 1000);
+        const handleVisibilityChange = () => {
+            tickReadTime();
+        };
+        const handlePageHide = () => {
+            tickReadTime();
+            void sendArticleHeartbeat({ ended: true });
+        };
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("pagehide", handlePageHide);
+
+        return () => {
+            tickReadTime();
+            window.clearInterval(intervalId);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("pagehide", handlePageHide);
+            if (heartbeatTimerRef.current) {
+                window.clearTimeout(heartbeatTimerRef.current);
+                heartbeatTimerRef.current = null;
+            }
+            void sendArticleHeartbeat({ ended: true });
+        };
+    }, [
+        article?.article_id,
+        article?.status,
+        ensureViewSession,
+        scheduleArticleHeartbeat,
+        sendArticleHeartbeat,
+        store.isAuthenticated,
+    ]);
+
+    useEffect(() => {
+        if (!store.isAuthenticated || !article?.article_id || article.status !== "published") {
+            return;
+        }
+        const progressPercent = Math.floor(readingProgress || 0);
+        if (progressPercent >= lastSentProgressRef.current + 5) {
+            scheduleArticleHeartbeat();
+        }
+    }, [
+        article?.article_id,
+        article?.status,
+        readingProgress,
+        scheduleArticleHeartbeat,
+        store.isAuthenticated,
+    ]);
 
     const canReact = store.isAuthenticated && article?.status === "published";
     const isLiked = article?.my_reaction === "like";
