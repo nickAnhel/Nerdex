@@ -33,7 +33,6 @@
 .article-editor-status,
 .article-editor-view-toggle,
 .article-editor-meta-grid,
-.article-editor-secondary-grid,
 .article-editor-toolbar,
 .article-cover-actions,
 .article-editor-actions,
@@ -91,8 +90,7 @@
     height: 1rem;
 }
 
-.article-editor-meta-grid label,
-.article-editor-secondary-grid label {
+.article-editor-meta-grid label {
     flex: 1 1 14rem;
     display: flex;
     flex-direction: column;
@@ -101,8 +99,6 @@
 
 .article-editor-meta-grid input,
 .article-editor-meta-grid select,
-.article-editor-secondary-grid input,
-.article-editor-secondary-grid textarea,
 .article-editor-markdown textarea {
     width: 100%;
     border: 1px solid #404040;

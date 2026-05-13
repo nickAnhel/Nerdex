@@ -14,11 +14,6 @@ class ArticleDetailsModel(Base):
     __tablename__ = "article_details"
     __table_args__ = (
         CheckConstraint("char_length(slug) BETWEEN 1 AND 180", name="ck_article_details_slug_length"),
-        CheckConstraint("char_length(seo_title) <= 300", name="ck_article_details_seo_title_length"),
-        CheckConstraint(
-            "seo_description IS NULL OR char_length(seo_description) <= 320",
-            name="ck_article_details_seo_description_length",
-        ),
         CheckConstraint("word_count >= 0", name="ck_article_details_word_count_non_negative"),
         CheckConstraint(
             "reading_time_minutes >= 1",
@@ -36,8 +31,6 @@ class ArticleDetailsModel(Base):
     word_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     reading_time_minutes: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     toc: Mapped[list[dict[str, str | int]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
-    seo_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    seo_description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     content: Mapped[ContentModel] = relationship(
         back_populates="article_details",

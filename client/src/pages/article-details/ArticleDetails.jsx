@@ -18,17 +18,6 @@ import { CopyIcon, EditIcon, ShareIcon, TrashIcon } from "../../components/icons
 import { getAvatarUrl } from "../../utils/avatar";
 import { stripArticleFormatting } from "../../utils/articleMarkdown";
 
-
-function ensureMetaTag(name, attribute = "name") {
-    let node = document.head.querySelector(`meta[${attribute}="${name}"]`);
-    if (!node) {
-        node = document.createElement("meta");
-        node.setAttribute(attribute, name);
-        document.head.appendChild(node);
-    }
-    return node;
-}
-
 function ArticleDetails() {
     const { store } = useContext(StoreContext);
     const navigate = useNavigate();
@@ -69,36 +58,6 @@ function ArticleDetails() {
 
         fetchArticle();
     }, [articleId]);
-
-    useEffect(() => {
-        if (!article) {
-            return undefined;
-        }
-
-        const previousTitle = document.title;
-        const previousDescription = document.head.querySelector('meta[name="description"]')?.content || "";
-        const ogTitle = ensureMetaTag("og:title", "property");
-        const ogDescription = ensureMetaTag("og:description", "property");
-        const ogImage = ensureMetaTag("og:image", "property");
-        let canonicalLink = document.head.querySelector('link[rel="canonical"]');
-        if (!canonicalLink) {
-            canonicalLink = document.createElement("link");
-            canonicalLink.setAttribute("rel", "canonical");
-            document.head.appendChild(canonicalLink);
-        }
-
-        document.title = article.seo_title || article.title;
-        ensureMetaTag("description").setAttribute("content", article.seo_description || article.excerpt || "");
-        ogTitle.setAttribute("content", article.seo_title || article.title);
-        ogDescription.setAttribute("content", article.seo_description || article.excerpt || "");
-        ogImage.setAttribute("content", article.og_image_url || "");
-        canonicalLink.setAttribute("href", `${window.location.origin}${article.canonical_path}`);
-
-        return () => {
-            document.title = previousTitle;
-            ensureMetaTag("description").setAttribute("content", previousDescription);
-        };
-    }, [article]);
 
     useEffect(() => {
         if (!isShareModalActive) {

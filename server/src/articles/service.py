@@ -95,8 +95,6 @@ class ArticleService:
             word_count=analysis.word_count,
             reading_time_minutes=analysis.reading_time_minutes,
             toc=analysis.toc,
-            seo_title=self._normalize_nullable_text(data.seo_title),
-            seo_description=self._normalize_nullable_text(data.seo_description),
             status=status,
             visibility=visibility,
             created_at=now,
@@ -198,16 +196,6 @@ class ArticleService:
             else article.visibility
         )
         next_tags = self._tag_service.normalize_tags(payload["tags"]) if "tags" in payload else None
-        next_seo_title = (
-            self._normalize_nullable_text(payload["seo_title"])
-            if "seo_title" in payload
-            else article.article_details.seo_title
-        )
-        next_seo_description = (
-            self._normalize_nullable_text(payload["seo_description"])
-            if "seo_description" in payload
-            else article.article_details.seo_description
-        )
         if "slug" in payload:
             if article.published_at is not None:
                 raise InvalidArticle("Article slug cannot be changed after publication")
@@ -248,8 +236,6 @@ class ArticleService:
             word_count=analysis.word_count,
             reading_time_minutes=analysis.reading_time_minutes,
             toc=analysis.toc,
-            seo_title=next_seo_title,
-            seo_description=next_seo_description,
             status=next_status,
             visibility=next_visibility,
             updated_at=updated_at,
@@ -594,12 +580,6 @@ class ArticleService:
             ArticleWriteVisibility.PRIVATE: ContentVisibilityEnum.PRIVATE,
         }
         return mapping[visibility]
-
-    def _normalize_nullable_text(self, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
 
     def _now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.timezone.utc)

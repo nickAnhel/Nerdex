@@ -36,8 +36,6 @@ const DEFAULT_FORM = {
     status: "draft",
     visibility: "private",
     tags: [],
-    seoTitle: "",
-    seoDescription: "",
 };
 
 const DEFAULT_MERMAID_CODE = "flowchart TD\n    Start[Idea] --> Draft[Draft]\n    Draft --> Publish[Published]";
@@ -97,8 +95,6 @@ function ArticleEditor() {
                     status: res.data.status || "draft",
                     visibility: res.data.visibility || "private",
                     tags: normalizeTagList(res.data.tags),
-                    seoTitle: res.data.seo_title || "",
-                    seoDescription: res.data.seo_description || "",
                 };
                 setForm(nextForm);
                 setCoverAsset((prevCoverAsset) => mergeCoverAsset(prevCoverAsset, res.data.cover));
@@ -246,8 +242,6 @@ function ArticleEditor() {
             visibility: publish ? form.visibility : form.visibility,
             tags: form.tags,
             cover_asset_id: coverAsset?.asset_id || null,
-            seo_title: form.seoTitle || null,
-            seo_description: form.seoDescription || null,
         };
         const snapshotAtStart = buildSnapshot(
             {
@@ -586,36 +580,6 @@ function ArticleEditor() {
                         </label>
                     </div>
 
-                    <div className="article-editor-secondary-grid">
-                        <label>
-                            <span>SEO title</span>
-                            <input
-                                type="text"
-                                value={form.seoTitle}
-                                maxLength={300}
-                                onChange={(event) => setForm((prevForm) => ({
-                                    ...prevForm,
-                                    seoTitle: event.target.value,
-                                }))}
-                                placeholder="Optional meta title"
-                            />
-                        </label>
-
-                        <label>
-                            <span>SEO description</span>
-                            <textarea
-                                value={form.seoDescription}
-                                maxLength={320}
-                                onChange={(event) => setForm((prevForm) => ({
-                                    ...prevForm,
-                                    seoDescription: event.target.value,
-                                }))}
-                                placeholder="Optional meta description"
-                                rows={3}
-                            />
-                        </label>
-                    </div>
-
                     <div className="article-cover-panel">
                         <div className="article-section-label">Cover</div>
                         {
@@ -803,8 +767,6 @@ function buildSnapshot(form, coverAsset) {
         status: form.status,
         visibility: form.visibility,
         tags: form.tags,
-        seoTitle: form.seoTitle,
-        seoDescription: form.seoDescription,
         coverAssetId: coverAsset?.asset_id || null,
     });
 }
