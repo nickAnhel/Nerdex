@@ -4,6 +4,9 @@ from fastapi.requests import Request
 from src.users.exceptions import (
     CantSubscribeToUser,
     CantUnsubscribeFromUser,
+    InvalidCurrentPassword,
+    SamePassword,
+    WeakPassword,
     UsernameAlreadyExists,
     UserNotFound,
     UserNotInSubscriptions,
@@ -46,6 +49,33 @@ async def cant_subscribe_to_user_handler(
 
 async def cant_unsubscribe_from_user_handler(
     request: Request, exc: CantUnsubscribeFromUser
+) -> HTTPException:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=str(exc),
+    )
+
+
+async def invalid_current_password_handler(
+    request: Request, exc: InvalidCurrentPassword
+) -> HTTPException:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=str(exc),
+    )
+
+
+async def weak_password_handler(
+    request: Request, exc: WeakPassword
+) -> HTTPException:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=str(exc),
+    )
+
+
+async def same_password_handler(
+    request: Request, exc: SamePassword
 ) -> HTTPException:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,

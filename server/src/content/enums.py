@@ -21,6 +21,13 @@ class ContentVisibilityEnum(str, Enum):
     PRIVATE = "private"
 
 
+class ContentProfileFilterEnum(str, Enum):
+    ALL = "all"
+    PUBLIC = "public"
+    PRIVATE = "private"
+    DRAFTS = "drafts"
+
+
 class ReactionTypeEnum(str, Enum):
     LIKE = "like"
     DISLIKE = "dislike"

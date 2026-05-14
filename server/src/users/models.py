@@ -1,7 +1,7 @@
 import typing as tp
 import uuid
 
-from sqlalchemy import JSON, ForeignKey, Index, text
+from sqlalchemy import JSON, ForeignKey, Index, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +45,14 @@ class UserModel(Base):
     )
 
     username: Mapped[str] = mapped_column(unique=True)
+    display_name: Mapped[str | None] = mapped_column(nullable=True)
+    bio: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    links: Mapped[list[dict[str, tp.Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     hashed_password: Mapped[str]
 
     subscribers_count: Mapped[int] = mapped_column(default=0)

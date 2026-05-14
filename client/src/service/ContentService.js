@@ -6,6 +6,14 @@ export default class ContentService {
         return api.get("/contents/list", { params });
     }
 
+    static async getPublications(params) {
+        return api.get("/contents/publications", { params });
+    }
+
+    static async getGallery(params) {
+        return api.get("/contents/gallery", { params });
+    }
+
     static async getSubscriptionsFeed(params) {
         return api.get("/contents/subscriptions", { params });
     }

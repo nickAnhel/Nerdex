@@ -77,6 +77,26 @@ function buildCropPayload(imageSize, scale, offset) {
     };
 }
 
+function isValidHttpUrl(value) {
+    try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+    } catch (_error) {
+        return false;
+    }
+}
+
+function normalizeLinksFromUser(userLinks) {
+    if (!Array.isArray(userLinks) || userLinks.length === 0) {
+        return [{ label: "", url: "" }];
+    }
+
+    return userLinks.map((link) => ({
+        label: link.label || "",
+        url: link.url || "",
+    }));
+}
+
 function ProfileForm() {
     const { store } = useContext(StoreContext);
 
@@ -84,12 +104,26 @@ function ProfileForm() {
     const dragStateRef = useRef(null);
     const fileInputRef = useRef(null);
 
-    const [isLoadingSave, setIsLoadingSave] = useState(false);
+    const [isLoadingSaveProfile, setIsLoadingSaveProfile] = useState(false);
     const [isLoadingDelete, setIsLoadingDelete] = useState(false);
     const [isSavingAvatar, setIsSavingAvatar] = useState(false);
     const [isDeletingAvatar, setIsDeletingAvatar] = useState(false);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+    const [profileError, setProfileError] = useState("");
+    const [profileSuccess, setProfileSuccess] = useState("");
+    const [passwordError, setPasswordError] = useState("");
+    const [passwordSuccess, setPasswordSuccess] = useState("");
 
     const [username, setUsername] = useState("");
+    const [displayName, setDisplayName] = useState("");
+    const [bio, setBio] = useState("");
+    const [links, setLinks] = useState([{ label: "", url: "" }]);
+
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmNewPassword, setConfirmNewPassword] = useState("");
+
     const [avatarError, setAvatarError] = useState("");
     const [isPhotoModalActive, setIsPhotoModalActive] = useState(false);
     const [avatarModalStep, setAvatarModalStep] = useState("pick");
@@ -107,7 +141,10 @@ function ProfileForm() {
 
     useEffect(() => {
         setUsername(store.user.username || "");
-    }, [store.user.username]);
+        setDisplayName(store.user.display_name || "");
+        setBio(store.user.bio || "");
+        setLinks(normalizeLinksFromUser(store.user.links));
+    }, [store.user.username, store.user.display_name, store.user.bio, store.user.links]);
 
     useEffect(() => {
         if (!selectedFile) {
@@ -147,31 +184,119 @@ function ProfileForm() {
         resetAvatarModal();
     };
 
-    const handleReset = (e) => {
+    const handleResetProfile = (e) => {
         e.preventDefault();
+        setProfileError("");
+        setProfileSuccess("");
         setUsername(store.user.username || "");
+        setDisplayName(store.user.display_name || "");
+        setBio(store.user.bio || "");
+        setLinks(normalizeLinksFromUser(store.user.links));
     };
 
-    const handleSubmit = async (e) => {
+    const setLinkField = (index, field, value) => {
+        setLinks((prev) => prev.map((item, itemIndex) => {
+            if (itemIndex !== index) {
+                return item;
+            }
+            return {
+                ...item,
+                [field]: value,
+            };
+        }));
+    };
+
+    const addLinkRow = () => {
+        setLinks((prev) => [...prev, { label: "", url: "" }]);
+    };
+
+    const removeLinkRow = (index) => {
+        setLinks((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+    };
+
+    const buildLinksPayload = () => {
+        const payload = [];
+        for (const row of links) {
+            const label = row.label.trim();
+            const url = row.url.trim();
+
+            if (!label && !url) {
+                continue;
+            }
+            if (!label || !url) {
+                throw new Error("Fill both label and URL for each link");
+            }
+            if (!isValidHttpUrl(url)) {
+                throw new Error("Link URL must start with http:// or https://");
+            }
+
+            payload.push({ label, url });
+        }
+        return payload;
+    };
+
+    const handleSaveProfile = async (e) => {
         e.preventDefault();
+        setProfileError("");
+        setProfileSuccess("");
 
         if (!/^[A-Za-z0-9._-]{1,32}$/.test(username)) {
-            alert("Invalid username");
+            setProfileError("Invalid username");
             return;
         }
 
-        setIsLoadingSave(true);
-
+        let linksPayload;
         try {
-            const res = await UserService.updateMe({ username: username.trim() });
-            store.setUser(res.data);
-            handleReset(e);
-        } catch (error) {
-            console.log(error);
-            console.log(error?.response?.data?.detail);
+            linksPayload = buildLinksPayload();
+        } catch (validationError) {
+            setProfileError(validationError.message || "Invalid links");
+            return;
         }
 
-        setIsLoadingSave(false);
+        setIsLoadingSaveProfile(true);
+
+        try {
+            const res = await UserService.updateProfile({
+                username: username.trim(),
+                display_name: displayName.trim() || null,
+                bio: bio.trim() || null,
+                links: linksPayload,
+            });
+            store.setUser(res.data);
+            setProfileSuccess("Profile updated");
+        } catch (error) {
+            setProfileError(error?.response?.data?.detail || "Failed to update profile");
+        } finally {
+            setIsLoadingSaveProfile(false);
+        }
+    };
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        setPasswordError("");
+        setPasswordSuccess("");
+
+        if (newPassword !== confirmNewPassword) {
+            setPasswordError("New password and confirmation do not match");
+            return;
+        }
+
+        setIsChangingPassword(true);
+
+        try {
+            await UserService.changePassword({
+                current_password: currentPassword,
+                new_password: newPassword,
+            });
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmNewPassword("");
+            setPasswordSuccess("Password updated");
+        } catch (error) {
+            setPasswordError(error?.response?.data?.detail || "Failed to change password");
+        } finally {
+            setIsChangingPassword(false);
+        }
     };
 
     const handleLogout = () => {
@@ -348,49 +473,165 @@ function ProfileForm() {
 
     return (
         <div className="profile-form">
-            <form onSubmit={handleSubmit}>
-                <div className="form-section">
-                    <button
-                        type="button"
-                        className="avatar-trigger"
-                        onClick={() => {
-                            resetAvatarModal();
-                            setIsPhotoModalActive(true);
-                        }}
-                    >
-                        <img
-                            key={avatarRenderKey}
-                            src={avatarSrc}
-                            onError={(e) => { e.currentTarget.src = "/assets/profile.svg"; }}
-                            alt="Profile avatar"
-                        />
-                    </button>
+            <section className="profile-card profile-avatar-card">
+                <h2>Avatar</h2>
+                <button
+                    type="button"
+                    className="avatar-trigger"
+                    onClick={() => {
+                        resetAvatarModal();
+                        setIsPhotoModalActive(true);
+                    }}
+                >
+                    <img
+                        key={avatarRenderKey}
+                        src={avatarSrc}
+                        onError={(e) => { e.currentTarget.src = "/assets/profile.svg"; }}
+                        alt="Profile avatar"
+                    />
+                    <span>Change avatar</span>
+                </button>
+            </section>
 
+            <section className="profile-card">
+                <h2>Public profile</h2>
+                <form onSubmit={handleSaveProfile} className="profile-section-form">
+                    <div className="profile-field-group">
+                        <label htmlFor="profile-username" className="profile-field-label">Username</label>
+                        <input
+                            id="profile-username"
+                            type="text"
+                            placeholder="Username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            maxLength={32}
+                            pattern="[A-Za-z0-9._-]{1,32}"
+                            required
+                        />
+                    </div>
+
+                    <div className="profile-field-group">
+                        <label htmlFor="profile-display-name" className="profile-field-label">Display name</label>
+                        <input
+                            id="profile-display-name"
+                            type="text"
+                            placeholder="Display name"
+                            value={displayName}
+                            onChange={(e) => setDisplayName(e.target.value)}
+                            maxLength={64}
+                        />
+                    </div>
+
+                    <div className="profile-field-group">
+                        <label htmlFor="profile-bio" className="profile-field-label">Bio</label>
+                        <textarea
+                            id="profile-bio"
+                            className="profile-field-textarea"
+                            placeholder="Tell people about yourself"
+                            value={bio}
+                            onChange={(e) => setBio(e.target.value)}
+                            maxLength={500}
+                        />
+                    </div>
+
+                    <div className="profile-field-group">
+                        <label className="profile-field-label">Links</label>
+                        <div className="profile-links-block">
+                        {links.map((link, index) => (
+                            <div className="profile-link-row" key={`profile-link-${index}`}>
+                                <input
+                                    type="text"
+                                    placeholder="Label"
+                                    value={link.label}
+                                    maxLength={32}
+                                    onChange={(e) => setLinkField(index, "label", e.target.value)}
+                                />
+                                <input
+                                    type="url"
+                                    placeholder="https://example.com"
+                                    value={link.url}
+                                    onChange={(e) => setLinkField(index, "url", e.target.value)}
+                                />
+                                <button
+                                    type="button"
+                                    className="btn btn-outline-primary profile-link-remove"
+                                    onClick={() => removeLinkRow(index)}
+                                    disabled={links.length === 1}
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            className="btn btn-outline-primary profile-link-add"
+                            onClick={addLinkRow}
+                        >
+                            Add link
+                        </button>
+                        </div>
+                    </div>
+
+                    {profileError ? <div className="profile-error">{profileError}</div> : null}
+                    {profileSuccess ? <div className="profile-success">{profileSuccess}</div> : null}
+
+                    <div className="profile-form-actions">
+                        <button className="btn btn-primary" type="submit" disabled={isLoadingSaveProfile}>
+                            {isLoadingSaveProfile ? <Loader /> : "Save profile"}
+                        </button>
+
+                        <button
+                            type="reset"
+                            className="reset btn btn-secondary"
+                            onClick={handleResetProfile}
+                            disabled={isLoadingSaveProfile}
+                        >
+                            Reset
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section className="profile-card">
+                <h2>Password</h2>
+                <form onSubmit={handleChangePassword} className="profile-section-form">
                     <input
-                        type="text"
-                        placeholder="Username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        maxLength={32}
-                        pattern="[A-Za-z0-9._-]{1,32}"
+                        type="password"
+                        placeholder="Current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        minLength={1}
+                        required
+                    />
+                    <input
+                        type="password"
+                        placeholder="New password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        minLength={8}
+                        required
+                    />
+                    <input
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        minLength={8}
                         required
                     />
 
-                    <button className="btn btn-primary" type="submit" disabled={isLoadingSave}>
-                        {isLoadingSave ? <Loader /> : "Save"}
-                    </button>
+                    {passwordError ? <div className="profile-error">{passwordError}</div> : null}
+                    {passwordSuccess ? <div className="profile-success">{passwordSuccess}</div> : null}
 
-                    <button
-                        type="reset"
-                        className="reset btn btn-secondary"
-                        onClick={handleReset}
-                    >
-                        Reset
+                    <button className="btn btn-primary" type="submit" disabled={isChangingPassword}>
+                        {isChangingPassword ? <Loader /> : "Change password"}
                     </button>
-                </div>
+                </form>
+            </section>
 
-                <div className="form-section">
-                    <h2>Actions</h2>
+            <section className="profile-card">
+                <h2>Account actions</h2>
+                <div className="profile-section-form">
                     <button
                         type="button"
                         className="logout btn btn-secondary"
@@ -407,7 +648,7 @@ function ProfileForm() {
                         {isLoadingDelete ? <Loader /> : "Delete Account"}
                     </button>
                 </div>
-            </form>
+            </section>
 
             <Modal active={isPhotoModalActive} setActive={closeAvatarModal}>
                 <form className="image-form">

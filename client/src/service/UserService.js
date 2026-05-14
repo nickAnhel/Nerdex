@@ -15,7 +15,15 @@ export default class UserService {
     }
 
     static async updateMe(data) {
-        return api.put("/users/", data);
+        return api.put("/users/me/profile", data);
+    }
+
+    static async updateProfile(data) {
+        return api.put("/users/me/profile", data);
+    }
+
+    static async changePassword(data) {
+        return api.put("/users/me/password", data);
     }
 
     static async deleteMe() {

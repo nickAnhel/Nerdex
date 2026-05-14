@@ -39,6 +39,9 @@ async def build_user_get(
         avatar_asset_id=user.avatar_asset_id,
         avatar=await build_user_avatar_get(user, storage=storage),
         username=user.username,
+        display_name=user.display_name or user.username,
+        bio=user.bio,
+        links=getattr(user, "links", []) or [],
         subscribers_count=user.subscribers_count,
         is_admin=user.is_admin,
         is_subscribed=(

@@ -9,11 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.assets.models import AssetModel, ContentAssetModel
+from src.assets.enums import AssetTypeEnum, AttachmentTypeEnum
 import src.articles.models  # noqa: F401
 import src.moments.models  # noqa: F401
 import src.tags.models  # noqa: F401
 import src.videos.models  # noqa: F401
-from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
+from src.content.enums import (
+    ContentProfileFilterEnum,
+    ContentStatusEnum,
+    ContentTypeEnum,
+    ContentVisibilityEnum,
+    ReactionTypeEnum,
+)
 from src.content.enums_list import ContentOrder
 from src.content.models import ContentModel, ContentReactionModel, ContentViewSessionModel
 from src.users.models import SubscriptionModel, UserModel
@@ -238,6 +245,145 @@ class ContentRepository:
             item.is_owner = item.author_id == viewer_id
             items.append((item, session))
         return items
+
+    async def get_author_publications(
+        self,
+        *,
+        author_id: uuid.UUID,
+        viewer_id: uuid.UUID | None,
+        content_type: ContentTypeEnum | None,
+        profile_filter: ContentProfileFilterEnum,
+        order: ContentOrder,
+        order_desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ContentModel]:
+        stmt = (
+            self._build_content_query(viewer_id=viewer_id)
+            .outerjoin(VideoPlaybackDetailsModel)
+            .where(
+                ContentModel.content_type.in_(
+                    [
+                        ContentTypeEnum.POST,
+                        ContentTypeEnum.ARTICLE,
+                        ContentTypeEnum.VIDEO,
+                        ContentTypeEnum.MOMENT,
+                    ]
+                )
+            )
+            .where(ContentModel.author_id == author_id)
+            .where(ContentModel.deleted_at.is_(None))
+            .where(
+                or_(
+                    ContentModel.content_type.notin_([ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT]),
+                    VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
+                )
+            )
+        )
+
+        if content_type is not None:
+            stmt = stmt.where(ContentModel.content_type == content_type)
+
+        if viewer_id == author_id:
+            if profile_filter == ContentProfileFilterEnum.ALL:
+                stmt = stmt.where(
+                    ContentModel.status.in_(
+                        [
+                            ContentStatusEnum.PUBLISHED,
+                            ContentStatusEnum.DRAFT,
+                        ]
+                    )
+                )
+            elif profile_filter == ContentProfileFilterEnum.DRAFTS:
+                stmt = stmt.where(ContentModel.status == ContentStatusEnum.DRAFT)
+            elif profile_filter == ContentProfileFilterEnum.PRIVATE:
+                stmt = (
+                    stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                    .where(ContentModel.visibility == ContentVisibilityEnum.PRIVATE)
+                )
+            else:
+                stmt = (
+                    stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                    .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
+                )
+        else:
+            stmt = (
+                stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
+            )
+
+        stmt = (
+            stmt.order_by(self._order_by_clause(order=order, order_desc=order_desc))
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return self._many(result, viewer_id=viewer_id)
+
+    async def get_author_gallery_posts(
+        self,
+        *,
+        author_id: uuid.UUID,
+        viewer_id: uuid.UUID | None,
+        profile_filter: ContentProfileFilterEnum,
+        order: ContentOrder,
+        order_desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ContentModel]:
+        media_exists = exists(
+            select(1)
+            .select_from(ContentAssetModel)
+            .join(AssetModel, ContentAssetModel.asset_id == AssetModel.asset_id)
+            .where(ContentAssetModel.content_id == ContentModel.content_id)
+            .where(ContentAssetModel.deleted_at.is_(None))
+            .where(ContentAssetModel.attachment_type == AttachmentTypeEnum.MEDIA)
+            .where(AssetModel.asset_type.in_([AssetTypeEnum.IMAGE, AssetTypeEnum.VIDEO]))
+        )
+
+        stmt = (
+            self._build_content_query(viewer_id=viewer_id)
+            .where(ContentModel.content_type == ContentTypeEnum.POST)
+            .where(ContentModel.author_id == author_id)
+            .where(ContentModel.deleted_at.is_(None))
+            .where(media_exists)
+        )
+
+        if viewer_id == author_id:
+            if profile_filter == ContentProfileFilterEnum.ALL:
+                stmt = stmt.where(
+                    ContentModel.status.in_(
+                        [
+                            ContentStatusEnum.PUBLISHED,
+                            ContentStatusEnum.DRAFT,
+                        ]
+                    )
+                )
+            elif profile_filter == ContentProfileFilterEnum.DRAFTS:
+                stmt = stmt.where(ContentModel.status == ContentStatusEnum.DRAFT)
+            elif profile_filter == ContentProfileFilterEnum.PRIVATE:
+                stmt = (
+                    stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                    .where(ContentModel.visibility == ContentVisibilityEnum.PRIVATE)
+                )
+            else:
+                stmt = (
+                    stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                    .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
+                )
+        else:
+            stmt = (
+                stmt.where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+                .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
+            )
+
+        stmt = (
+            stmt.order_by(self._order_by_clause(order=order, order_desc=order_desc))
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return self._many(result, viewer_id=viewer_id)
 
     async def set_reaction(
         self,

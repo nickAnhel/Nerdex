@@ -92,7 +92,6 @@ class UserRepository:
         data: dict[str, tp.Any],
         **filters,
     ) -> UserModel:
-        data = {key: value for key, value in data.items() if value is not None}
         stmt = (
             update(UserModel)
             .filter_by(**filters)
@@ -103,6 +102,21 @@ class UserRepository:
         result = await self._session.execute(stmt)
         await self._session.commit()
 
+        return result.scalar_one()
+
+    async def update_hashed_password(
+        self,
+        *,
+        user_id: uuid.UUID,
+        hashed_password: str,
+    ) -> UserModel:
+        result = await self._session.execute(
+            update(UserModel)
+            .where(UserModel.user_id == user_id)
+            .values(hashed_password=hashed_password)
+            .returning(UserModel)
+        )
+        await self._session.commit()
         return result.scalar_one()
 
     async def set_avatar(

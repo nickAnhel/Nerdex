@@ -5,11 +5,20 @@ from dataclasses import dataclass, field
 import pytest
 from pydantic import ValidationError
 
-from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
+from src.assets.enums import AssetTypeEnum, AttachmentTypeEnum
+from src.content.enums import (
+    ContentProfileFilterEnum,
+    ContentStatusEnum,
+    ContentTypeEnum,
+    ContentVisibilityEnum,
+    ReactionTypeEnum,
+)
+from src.content.enums_list import ContentOrder
 from src.content.exceptions import ContentNotFound
 from src.content.repository import ContentReactionRemoveResult, ContentReactionSetResult
 from src.content.schemas import ContentListItemGet, ContentViewSessionHeartbeat, ContentViewSessionStart
 from src.content.service import ContentService
+from src.posts.schemas import PostAttachmentGet
 from src.users.schemas import UserGet
 from src.videos.enums import VideoProcessingStatusEnum
 
@@ -18,6 +27,29 @@ from src.videos.enums import VideoProcessingStatusEnum
 class FakePlayback:
     processing_status: VideoProcessingStatusEnum = VideoProcessingStatusEnum.READY
     duration_seconds: int | None = 100
+
+
+@dataclass
+class FakePostDetails:
+    body_text: str = ""
+
+
+@dataclass
+class FakeAsset:
+    asset_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    asset_type: AssetTypeEnum = AssetTypeEnum.IMAGE
+    detected_mime_type: str | None = "image/jpeg"
+    original_filename: str | None = "image.jpg"
+    size_bytes: int | None = 128
+    variants: list = field(default_factory=list)
+
+
+@dataclass
+class FakeLink:
+    attachment_type: AttachmentTypeEnum = AttachmentTypeEnum.MEDIA
+    position: int = 0
+    asset: FakeAsset = field(default_factory=FakeAsset)
+    deleted_at: datetime.datetime | None = None
 
 
 @dataclass
@@ -37,6 +69,8 @@ class FakeContent:
     dislikes_count: int = 0
     views_count: int = 0
     video_playback_details: FakePlayback | None = field(default_factory=FakePlayback)
+    post_details: FakePostDetails | None = field(default_factory=FakePostDetails)
+    asset_links: list[FakeLink] = field(default_factory=list)
     tags: list = field(default_factory=list)
     my_reaction: ReactionTypeEnum | None = None
     is_owner: bool = False
@@ -65,6 +99,8 @@ class FakeRepository:
         self.content = content
         self.reactions: dict[tuple[uuid.UUID, uuid.UUID], ReactionTypeEnum] = {}
         self.sessions: dict[uuid.UUID, FakeSession] = {}
+        self.publications: list[FakeContent] = [content]
+        self.gallery_posts: list[FakeContent] = [content]
 
     async def get_single(self, *, content_id: uuid.UUID, viewer_id: uuid.UUID | None = None):
         if content_id != self.content.content_id:
@@ -170,6 +206,82 @@ class FakeRepository:
 
     async def get_history_sessions(self, *, viewer_id, content_type=None, offset, limit):  # type: ignore[no-untyped-def]
         return [(self.content, session) for session in list(self.sessions.values())[offset:offset + limit] if session.viewer_id == viewer_id]
+
+    async def get_author_publications(self, **kwargs):  # type: ignore[no-untyped-def]
+        viewer_id = kwargs["viewer_id"]
+        author_id = kwargs["author_id"]
+        content_type = kwargs["content_type"]
+        profile_filter = kwargs["profile_filter"]
+
+        items = self.publications
+        if content_type is not None:
+            items = [item for item in items if item.content_type == content_type]
+
+        if viewer_id == author_id:
+            if profile_filter == ContentProfileFilterEnum.DRAFTS:
+                return [item for item in items if item.status == ContentStatusEnum.DRAFT]
+            if profile_filter == ContentProfileFilterEnum.PRIVATE:
+                return [
+                    item
+                    for item in items
+                    if item.status == ContentStatusEnum.PUBLISHED
+                    and item.visibility == ContentVisibilityEnum.PRIVATE
+                ]
+            if profile_filter == ContentProfileFilterEnum.PUBLIC:
+                return [
+                    item
+                    for item in items
+                    if item.status == ContentStatusEnum.PUBLISHED
+                    and item.visibility == ContentVisibilityEnum.PUBLIC
+                ]
+            return [
+                item
+                for item in items
+                if item.status in {ContentStatusEnum.PUBLISHED, ContentStatusEnum.DRAFT}
+            ]
+
+        return [
+            item
+            for item in items
+            if item.status == ContentStatusEnum.PUBLISHED
+            and item.visibility == ContentVisibilityEnum.PUBLIC
+        ]
+
+    async def get_author_gallery_posts(self, **kwargs):  # type: ignore[no-untyped-def]
+        viewer_id = kwargs["viewer_id"]
+        author_id = kwargs["author_id"]
+        profile_filter = kwargs["profile_filter"]
+        items = self.gallery_posts
+
+        if viewer_id == author_id:
+            if profile_filter == ContentProfileFilterEnum.DRAFTS:
+                return [item for item in items if item.status == ContentStatusEnum.DRAFT]
+            if profile_filter == ContentProfileFilterEnum.PRIVATE:
+                return [
+                    item
+                    for item in items
+                    if item.status == ContentStatusEnum.PUBLISHED
+                    and item.visibility == ContentVisibilityEnum.PRIVATE
+                ]
+            if profile_filter == ContentProfileFilterEnum.PUBLIC:
+                return [
+                    item
+                    for item in items
+                    if item.status == ContentStatusEnum.PUBLISHED
+                    and item.visibility == ContentVisibilityEnum.PUBLIC
+                ]
+            return [
+                item
+                for item in items
+                if item.status in {ContentStatusEnum.PUBLISHED, ContentStatusEnum.DRAFT}
+            ]
+
+        return [
+            item
+            for item in items
+            if item.status == ContentStatusEnum.PUBLISHED
+            and item.visibility == ContentVisibilityEnum.PUBLIC
+        ]
 
 
 class FakeProjectorRegistry:
@@ -591,3 +703,120 @@ async def test_moment_author_view_session_does_not_increment_public_views(servic
     assert result.is_counted is True
     assert result.views_count == 0
     assert content.views_count == 0
+
+
+@pytest.mark.anyio
+async def test_publications_owner_and_non_owner_visibility_filters(service_bundle) -> None:
+    service, repository, content, author, viewer = service_bundle
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    content.content_type = ContentTypeEnum.POST
+    content.video_playback_details = None
+    content.post_details = FakePostDetails(body_text="public")
+
+    private_post = FakeContent(
+        content_id=uuid.uuid4(),
+        author_id=author.user_id,
+        author=author,
+        content_type=ContentTypeEnum.POST,
+        status=ContentStatusEnum.PUBLISHED,
+        visibility=ContentVisibilityEnum.PRIVATE,
+        created_at=now,
+        updated_at=now,
+        published_at=now,
+        video_playback_details=None,
+        post_details=FakePostDetails(body_text="private"),
+    )
+    draft_post = FakeContent(
+        content_id=uuid.uuid4(),
+        author_id=author.user_id,
+        author=author,
+        content_type=ContentTypeEnum.POST,
+        status=ContentStatusEnum.DRAFT,
+        visibility=ContentVisibilityEnum.PRIVATE,
+        created_at=now,
+        updated_at=now,
+        published_at=None,
+        video_playback_details=None,
+        post_details=FakePostDetails(body_text="draft"),
+    )
+
+    repository.publications = [content, private_post, draft_post]
+
+    owner_items = await service.get_publications(
+        author_id=author.user_id,
+        viewer_id=author.user_id,
+        content_type=None,
+        profile_filter=ContentProfileFilterEnum.ALL,
+        order=ContentOrder.CREATED_AT,
+        desc=True,
+        offset=0,
+        limit=20,
+    )
+    viewer_items = await service.get_publications(
+        author_id=author.user_id,
+        viewer_id=viewer.user_id,
+        content_type=None,
+        profile_filter=ContentProfileFilterEnum.ALL,
+        order=ContentOrder.CREATED_AT,
+        desc=True,
+        offset=0,
+        limit=20,
+    )
+    owner_drafts = await service.get_publications(
+        author_id=author.user_id,
+        viewer_id=author.user_id,
+        content_type=None,
+        profile_filter=ContentProfileFilterEnum.DRAFTS,
+        order=ContentOrder.CREATED_AT,
+        desc=True,
+        offset=0,
+        limit=20,
+    )
+
+    assert len(owner_items) == 3
+    assert len(viewer_items) == 1
+    assert viewer_items[0].content_id == content.content_id
+    assert len(owner_drafts) == 1
+    assert owner_drafts[0].status == ContentStatusEnum.DRAFT
+
+
+@pytest.mark.anyio
+async def test_gallery_returns_post_media_items(monkeypatch, service_bundle) -> None:
+    service, repository, content, author, viewer = service_bundle
+    content.content_type = ContentTypeEnum.POST
+    content.status = ContentStatusEnum.PUBLISHED
+    content.visibility = ContentVisibilityEnum.PUBLIC
+    content.video_playback_details = None
+    content.post_details = FakePostDetails(body_text="gallery post")
+    content.asset_links = [FakeLink(position=2)]
+    repository.gallery_posts = [content]
+
+    async def fake_build_attachment(link, *, storage):  # type: ignore[no-untyped-def]
+        return PostAttachmentGet(
+            asset_id=link.asset.asset_id,
+            attachment_type=AttachmentTypeEnum.MEDIA,
+            position=link.position,
+            asset_type=AssetTypeEnum.IMAGE,
+            mime_type="image/jpeg",
+            file_kind="image",
+            preview_url="https://cdn.test/preview.jpg",
+            original_url="https://cdn.test/original.jpg",
+        )
+
+    monkeypatch.setattr("src.content.service.build_post_attachment_get", fake_build_attachment)
+
+    items = await service.get_gallery(
+        author_id=author.user_id,
+        viewer_id=viewer.user_id,
+        profile_filter=ContentProfileFilterEnum.PUBLIC,
+        order=ContentOrder.CREATED_AT,
+        desc=True,
+        offset=0,
+        limit=20,
+    )
+
+    assert len(items) == 1
+    assert items[0].post_id == content.content_id
+    assert items[0].position == 2
+    assert items[0].attachment.preview_url == "https://cdn.test/preview.jpg"

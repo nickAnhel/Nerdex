@@ -97,3 +97,15 @@ class ContentViewSessionGet(ContentHistoryProgressGet):
 class ContentHistoryItemGet(BaseSchema):
     content: ContentListItemGet
     progress: ContentHistoryProgressGet
+
+
+class ContentGalleryItemGet(BaseSchema):
+    content_id: uuid.UUID
+    post_id: uuid.UUID
+    asset_id: uuid.UUID
+    position: int = Field(ge=0)
+    created_at: datetime.datetime
+    published_at: datetime.datetime | None = None
+    excerpt: str | None = None
+    canonical_path: str
+    attachment: PostAttachmentGet

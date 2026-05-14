@@ -1,137 +1,133 @@
 import { useContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useParams } from "react-router-dom";
-import "./UserDetails.css"
+import { useNavigate, useParams } from "react-router-dom";
+
+import "./UserDetails.css";
 
 import { StoreContext } from "../..";
 
 import UserService from "../../service/UserService";
-import PostService from "../../service/PostService";
-import ArticleService from "../../service/ArticleService";
-import VideoService from "../../service/VideoService";
-import MomentService from "../../service/MomentService";
+import ContentService from "../../service/ContentService";
 import ChatService from "../../service/ChatService";
 
 import NotFound from "../../components/not-found/NotFound";
 import Loader from "../../components/loader/Loader";
-import PostModal from "../../components/post-modal/PostModal";
-import PostDetails from "../post-details/PostDetails";
-
-import PostList from "../../components/post-list/PostList";
 import ContentList from "../../components/content-list/ContentList";
 import UserList from "../../components/user-list/UserList";
-import ArticleCard from "../../components/article-card/ArticleCard";
-import MomentCard from "../../components/moment-card/MomentCard";
-import VideoCard from "../../components/video-card/VideoCard";
+import FeedContentCard from "../../components/feed-content-card/FeedContentCard";
+import PostGalleryViewer from "../../components/post-gallery-viewer/PostGalleryViewer";
+import PostDetails from "../post-details/PostDetails";
 import { getAvatarUrl } from "../../utils/avatar";
+
+
+const PUBLICATION_FILTERS = [
+    { label: "All", value: null },
+    { label: "Posts", value: "post" },
+    { label: "Articles", value: "article" },
+    { label: "Videos", value: "video" },
+    { label: "Moments", value: "moment" },
+];
+
+const PROFILE_FILTERS = ["all", "public", "private", "drafts"];
 
 
 function UserDetails() {
     const { store } = useContext(StoreContext);
-    const ownerPostFilters = ["all", "public", "private", "drafts"];
-    const ownerArticleFilters = ["all", "public", "private", "drafts"];
-    const ownerVideoFilters = ["all", "public", "private", "drafts"];
-    const ownerMomentFilters = ["all", "public", "private", "drafts"];
     const navigate = useNavigate();
-
-    const [tab, setTab] = useState("posts");
-    const [postFilter, setPostFilter] = useState("all");
-    const [articleFilter, setArticleFilter] = useState("all");
-    const [videoFilter, setVideoFilter] = useState("all");
-    const [momentFilter, setMomentFilter] = useState("all");
-    const [isCreatePostModalActive, setIsCreatePostModalActive] = useState(false);
-
     const params = useParams();
-    const username = params.username.slice(1);
+
+    const [tab, setTab] = useState("publications");
+    const [publicationType, setPublicationType] = useState(null);
+    const [profileFilter, setProfileFilter] = useState("all");
+    const [galleryItems, setGalleryItems] = useState([]);
+    const [galleryActiveIndex, setGalleryActiveIndex] = useState(null);
 
     const [user, setUser] = useState({});
-
-    const [userProfilePhotoStyle, setUserProfilePhotoStyle] = useState({});
-    const [userProfilePhotoSrc, setUserProfilePhotoSrc] = useState("");
-
+    const [isLoadingUser, setIsLoadingUser] = useState(true);
     const [userNotFound, setUserNotFound] = useState(false);
 
+    const [avatarSrc, setAvatarSrc] = useState("");
     const [isLoadingSubscribe, setIsLoadingSubscribe] = useState(false);
     const [isLoadingDirectChat, setIsLoadingDirectChat] = useState(false);
-    const [isSubscribed, setIsSubsctribed] = useState(false);
+    const [isSubscribed, setIsSubscribed] = useState(false);
     const [subsCount, setSubsCount] = useState(0);
+
+    const username = (params.username || "").slice(1);
+    const isOwner = Boolean(store.user?.user_id && store.user.user_id === user.user_id);
+
+    const galleryAttachments = galleryItems.map((item) => item.attachment).filter(Boolean);
 
     useEffect(() => {
         const fetchUserData = async () => {
+            setIsLoadingUser(true);
+            setUserNotFound(false);
+
             try {
                 const res = await UserService.getUserByUsername(username);
                 setUser(res.data);
-                setIsSubsctribed(res.data.is_subscribed);
-                setSubsCount(res.data.subscribers_count);
-                setUserProfilePhotoSrc(getAvatarUrl(res.data, "medium"));
-                setUserProfilePhotoStyle({});
-                setTab("posts");
-                setPostFilter("all");
-                setArticleFilter("all");
-                setVideoFilter("all");
-                setMomentFilter("all");
-
-            } catch (e) {
+                setIsSubscribed(Boolean(res.data.is_subscribed));
+                setSubsCount(res.data.subscribers_count || 0);
+                setAvatarSrc(getAvatarUrl(res.data, "medium"));
+                setTab("publications");
+                setPublicationType(null);
+                setProfileFilter("all");
+            } catch (_error) {
                 setUserNotFound(true);
-                console.log(e);
+            } finally {
+                setIsLoadingUser(false);
             }
-        }
+        };
 
-        fetchUserData();
+        if (username) {
+            fetchUserData();
+        }
     }, [username]);
 
+    useEffect(() => {
+        setGalleryItems([]);
+        setGalleryActiveIndex(null);
+    }, [user.user_id, profileFilter, tab]);
+
     const handleSubscribe = async () => {
+        if (!user.user_id) {
+            return;
+        }
+
         setIsLoadingSubscribe(true);
 
         try {
             await UserService.subscribeToUser(user.user_id);
-            setIsSubsctribed(true);
+            setIsSubscribed(true);
             setSubsCount((prev) => prev + 1);
+        } catch (error) {
+            console.log(error);
+        } finally {
+            setIsLoadingSubscribe(false);
+        }
+    };
 
-        } catch (e) {
-            console.log(e);
-            // alertsContext.addAlert({
-            //     text: "Failed to subscribe to channel",
-            //     time: 2000,
-            //     type: "error"
-            // })
+    const handleUnsubscribe = async () => {
+        if (!user.user_id) {
             return;
         }
 
-        setIsLoadingSubscribe(false);
-        // alertsContext.addAlert({
-        //     text: "Successfully subscribed to channel",
-        //     time: 2000,
-        //     type: "success"
-        // })
-    }
-
-    const handleUnsubscribe = async () => {
         setIsLoadingSubscribe(true);
 
         try {
             await UserService.unsubscribFromuser(user.user_id);
-            setIsSubsctribed(false);
-            setSubsCount((prev) => prev - 1);
-
-        } catch (e) {
-            // alertsContext.addAlert({
-            //     text: "Failed to unsubscribe from channel",
-            //     time: 2000,
-            //     type: "error"
-            // })
-            console.log(e);
+            setIsSubscribed(false);
+            setSubsCount((prev) => Math.max(0, prev - 1));
+        } catch (error) {
+            console.log(error);
+        } finally {
+            setIsLoadingSubscribe(false);
         }
-
-        setIsLoadingSubscribe(false);
-        // alertsContext.addAlert({
-        //     text: "Successfully unsubscribed from channel",
-        //     time: 2000,
-        //     type: "success"
-        // })
-    }
+    };
 
     const handleStartDirectChat = async () => {
+        if (!user.user_id) {
+            return;
+        }
+
         setIsLoadingDirectChat(true);
 
         try {
@@ -140,108 +136,136 @@ function UserDetails() {
                 member_id: user.user_id,
             });
             navigate(`/chats/@${res.data.chat_id}`);
-        } catch (e) {
-            console.log(e);
+        } catch (error) {
+            console.log(error);
         } finally {
             setIsLoadingDirectChat(false);
         }
-    }
+    };
+
+    const openGalleryViewer = (galleryItem) => {
+        const index = galleryItems.findIndex((item) => (
+            item.content_id === galleryItem.content_id
+            && item.asset_id === galleryItem.asset_id
+            && item.position === galleryItem.position
+        ));
+        if (index < 0) {
+            return;
+        }
+        setGalleryActiveIndex(index);
+    };
 
     if (userNotFound) {
         return (
             <div id="user-details">
                 <NotFound />
             </div>
-        )
+        );
     }
 
-    const isOwner = store.user.user_id === user.user_id;
+    if (isLoadingUser) {
+        return (
+            <div id="user-details">
+                <div className="user-details-loader"><Loader /></div>
+            </div>
+        );
+    }
 
     return (
         <div id="user-details">
             <div className="user-card">
                 <img
-                    src={userProfilePhotoSrc}
-                    style={userProfilePhotoStyle}
+                    src={avatarSrc}
                     alt={`${user.username} profile`}
-                    onError={() => {
-                        setUserProfilePhotoSrc("/assets/profile.svg");
-                        setUserProfilePhotoStyle({ padding: ".5rem", opacity: ".1", aspectRatio: "1/1", backgroundColor: "#0a0a0a", border: "5px solid #fff" });
-                    }}
+                    onError={() => setAvatarSrc("/assets/profile.svg")}
                 />
 
                 <div className="user-data">
-                    <div className="username">{user.username}</div>
+                    <div className="display-name">{user.display_name || user.username}</div>
+                    <div className="username">@{user.username}</div>
+                    {user.bio ? <div className="bio">{user.bio}</div> : null}
                     <div className="subs">{subsCount} subscriber{subsCount === 1 ? "" : "s"}</div>
                 </div>
 
-                {
-                    store.user.user_id !== user.user_id && (
-                        <>
+                {Array.isArray(user.links) && user.links.length > 0 ? (
+                    <div className="user-links">
+                        {user.links.map((link, index) => (
+                            <a
+                                key={`profile-link-${index}`}
+                                href={link.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="user-link-item"
+                            >
+                                {link.label}
+                            </a>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="user-links-empty">No links</div>
+                )}
+
+                {isOwner ? (
+                    <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={() => navigate("/profile")}
+                    >
+                        Edit profile
+                    </button>
+                ) : (
+                    <>
+                        <button
+                            className="btn btn-outline-primary message-user"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleStartDirectChat();
+                            }}
+                            disabled={!store.isAuthenticated || isLoadingDirectChat}
+                        >
+                            {isLoadingDirectChat ? <Loader /> : "Message"}
+                        </button>
+
+                        {isSubscribed ? (
                             <button
-                                className="btn btn-outline-primary message-user"
+                                className="btn btn-outline-primary unsubscribe"
                                 onClick={(e) => {
                                     e.preventDefault();
-                                    handleStartDirectChat();
+                                    handleUnsubscribe();
                                 }}
-                                disabled={!store.isAuthenticated || isLoadingDirectChat}
+                                disabled={!store.isAuthenticated || isLoadingSubscribe}
                             >
-                                {isLoadingDirectChat ? <Loader /> : "Message"}
+                                {isLoadingSubscribe ? <Loader /> : "Unsubscribe"}
                             </button>
-                            {
-                                isSubscribed ?
-                                    <button
-                                        className="btn btn-outline-primary unsubscribe"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            handleUnsubscribe();
-                                        }}
-                                        disabled={!store.isAuthenticated}
-                                    >
-                                        {isLoadingSubscribe ? <Loader /> : "Unsubscribe"}
-                                    </button>
-                                    :
-                                    <button
-                                        className="btn btn-primary"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            handleSubscribe();
-                                        }}
-                                        disabled={!store.isAuthenticated || store.user.user_id === user.user_id}
-                                    >
-                                        {isLoadingSubscribe ? <Loader /> : "Subscribe"}
-                                    </button>
-                            }
-                        </>
-                    )
-                }
+                        ) : (
+                            <button
+                                className="btn btn-primary"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleSubscribe();
+                                }}
+                                disabled={!store.isAuthenticated || isLoadingSubscribe}
+                            >
+                                {isLoadingSubscribe ? <Loader /> : "Subscribe"}
+                            </button>
+                        )}
+                    </>
+                )}
             </div>
 
             <div className="user-info">
                 <div className="tabs">
                     <div
-                        className={tab === "posts" ? "tab active" : "tab"}
-                        onClick={() => setTab("posts")}
+                        className={tab === "publications" ? "tab active" : "tab"}
+                        onClick={() => setTab("publications")}
                     >
-                        Posts
+                        Publications
                     </div>
                     <div
-                        className={tab === "articles" ? "tab active" : "tab"}
-                        onClick={() => setTab("articles")}
+                        className={tab === "gallery" ? "tab active" : "tab"}
+                        onClick={() => setTab("gallery")}
                     >
-                        Articles
-                    </div>
-                    <div
-                        className={tab === "videos" ? "tab active" : "tab"}
-                        onClick={() => setTab("videos")}
-                    >
-                        Videos
-                    </div>
-                    <div
-                        className={tab === "moments" ? "tab active" : "tab"}
-                        onClick={() => setTab("moments")}
-                    >
-                        Moments
+                        Gallery
                     </div>
                     <div
                         className={tab === "subscriptions" ? "tab active" : "tab"}
@@ -251,243 +275,143 @@ function UserDetails() {
                     </div>
                 </div>
 
-                {
-                    tab === "posts" &&
+                {tab === "publications" && user.user_id ? (
                     <>
-                        {
-                            isOwner &&
-                            <div className="posts-toolbar">
-                                <div className="post-filter-tabs">
-                                    {ownerPostFilters.map((filter) => (
+                        <div className="publications-toolbar">
+                            <div className="publication-type-filters">
+                                {PUBLICATION_FILTERS.map((filter) => (
+                                    <button
+                                        key={filter.label}
+                                        type="button"
+                                        className={publicationType === filter.value ? "post-filter-chip active" : "post-filter-chip"}
+                                        onClick={() => setPublicationType(filter.value)}
+                                    >
+                                        {filter.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {isOwner ? (
+                                <div className="publication-scope-filters">
+                                    {PROFILE_FILTERS.map((filter) => (
                                         <button
                                             key={filter}
                                             type="button"
-                                            className={postFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
-                                            onClick={() => setPostFilter(filter)}
+                                            className={profileFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
+                                            onClick={() => setProfileFilter(filter)}
                                         >
                                             {filter.charAt(0).toUpperCase() + filter.slice(1)}
                                         </button>
                                     ))}
                                 </div>
+                            ) : null}
+                        </div>
 
-                                <button
-                                    type="button"
-                                    className="create-post-button btn btn-primary"
-                                    onClick={() => setIsCreatePostModalActive(true)}
-                                >
-                                    Create post
-                                </button>
-                            </div>
-                        }
-
-                        {
-                            user.user_id &&
-                            <PostList
-                                fetchPosts={PostService.getPosts}
-                                filters={{
-                                    desc: true,
-                                    order: "created_at",
-                                    user_id: user.user_id,
-                                    profile_filter: isOwner ? postFilter : "public",
-                                }}
-                                refresh={`${store.isRefreshPosts}-${user.user_id}-${postFilter}`}
-                            />
-                        }
+                        <ContentList
+                            fetchItems={ContentService.getPublications}
+                            filters={{
+                                author_id: user.user_id,
+                                content_type: publicationType || undefined,
+                                profile_filter: isOwner ? profileFilter : "public",
+                                order: "published_at",
+                                desc: true,
+                            }}
+                            refresh={`${store.isRefreshPosts}-publications-${user.user_id}-${publicationType || "all"}-${profileFilter}`}
+                            emptyText="No publications"
+                            renderItem={({ item, removeItem, ref }) => (
+                                <FeedContentCard
+                                    key={item.content_id}
+                                    item={item}
+                                    removeItem={removeItem}
+                                    forwardedRef={ref}
+                                />
+                            )}
+                        />
                     </>
-                }
+                ) : null}
 
-                {
-                    tab === "articles" &&
+                {tab === "gallery" && user.user_id ? (
                     <>
-                        {
-                            isOwner &&
-                            <div className="posts-toolbar">
-                                <div className="post-filter-tabs">
-                                    {ownerArticleFilters.map((filter) => (
-                                        <button
-                                            key={filter}
-                                            type="button"
-                                            className={articleFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
-                                            onClick={() => setArticleFilter(filter)}
-                                        >
-                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <button
-                                    type="button"
-                                    className="create-post-button btn btn-primary"
-                                    onClick={() => navigate("/articles/new")}
-                                >
-                                    Write article
-                                </button>
+                        {isOwner ? (
+                            <div className="publication-scope-filters">
+                                {PROFILE_FILTERS.map((filter) => (
+                                    <button
+                                        key={`gallery-${filter}`}
+                                        type="button"
+                                        className={profileFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
+                                        onClick={() => setProfileFilter(filter)}
+                                    >
+                                        {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                                    </button>
+                                ))}
                             </div>
-                        }
+                        ) : null}
 
-                        {
-                            user.user_id &&
+                        <div className="gallery-grid-list">
                             <ContentList
-                                fetchItems={ArticleService.getArticles}
+                                fetchItems={ContentService.getGallery}
                                 filters={{
+                                    author_id: user.user_id,
+                                    profile_filter: isOwner ? profileFilter : "public",
+                                    order: "created_at",
                                     desc: true,
-                                    order: "published_at",
-                                    user_id: user.user_id,
-                                    profile_filter: isOwner ? articleFilter : "public",
                                 }}
-                                refresh={`${store.isRefreshPosts}-articles-${user.user_id}-${articleFilter}`}
-                                emptyText="No articles"
-                                renderItem={({ item, removeItem, ref }) => (
-                                    <ArticleCard
-                                        key={item.article_id || item.content_id}
+                                refresh={`${store.isRefreshPosts}-gallery-${user.user_id}-${profileFilter}`}
+                                emptyText="No gallery items"
+                                onItemsChange={setGalleryItems}
+                                renderItem={({ item, ref }) => (
+                                    <button
+                                        key={`${item.content_id}-${item.asset_id}-${item.position}`}
                                         ref={ref}
-                                        article={{
-                                            ...item,
-                                            article_id: item.article_id || item.content_id,
-                                        }}
-                                        removeItem={removeItem}
-                                    />
+                                        type="button"
+                                        className="gallery-item"
+                                        onClick={() => openGalleryViewer(item)}
+                                    >
+                                        <div className="gallery-media-wrap">
+                                            {item.attachment.file_kind === "video" ? (
+                                                <video
+                                                    src={item.attachment.stream_url || item.attachment.original_url || item.attachment.preview_url}
+                                                    poster={item.attachment.poster_url || item.attachment.preview_url || undefined}
+                                                    muted
+                                                    playsInline
+                                                    preload="metadata"
+                                                />
+                                            ) : (
+                                                <img
+                                                    src={item.attachment.preview_url || item.attachment.original_url || "/assets/profile.svg"}
+                                                    alt={item.excerpt || "Gallery item"}
+                                                    onError={(e) => { e.currentTarget.src = "/assets/profile.svg"; }}
+                                                />
+                                            )}
+                                            {item.attachment.file_kind === "video" ? <span className="gallery-video-badge">Video</span> : null}
+                                        </div>
+                                        <div className="gallery-item-meta">{item.excerpt || "Open media"}</div>
+                                    </button>
                                 )}
                             />
-                        }
+                        </div>
                     </>
-                }
+                ) : null}
 
-                {
-                    tab === "videos" &&
-                    <>
-                        {
-                            isOwner &&
-                            <div className="posts-toolbar">
-                                <div className="post-filter-tabs">
-                                    {ownerVideoFilters.map((filter) => (
-                                        <button
-                                            key={filter}
-                                            type="button"
-                                            className={videoFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
-                                            onClick={() => setVideoFilter(filter)}
-                                        >
-                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <button
-                                    type="button"
-                                    className="create-post-button btn btn-primary"
-                                    onClick={() => navigate("/videos/new")}
-                                >
-                                    New video
-                                </button>
-                            </div>
-                        }
-
-                        {
-                            user.user_id &&
-                            <div className="profile-videos-list">
-                                <ContentList
-                                    fetchItems={VideoService.getVideos}
-                                    filters={{
-                                        desc: true,
-                                        order: "published_at",
-                                        user_id: user.user_id,
-                                        profile_filter: isOwner ? videoFilter : "public",
-                                    }}
-                                    refresh={`${store.isRefreshPosts}-videos-${user.user_id}-${videoFilter}`}
-                                    emptyText="No videos"
-                                    renderItem={({ item, removeItem, ref }) => (
-                                        <VideoCard
-                                            key={item.video_id || item.content_id}
-                                            ref={ref}
-                                            video={{
-                                                ...item,
-                                                video_id: item.video_id || item.content_id,
-                                            }}
-                                            removeItem={removeItem}
-                                        />
-                                    )}
-                                />
-                            </div>
-                        }
-                    </>
-                }
-
-                {
-                    tab === "moments" &&
-                    <>
-                        {
-                            isOwner &&
-                            <div className="posts-toolbar">
-                                <div className="post-filter-tabs">
-                                    {ownerMomentFilters.map((filter) => (
-                                        <button
-                                            key={filter}
-                                            type="button"
-                                            className={momentFilter === filter ? "post-filter-chip active" : "post-filter-chip"}
-                                            onClick={() => setMomentFilter(filter)}
-                                        >
-                                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <button
-                                    type="button"
-                                    className="create-post-button btn btn-primary"
-                                    onClick={() => navigate("/moments/new")}
-                                >
-                                    New Moment
-                                </button>
-                            </div>
-                        }
-
-                        {
-                            user.user_id &&
-                            <div className="profile-moments-list">
-                                <ContentList
-                                    fetchItems={MomentService.getMoments}
-                                    filters={{
-                                        desc: true,
-                                        order: "published_at",
-                                        user_id: user.user_id,
-                                        profile_filter: isOwner ? momentFilter : "public",
-                                    }}
-                                    refresh={`${store.isRefreshPosts}-moments-${user.user_id}-${momentFilter}`}
-                                    emptyText="No Moments"
-                                    renderItem={({ item, removeItem, ref }) => (
-                                        <MomentCard
-                                            key={item.moment_id || item.content_id}
-                                            ref={ref}
-                                            moment={{
-                                                ...item,
-                                                moment_id: item.moment_id || item.content_id,
-                                            }}
-                                            removeItem={removeItem}
-                                        />
-                                    )}
-                                />
-                            </div>
-                        }
-                    </>
-                }
-
-                {
-                    tab === "subscriptions" &&
-                    <UserList fetchUsers={UserService.getSubsctiptions} filters={{ user_id: user.user_id }} />
-                }
+                {tab === "subscriptions" && user.user_id ? (
+                    <UserList
+                        fetchUsers={UserService.getSubsctiptions}
+                        filters={{ user_id: user.user_id }}
+                        refresh={`${user.user_id}-subs`}
+                    />
+                ) : null}
             </div>
 
-            <PostModal
-                active={isCreatePostModalActive}
-                setActive={setIsCreatePostModalActive}
-                savePostFunc={PostService.createPost}
-                modalHeader={"Create new post"}
-                buttonText={"Create"}
-                navigateTo={(post) => `/people/@${post.user.username}`}
-            />
             <PostDetails />
+            <PostGalleryViewer
+                attachments={galleryAttachments}
+                activeIndex={galleryActiveIndex}
+                onClose={() => setGalleryActiveIndex(null)}
+                onChange={setGalleryActiveIndex}
+            />
         </div>
-    )
+    );
 }
+
 
 export default UserDetails;

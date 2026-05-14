@@ -1,29 +1,84 @@
 .profile-form {
-    height: 100%;
+    width: min(58rem, 100%);
+    margin: 0 auto;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    gap: 1rem;
     box-sizing: border-box;
 }
 
-.profile-form form {
-    width: 100%;
+.profile-card {
+    background: #1b1b1b;
+    border: 1px solid #2f2f2f;
+    border-radius: 1rem;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 3rem;
+    gap: 0.75rem;
 }
 
-.profile-form h2 {
-    font-size: 2rem;
+.profile-card h2 {
+    font-size: 1.1rem;
+    margin: 0;
 }
 
-.form-section {
+.profile-section-form {
     display: flex;
-    width: 100%;
     flex-direction: column;
-    align-items: center;
-    gap: .75rem;
+    gap: 0.65rem;
+}
+
+.profile-section-form input,
+.profile-section-form textarea {
+    font-size: 1rem;
+}
+
+.profile-section-form textarea {
+    min-height: 6rem;
+    resize: vertical;
+}
+
+.profile-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.profile-field-label {
+    font-size: 0.9rem;
+    color: #a8a8a8;
+    letter-spacing: 0.01em;
+}
+
+.profile-field-textarea {
+    border: 1px solid #3a3a3a;
+    background: #151515;
+    border-radius: 0.7rem;
+}
+
+.profile-form-actions {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.profile-form-actions button {
+    width: auto;
+    margin: 0;
+}
+
+.profile-error {
+    color: #ff8a8a;
+    font-size: 0.9rem;
+}
+
+.profile-success {
+    color: #93e7ae;
+    font-size: 0.9rem;
+}
+
+.profile-avatar-card {
+    align-items: flex-start;
 }
 
 .avatar-trigger {
@@ -34,11 +89,11 @@
     background: none;
     border: none;
     padding: 0;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
 }
 
 .avatar-trigger img {
-    width: 15rem;
+    width: 10rem;
     aspect-ratio: 1 / 1;
     border-radius: 999px;
     cursor: pointer;
@@ -53,24 +108,46 @@
 }
 
 .avatar-trigger span {
-    font-size: 1rem;
-    letter-spacing: .08em;
-    text-transform: uppercase;
+    font-size: 0.9rem;
     color: #a7a7a7;
 }
 
-.form-section input {
-    font-size: 1.4rem;
+.profile-links-block {
+    border: 1px solid #2f2f2f;
+    border-radius: 0.9rem;
+    padding: 0.8rem;
+    background: #131313;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
 }
 
-.form-section button {
-    font-size: 1.2rem;
+.profile-links-header {
+    font-size: 0.95rem;
+    color: #b6b6b6;
+}
+
+.profile-links-block input {
+    border: 1px solid #3a3a3a;
+    background: #161616;
+    border-radius: 0.65rem;
+}
+
+.profile-link-row {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr auto;
+    gap: 0.55rem;
+}
+
+.profile-link-row .profile-link-remove {
+    width: auto;
     margin: 0;
 }
 
-.form-section > button:not(.avatar-trigger),
-.profile-form .image-form > button {
-    width: 100%;
+.profile-link-add {
+    width: auto;
+    margin: 0;
+    align-self: flex-start;
 }
 
 .delete .spin {
@@ -252,9 +329,21 @@
     line-height: 1.4;
 }
 
-@media (max-width: 640px) {
-    .avatar-trigger img {
-        width: 12rem;
+@media (max-width: 860px) {
+    .profile-form {
+        padding: 0.5rem;
+    }
+
+    .profile-form-actions {
+        flex-direction: column;
+    }
+
+    .profile-link-row {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-link-row .profile-link-remove {
+        width: 100%;
     }
 
     .avatar-file-picker-secondary {
