@@ -144,6 +144,7 @@ function ArticleDetails() {
         }
 
         heartbeatInFlightRef.current = true;
+        let consumedReadSeconds = 0;
         try {
             const sessionId = await ensureViewSession();
             if (!sessionId) {
@@ -160,6 +161,7 @@ function ArticleDetails() {
                 return;
             }
 
+            consumedReadSeconds = readSecondsDelta;
             readSecondsAccumulatorRef.current = Math.max(0, readSecondsAccumulatorRef.current - readSecondsDelta);
             const payload = {
                 progress_percent: progressPercent,
@@ -176,6 +178,7 @@ function ArticleDetails() {
                 res.data.progress_percent || progressPercent,
             );
         } catch (error) {
+            readSecondsAccumulatorRef.current += consumedReadSeconds;
             console.log(error);
         } finally {
             heartbeatInFlightRef.current = false;

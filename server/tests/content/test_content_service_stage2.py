@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.exceptions import ContentNotFound
+from src.content.repository import ContentReactionRemoveResult, ContentReactionSetResult
 from src.content.schemas import ContentListItemGet, ContentViewSessionHeartbeat, ContentViewSessionStart
 from src.content.service import ContentService
 from src.users.schemas import UserGet
@@ -72,10 +73,10 @@ class FakeRepository:
         self.content.is_owner = self.content.author_id == viewer_id
         return self.content
 
-    async def set_reaction(self, *, content_id: uuid.UUID, user_id: uuid.UUID, reaction_type: ReactionTypeEnum) -> None:
+    async def set_reaction(self, *, content_id: uuid.UUID, user_id: uuid.UUID, reaction_type: ReactionTypeEnum) -> ContentReactionSetResult:
         existing = self.reactions.get((content_id, user_id))
         if existing == reaction_type:
-            return
+            return ContentReactionSetResult(changed=False, previous_reaction=existing, new_reaction=reaction_type)
         if existing == ReactionTypeEnum.LIKE:
             self.content.likes_count -= 1
         elif existing == ReactionTypeEnum.DISLIKE:
@@ -85,16 +86,18 @@ class FakeRepository:
         else:
             self.content.dislikes_count += 1
         self.reactions[(content_id, user_id)] = reaction_type
+        return ContentReactionSetResult(changed=True, previous_reaction=existing, new_reaction=reaction_type)
 
-    async def remove_reaction(self, *, content_id: uuid.UUID, user_id: uuid.UUID, reaction_type: ReactionTypeEnum | None = None) -> None:
+    async def remove_reaction(self, *, content_id: uuid.UUID, user_id: uuid.UUID, reaction_type: ReactionTypeEnum | None = None) -> ContentReactionRemoveResult:
         existing = self.reactions.get((content_id, user_id))
         if existing is None or (reaction_type is not None and existing != reaction_type):
-            return
+            return ContentReactionRemoveResult(removed=False, previous_reaction=existing)
         if existing == ReactionTypeEnum.LIKE:
             self.content.likes_count -= 1
         else:
             self.content.dislikes_count -= 1
         del self.reactions[(content_id, user_id)]
+        return ContentReactionRemoveResult(removed=True, previous_reaction=existing)
 
     async def create_view_session(  # type: ignore[no-untyped-def]
         self,
@@ -193,6 +196,22 @@ class FakeProjectorRegistry:
         )
 
 
+class FakeActivityService:
+    def __init__(self) -> None:
+        self.content_views: list[dict] = []
+        self.reactions: list[dict] = []
+        self.removed_reactions: list[dict] = []
+
+    async def log_content_view(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.content_views.append(kwargs)
+
+    async def log_content_reaction(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.reactions.append(kwargs)
+
+    async def log_content_reaction_removed(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.removed_reactions.append(kwargs)
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -216,13 +235,20 @@ def service_bundle():
     viewer = make_user("viewer")
     content = FakeContent(content_id=uuid.uuid4(), author_id=author.user_id, author=author)
     repository = FakeRepository(content)
-    service = ContentService(repository=repository, asset_storage=None, projector_registry=FakeProjectorRegistry())  # type: ignore[arg-type]
+    activity = FakeActivityService()
+    service = ContentService(
+        repository=repository,
+        asset_storage=None,
+        projector_registry=FakeProjectorRegistry(),
+        activity_service=activity,
+    )  # type: ignore[arg-type]
     return service, repository, content, author, viewer
 
 
 @pytest.mark.anyio
 async def test_generic_content_reaction_switches_and_removes(service_bundle) -> None:
     service, _repository, content, _author, viewer = service_bundle
+    activity = service._activity_service
 
     liked = await service.set_reaction(content_id=content.content_id, user=viewer, reaction_type=ReactionTypeEnum.LIKE)
     disliked = await service.set_reaction(content_id=content.content_id, user=viewer, reaction_type=ReactionTypeEnum.DISLIKE)
@@ -233,6 +259,24 @@ async def test_generic_content_reaction_switches_and_removes(service_bundle) -> 
     assert disliked.dislikes_count == 1
     assert removed.dislikes_count == 0
     assert removed.my_reaction is None
+    assert [event["new_reaction"] for event in activity.reactions] == [
+        ReactionTypeEnum.LIKE,
+        ReactionTypeEnum.DISLIKE,
+    ]
+    assert activity.removed_reactions[0]["previous_reaction"] == ReactionTypeEnum.DISLIKE
+
+
+@pytest.mark.anyio
+async def test_generic_content_reaction_no_op_does_not_log_activity(service_bundle) -> None:
+    service, _repository, content, _author, viewer = service_bundle
+    activity = service._activity_service
+
+    await service.set_reaction(content_id=content.content_id, user=viewer, reaction_type=ReactionTypeEnum.LIKE)
+    await service.set_reaction(content_id=content.content_id, user=viewer, reaction_type=ReactionTypeEnum.LIKE)
+    await service.remove_reaction(content_id=content.content_id, user=viewer, reaction_type=ReactionTypeEnum.DISLIKE)
+
+    assert len(activity.reactions) == 1
+    assert activity.removed_reactions == []
 
 
 @pytest.mark.anyio
@@ -247,6 +291,7 @@ async def test_processing_video_does_not_accept_generic_reaction(service_bundle)
 @pytest.mark.anyio
 async def test_post_view_session_counts_on_start_once_per_day(service_bundle) -> None:
     service, repository, content, _author, viewer = service_bundle
+    activity = service._activity_service
     content.content_type = ContentTypeEnum.POST
     content.video_playback_details = None
 
@@ -268,6 +313,8 @@ async def test_post_view_session_counts_on_start_once_per_day(service_bundle) ->
     assert second.views_count == 1
     assert content.views_count == 1
     assert len(repository.sessions) == 2
+    assert len(activity.content_views) == 1
+    assert activity.content_views[0]["view_session_id"] == first.view_session_id
 
 
 @pytest.mark.anyio
@@ -322,6 +369,7 @@ async def test_article_heartbeat_accepts_missing_position_and_keeps_progress_mon
 @pytest.mark.anyio
 async def test_article_view_session_counts_at_progress_threshold(service_bundle) -> None:
     service, repository, content, _author, viewer = service_bundle
+    activity = service._activity_service
     content.content_type = ContentTypeEnum.ARTICLE
     content.video_playback_details = None
 
@@ -342,6 +390,15 @@ async def test_article_view_session_counts_at_progress_threshold(service_bundle)
     assert persisted.is_counted is True
     assert persisted.counted_at is not None
     assert persisted.counted_date is not None
+    assert len(activity.content_views) == 1
+
+    await service.heartbeat_view_session(
+        content_id=content.content_id,
+        session_id=started.view_session_id,
+        user=viewer,
+        data=ContentViewSessionHeartbeat(progress_percent=50, watched_seconds_delta=5),
+    )
+    assert len(activity.content_views) == 1
     assert content.views_count == 1
 
 

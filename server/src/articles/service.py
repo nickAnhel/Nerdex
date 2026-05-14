@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from typing import TYPE_CHECKING
 
 from src.articles.enums import ArticleOrder, ArticleProfileFilter, ArticleWriteStatus, ArticleWriteVisibility
 from src.articles.exceptions import ArticleNotFound, InvalidArticle
@@ -26,6 +27,9 @@ from src.content.enums import ContentStatusEnum, ContentVisibilityEnum, Reaction
 from src.tags.service import TagService
 from src.users.schemas import UserGet
 
+if TYPE_CHECKING:
+    from src.activity.service import ActivityService
+
 
 ARTICLE_ALLOWED_ASSET_STATUSES = {
     AssetStatusEnum.UPLOADED,
@@ -46,12 +50,14 @@ class ArticleService:
         asset_repository: AssetRepository,
         asset_service: AssetService,
         asset_storage: AssetStorage,
+        activity_service: ActivityService | None = None,
     ) -> None:
         self._repository = repository
         self._tag_service = tag_service
         self._asset_repository = asset_repository
         self._asset_service = asset_service
         self._asset_storage = asset_storage
+        self._activity_service = activity_service
 
     async def create_article(
         self,
@@ -343,12 +349,20 @@ class ArticleService:
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
     ) -> ArticleRating:
-        await self._get_reactable_article(article_id=article_id, viewer_id=user_id)
-        await self._repository.set_reaction(
+        article = await self._get_reactable_article(article_id=article_id, viewer_id=user_id)
+        result = await self._repository.set_reaction(
             content_id=article_id,
             user_id=user_id,
             reaction_type=reaction_type,
         )
+        if self._activity_service is not None and getattr(result, "changed", False):
+            await self._activity_service.log_content_reaction(
+                user_id=user_id,
+                content_id=article_id,
+                content_type=article.content_type,
+                previous_reaction=result.previous_reaction,
+                new_reaction=result.new_reaction,
+            )
         return await self._build_rating(article_id=article_id, viewer_id=user_id)
 
     async def _remove_reaction(
@@ -358,12 +372,23 @@ class ArticleService:
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
     ) -> ArticleRating:
-        await self._get_reactable_article(article_id=article_id, viewer_id=user_id)
-        await self._repository.remove_reaction(
+        article = await self._get_reactable_article(article_id=article_id, viewer_id=user_id)
+        result = await self._repository.remove_reaction(
             content_id=article_id,
             user_id=user_id,
             reaction_type=reaction_type,
         )
+        if (
+            self._activity_service is not None
+            and getattr(result, "removed", False)
+            and result.previous_reaction is not None
+        ):
+            await self._activity_service.log_content_reaction_removed(
+                user_id=user_id,
+                content_id=article_id,
+                content_type=article.content_type,
+                previous_reaction=result.previous_reaction,
+            )
         return await self._build_rating(article_id=article_id, viewer_id=user_id)
 
     async def _build_rating(

@@ -23,6 +23,7 @@ from src.users.schemas import UserGet
 from src.videos.enums import VideoProcessingStatusEnum
 
 if TYPE_CHECKING:
+    from src.activity.service import ActivityService
     from src.assets.storage import AssetStorage
     from src.content.projectors import ContentProjectorRegistry
 
@@ -33,10 +34,12 @@ class ContentService:
         repository: ContentRepository,
         asset_storage: AssetStorage,
         projector_registry: ContentProjectorRegistry,
+        activity_service: ActivityService | None = None,
     ) -> None:
         self._repository = repository
         self._asset_storage = asset_storage
         self._projector_registry = projector_registry
+        self._activity_service = activity_service
 
     async def get_feed(
         self,
@@ -109,12 +112,20 @@ class ContentService:
         user: UserGet,
         reaction_type: ReactionTypeEnum,
     ) -> ContentReactionGet:
-        await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
-        await self._repository.set_reaction(
+        content = await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
+        result = await self._repository.set_reaction(
             content_id=content_id,
             user_id=user.user_id,
             reaction_type=reaction_type,
         )
+        if self._activity_service is not None and getattr(result, "changed", False):
+            await self._activity_service.log_content_reaction(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                previous_reaction=result.previous_reaction,
+                new_reaction=result.new_reaction,
+            )
         return await self._build_reaction_get(content_id=content_id, viewer_id=user.user_id)
 
     async def remove_reaction(
@@ -124,12 +135,23 @@ class ContentService:
         user: UserGet,
         reaction_type: ReactionTypeEnum | None = None,
     ) -> ContentReactionGet:
-        await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
-        await self._repository.remove_reaction(
+        content = await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
+        result = await self._repository.remove_reaction(
             content_id=content_id,
             user_id=user.user_id,
             reaction_type=reaction_type,
         )
+        if (
+            self._activity_service is not None
+            and getattr(result, "removed", False)
+            and result.previous_reaction is not None
+        ):
+            await self._activity_service.log_content_reaction_removed(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                previous_reaction=result.previous_reaction,
+            )
         return await self._build_reaction_get(content_id=content_id, viewer_id=user.user_id)
 
     async def start_view_session(
@@ -184,6 +206,17 @@ class ContentService:
             metadata=data.metadata,
         )
         views_count = await self._repository.get_views_count(content_id=content_id)
+        if self._activity_service is not None and is_counted:
+            await self._activity_service.log_content_view(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                view_session_id=session.view_session_id,
+                source=session.source,
+                progress_percent=session.progress_percent,
+                watched_seconds=session.watched_seconds,
+                position_seconds=session.last_position_seconds,
+            )
         return self._build_view_session_get(session, views_count=views_count)
 
     async def heartbeat_view_session(
@@ -449,6 +482,7 @@ class ContentService:
         counted_date = session.counted_date
         counted_at = session.counted_at
         is_counted = session.is_counted
+        was_counted = session.is_counted
         increment_views = False
         if not is_counted:
             today = now.date()
@@ -492,6 +526,17 @@ class ContentService:
             viewer_id=user.user_id,
         )
         assert updated is not None
+        if self._activity_service is not None and not was_counted and updated.is_counted:
+            await self._activity_service.log_content_view(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                view_session_id=updated.view_session_id,
+                source=updated.source,
+                progress_percent=updated.progress_percent,
+                watched_seconds=updated.watched_seconds,
+                position_seconds=updated.last_position_seconds,
+            )
         return self._build_view_session_get(updated, views_count=views_count)
 
     def _build_view_session_get(self, session, *, views_count: int = 0) -> ContentViewSessionGet:  # type: ignore[no-untyped-def]

@@ -4,8 +4,11 @@ from src.assets.service import AssetService
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.activity.repository import ActivityRepository
+from src.activity.service import ActivityService
 from src.common.database import get_async_session
 from src.config import settings
+from src.content.projectors import build_default_content_projector_registry
 from src.posts.repository import PostRepository
 from src.posts.service import PostService
 from src.tags.repository import TagRepository
@@ -26,4 +29,9 @@ async def get_post_service(
             task_dispatcher=get_task_dispatcher(),
         ),
         asset_storage=get_asset_storage(),
+        activity_service=ActivityService(
+            repository=ActivityRepository(async_session),
+            asset_storage=get_asset_storage(),
+            projector_registry=build_default_content_projector_registry(),
+        ),
     )

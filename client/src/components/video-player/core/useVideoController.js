@@ -31,6 +31,7 @@ export default function useVideoController({
     const playerRef = useRef(null);
     const pendingQualitySwitchRef = useRef(null);
     const initialSeekAppliedRef = useRef(false);
+    const previousAutoPlayRef = useRef(autoPlay);
     const [selectedQualityId, setSelectedQualityId] = useState(
         initialQualityId || sources[0]?.id || ""
     );
@@ -199,6 +200,25 @@ export default function useVideoController({
             setIsLoading(false);
         }
     }, [initialQualityId, selectedQualityId, sources]);
+
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !selectedSource) {
+            previousAutoPlayRef.current = autoPlay;
+            return;
+        }
+
+        if (previousAutoPlayRef.current === autoPlay) {
+            return;
+        }
+        previousAutoPlayRef.current = autoPlay;
+
+        if (autoPlay) {
+            void play();
+            return;
+        }
+        pause();
+    }, [autoPlay, pause, play, selectedSource]);
 
     useEffect(() => {
         const video = videoRef.current;

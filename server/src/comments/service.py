@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from typing import TYPE_CHECKING
 
 from src.comments.exceptions import CommentNotFound, InvalidComment
 from src.comments.repository import CommentPageResult, CommentRepository
@@ -27,15 +28,20 @@ from src.users.presentation import build_user_get
 from src.users.repository import UserRepository
 from src.users.schemas import UserGet
 
+if TYPE_CHECKING:
+    from src.activity.service import ActivityService
+
 
 class CommentService:
     def __init__(
         self,
         repository: CommentRepository,
         user_repository: UserRepository | None = None,
+        activity_service: ActivityService | None = None,
     ) -> None:
         self._repository = repository
         self._user_repository = user_repository
+        self._activity_service = activity_service
 
     async def get_root_comments(
         self,
@@ -63,7 +69,7 @@ class CommentService:
         user: UserGet,
         data: CommentCreate,
     ) -> CommentGet:
-        await self._get_commentable_content(content_id=content_id, viewer_id=user.user_id)
+        content = await self._get_commentable_content(content_id=content_id, viewer_id=user.user_id)
         body_text = self._normalize_body_text(data.body_text)
         now = self._now()
         placement = build_root_comment_placement()
@@ -81,6 +87,13 @@ class CommentService:
             commit=False,
         )
         await self._repository.commit()
+        if self._activity_service is not None:
+            await self._activity_service.log_content_comment(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                comment=comment,
+            )
 
         return await self._get_comment_view_or_raise(
             comment_id=comment.comment_id,
@@ -138,7 +151,7 @@ class CommentService:
         if parent_comment.deleted_at is not None:
             raise CommentNotFound(f"Comment with id {comment_id!s} not found")
 
-        await self._get_commentable_content(
+        content = await self._get_commentable_content(
             content_id=parent_comment.content_id,
             viewer_id=user.user_id,
         )
@@ -169,6 +182,13 @@ class CommentService:
             commit=False,
         )
         await self._repository.commit()
+        if self._activity_service is not None:
+            await self._activity_service.log_content_comment(
+                user_id=user.user_id,
+                content_id=parent_comment.content_id,
+                content_type=content.content_type,
+                comment=comment,
+            )
 
         return await self._get_comment_view_or_raise(
             comment_id=comment.comment_id,

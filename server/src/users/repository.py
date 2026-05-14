@@ -156,7 +156,7 @@ class UserRepository:
         self,
         user_id: uuid.UUID,
         subscriber_id: uuid.UUID,
-    ) -> None:
+    ) -> bool:
         user = await self.get_single(user_id=user_id)
         subscriber = await self.get_single(user_id=subscriber_id)
 
@@ -165,12 +165,14 @@ class UserRepository:
             user.subscribers_count += 1
 
             await self._session.commit()
+            return True
+        return False
 
     async def unsubscribe(
         self,
         user_id: uuid.UUID,
         subscriber_id: uuid.UUID,
-    ) -> None:
+    ) -> bool:
         user = await self.get_single(user_id=user_id)
         subscriber = await self.get_single(user_id=subscriber_id)
 
@@ -178,6 +180,7 @@ class UserRepository:
         user.subscribers_count -= 1
 
         await self._session.commit()
+        return True
 
     async def get_subscriptions(
         self,
