@@ -7,7 +7,14 @@ from src.auth.dependencies import get_current_optional_user, get_current_user
 from src.common.schemas import Status
 from src.users.dependencies import get_user_service
 from src.users.enums import UserOrder
-from src.users.schemas import UserAvatarUpdate, UserCreate, UserGet, UserUpdate
+from src.users.schemas import (
+    UserAvatarUpdate,
+    UserCreate,
+    UserGet,
+    UserPasswordUpdate,
+    UserProfileUpdate,
+    UserUpdate,
+)
 from src.users.service import UserService
 
 router = APIRouter(
@@ -74,13 +81,42 @@ async def get_user_by_id(
     return await user_service.get_user(user_id=user_id, curr_user=user)
 
 
-@router.put("/")
-async def update_user(
+@router.put("/me/profile")
+async def update_profile(
+    data: UserProfileUpdate,
+    user: UserGet = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> UserGet:
+    return await user_service.update_profile(user_id=user.user_id, data=data)
+
+
+@router.put(
+    "/",
+    deprecated=True,
+    description="Legacy alias for profile update. Use /users/me/profile.",
+)
+async def update_user_legacy(
     data: UserUpdate,
     user: UserGet = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ) -> UserGet:
-    return await user_service.update_user(user_id=user.user_id, data=data)
+    return await user_service.update_profile(
+        user_id=user.user_id,
+        data=UserProfileUpdate.model_validate(data.model_dump(exclude_unset=True)),
+    )
+
+
+@router.put(
+    "/me/password",
+    description="Update password for the current user",
+)
+async def update_password(
+    data: UserPasswordUpdate,
+    user: UserGet = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> Status:
+    await user_service.change_password(user_id=user.user_id, data=data)
+    return Status(detail="Password updated successfully")
 
 
 @router.delete("/")

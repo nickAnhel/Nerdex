@@ -21,6 +21,9 @@ class _UserWithLazyAvatar:
     avatar_asset_id = uuid.uuid4()
     avatar_crop = {"x": 0.1, "y": 0.2, "size": 0.6}
     username = "alice"
+    display_name = None
+    bio = None
+    links = []
     subscribers_count = 0
     is_admin = False
 

@@ -70,6 +70,7 @@
     max-width: 100%;
     max-height: calc(100vh - 10rem);
     display: block;
+    width: 100%;
 }
 
 .post-gallery-media img {
@@ -78,6 +79,9 @@
 
 .post-gallery-media .video-player:not(.fullscreen) .video-player-frame {
     max-height: calc(100vh - 13rem);
+    min-height: 0;
+    width: 100%;
+    aspect-ratio: 16 / 9;
 }
 
 .post-gallery-nav:disabled {

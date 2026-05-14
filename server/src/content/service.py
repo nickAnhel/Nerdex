@@ -6,11 +6,17 @@ import uuid
 from typing import TYPE_CHECKING
 
 from src.content.access import can_view_content
-from src.content.enums import ContentStatusEnum, ContentTypeEnum, ReactionTypeEnum
+from src.content.enums import (
+    ContentProfileFilterEnum,
+    ContentStatusEnum,
+    ContentTypeEnum,
+    ReactionTypeEnum,
+)
 from src.content.enums_list import ContentOrder
 from src.content.exceptions import ContentNotFound
 from src.content.repository import ContentRepository
 from src.content.schemas import (
+    ContentGalleryItemGet,
     ContentHistoryItemGet,
     ContentHistoryProgressGet,
     ContentListItemGet,
@@ -19,6 +25,7 @@ from src.content.schemas import (
     ContentViewSessionHeartbeat,
     ContentViewSessionStart,
 )
+from src.posts.presentation import build_post_attachment_get
 from src.users.schemas import UserGet
 from src.videos.enums import VideoProcessingStatusEnum
 
@@ -104,6 +111,93 @@ class ContentService:
             limit=limit,
         )
         return [await self._build_feed_item(item, viewer_id=user_id) for item in content_items]
+
+    async def get_publications(
+        self,
+        *,
+        author_id: uuid.UUID,
+        viewer_id: uuid.UUID | None,
+        content_type: ContentTypeEnum | None,
+        profile_filter: ContentProfileFilterEnum,
+        order: ContentOrder,
+        desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ContentListItemGet]:
+        content_items = await self._repository.get_author_publications(
+            author_id=author_id,
+            viewer_id=viewer_id,
+            content_type=content_type,
+            profile_filter=profile_filter,
+            order=order,
+            order_desc=desc,
+            offset=offset,
+            limit=limit,
+        )
+        visible_items = [
+            item for item in content_items if can_view_content(content=item, viewer_id=viewer_id)
+        ]
+        return [await self._build_feed_item(item, viewer_id=viewer_id) for item in visible_items]
+
+    async def get_gallery(
+        self,
+        *,
+        author_id: uuid.UUID,
+        viewer_id: uuid.UUID | None,
+        profile_filter: ContentProfileFilterEnum,
+        order: ContentOrder,
+        desc: bool,
+        offset: int,
+        limit: int,
+    ) -> list[ContentGalleryItemGet]:
+        posts = await self._repository.get_author_gallery_posts(
+            author_id=author_id,
+            viewer_id=viewer_id,
+            profile_filter=profile_filter,
+            order=order,
+            order_desc=desc,
+            offset=offset,
+            limit=limit,
+        )
+
+        result: list[ContentGalleryItemGet] = []
+        for post in posts:
+            if not can_view_content(content=post, viewer_id=viewer_id):
+                continue
+            sorted_links = sorted(
+                [
+                    link
+                    for link in getattr(post, "asset_links", [])
+                    if getattr(link, "deleted_at", None) is None
+                    and getattr(getattr(link, "attachment_type", None), "value", getattr(link, "attachment_type", None)) == "media"
+                ],
+                key=lambda link: link.position,
+            )
+            for link in sorted_links:
+                attachment = await build_post_attachment_get(
+                    link,
+                    storage=self._asset_storage,
+                )
+                if attachment is None or attachment.file_kind not in {"image", "video"}:
+                    continue
+                result.append(
+                    ContentGalleryItemGet(
+                        content_id=post.content_id,
+                        post_id=post.content_id,
+                        asset_id=attachment.asset_id,
+                        position=attachment.position,
+                        created_at=post.created_at,
+                        published_at=post.published_at,
+                        excerpt=(
+                            post.post_details.body_text
+                            if post.post_details is not None
+                            else None
+                        ),
+                        canonical_path=f"/posts/{post.content_id}",
+                        attachment=attachment,
+                    )
+                )
+        return result
 
     async def set_reaction(
         self,

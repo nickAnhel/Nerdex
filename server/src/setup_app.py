@@ -35,14 +35,20 @@ from src.users.exc_handlers import (
     username_or_email_already_exists_handler,
     cant_subscribe_to_user_handler,
     cant_unsubscribe_from_user_handler,
+    invalid_current_password_handler,
+    same_password_handler,
     user_not_in_subscriptions_handler,
+    weak_password_handler,
 )
 from src.users.exceptions import (
     UserNotFound,
     UsernameAlreadyExists,
     CantSubscribeToUser,
     CantUnsubscribeFromUser,
+    InvalidCurrentPassword,
+    SamePassword,
     UserNotInSubscriptions,
+    WeakPassword,
 )
 
 from src.posts.exc_handlers import invalid_post_handler, post_not_found_handler
@@ -142,6 +148,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(CantSubscribeToUser, cant_subscribe_to_user_handler)  # type: ignore
     app.add_exception_handler(CantUnsubscribeFromUser, cant_unsubscribe_from_user_handler)  # type: ignore
     app.add_exception_handler(UserNotInSubscriptions, user_not_in_subscriptions_handler)  # type: ignore
+    app.add_exception_handler(InvalidCurrentPassword, invalid_current_password_handler)  # type: ignore
+    app.add_exception_handler(WeakPassword, weak_password_handler)  # type: ignore
+    app.add_exception_handler(SamePassword, same_password_handler)  # type: ignore
 
     app.add_exception_handler(PostNotFound, post_not_found_handler)  # type: ignore
     app.add_exception_handler(InvalidPost, invalid_post_handler)  # type: ignore

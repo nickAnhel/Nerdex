@@ -4,9 +4,12 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from src.auth.utils import validate_password
 from src.assets.enums import AssetAccessTypeEnum, AssetStatusEnum, AssetTypeEnum, AssetVariantStatusEnum, AssetVariantTypeEnum
-from src.users.schemas import UserAvatarUpdate
+from src.users.exceptions import InvalidCurrentPassword, SamePassword, WeakPassword
+from src.users.schemas import UserAvatarUpdate, UserPasswordUpdate, UserProfileUpdate
 from src.users.service import UserService
+from src.users.utils import get_password_hash
 
 
 @dataclass
@@ -35,6 +38,9 @@ class FakeUser:
     user_id: uuid.UUID
     username: str
     hashed_password: str
+    display_name: str | None = None
+    bio: str | None = None
+    links: list[dict[str, str]] = field(default_factory=list)
     avatar_asset_id: uuid.UUID | None = None
     avatar_crop: dict[str, float] | None = None
     subscribers_count: int = 0
@@ -62,6 +68,15 @@ class FakeUserRepository:
         self.user.avatar_asset_id = None
         self.user.avatar_crop = None
         self.user.avatar_asset = None
+        return self.user
+
+    async def update(self, data: dict, **filters) -> FakeUser:  # type: ignore[no-untyped-def]
+        for key, value in data.items():
+            setattr(self.user, key, value)
+        return self.user
+
+    async def update_hashed_password(self, *, user_id: uuid.UUID, hashed_password: str) -> FakeUser:
+        self.user.hashed_password = hashed_password
         return self.user
 
 
@@ -181,3 +196,122 @@ async def test_delete_avatar_clears_avatar_fields() -> None:
     assert response.avatar_asset_id is None
     assert response.avatar is None
     assert asset_service.orphaned == [asset_id]
+
+
+@pytest.mark.anyio
+async def test_update_profile_normalizes_display_name_bio_and_links() -> None:
+    user_id = uuid.uuid4()
+    user = FakeUser(
+        user_id=user_id,
+        username="tester",
+        hashed_password=get_password_hash("oldpass123"),
+    )
+    repository = FakeUserRepository(user=user, assets={})
+    service = UserService(
+        repository=repository,  # type: ignore[arg-type]
+        asset_service=FakeAssetService(),  # type: ignore[arg-type]
+        avatar_storage=FakeAvatarStorage(),  # type: ignore[arg-type]
+    )
+
+    response = await service.update_profile(
+        user_id=user_id,
+        data=UserProfileUpdate.model_validate(
+            {
+                "display_name": "   ",
+                "bio": "   short bio   ",
+                "links": [
+                    {"label": " GitHub ", "url": "https://github.com/tester "},
+                ],
+            }
+        ),
+    )
+
+    assert repository.user.display_name is None
+    assert repository.user.bio == "short bio"
+    assert repository.user.links == [{"label": "GitHub", "url": "https://github.com/tester"}]
+    assert response.display_name == "tester"
+
+
+@pytest.mark.anyio
+async def test_change_password_successfully_updates_hash() -> None:
+    user_id = uuid.uuid4()
+    user = FakeUser(
+        user_id=user_id,
+        username="tester",
+        hashed_password=get_password_hash("oldpass123"),
+    )
+    repository = FakeUserRepository(user=user, assets={})
+    service = UserService(
+        repository=repository,  # type: ignore[arg-type]
+        asset_service=FakeAssetService(),  # type: ignore[arg-type]
+        avatar_storage=FakeAvatarStorage(),  # type: ignore[arg-type]
+    )
+
+    await service.change_password(
+        user_id=user_id,
+        data=UserPasswordUpdate(
+            current_password="oldpass123",
+            new_password="newpass456",
+        ),
+    )
+
+    assert validate_password("newpass456", repository.user.hashed_password)
+
+
+@pytest.mark.anyio
+async def test_change_password_rejects_invalid_current_password() -> None:
+    user_id = uuid.uuid4()
+    user = FakeUser(
+        user_id=user_id,
+        username="tester",
+        hashed_password=get_password_hash("oldpass123"),
+    )
+    repository = FakeUserRepository(user=user, assets={})
+    service = UserService(
+        repository=repository,  # type: ignore[arg-type]
+        asset_service=FakeAssetService(),  # type: ignore[arg-type]
+        avatar_storage=FakeAvatarStorage(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(InvalidCurrentPassword):
+        await service.change_password(
+            user_id=user_id,
+            data=UserPasswordUpdate(
+                current_password="wrongpass000",
+                new_password="newpass456",
+            ),
+        )
+
+
+@pytest.mark.anyio
+async def test_change_password_rejects_same_or_weak_new_password() -> None:
+    user_id = uuid.uuid4()
+    user = FakeUser(
+        user_id=user_id,
+        username="tester",
+        hashed_password=get_password_hash("oldpass123"),
+    )
+    repository = FakeUserRepository(user=user, assets={})
+    service = UserService(
+        repository=repository,  # type: ignore[arg-type]
+        asset_service=FakeAssetService(),  # type: ignore[arg-type]
+        avatar_storage=FakeAvatarStorage(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(SamePassword):
+        await service.change_password(
+            user_id=user_id,
+            data=UserPasswordUpdate(
+                current_password="oldpass123",
+                new_password="oldpass123",
+            ),
+        )
+
+    with pytest.raises(WeakPassword):
+        await service.change_password(
+            user_id=user_id,
+            data=UserPasswordUpdate(
+                current_password="oldpass123",
+                new_password="weakpass",
+            ),
+        )

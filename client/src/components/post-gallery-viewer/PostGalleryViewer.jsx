@@ -7,7 +7,7 @@ import VideoPlayer from "../video-player";
 
 
 function buildVideoSources(attachment) {
-    const sourceUrl = attachment?.original_url || attachment?.stream_url || attachment?.preview_url;
+    const sourceUrl = attachment?.stream_url || attachment?.original_url || attachment?.preview_url;
     if (!sourceUrl) {
         return [];
     }

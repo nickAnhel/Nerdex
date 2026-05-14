@@ -5,8 +5,9 @@ from fastapi import APIRouter, Body, Depends, Query
 from src.auth.dependencies import get_current_optional_user, get_current_user
 from src.content.dependencies import get_content_service
 from src.content.enums_list import ContentOrder
-from src.content.enums import ContentTypeEnum
+from src.content.enums import ContentProfileFilterEnum, ContentTypeEnum
 from src.content.schemas import (
+    ContentGalleryItemGet,
     ContentHistoryItemGet,
     ContentListItemGet,
     ContentReactionGet,
@@ -40,6 +41,54 @@ async def get_feed(
         offset=offset,
         limit=limit,
         viewer_id=viewer_id,
+    )
+
+
+@router.get("/publications")
+async def get_author_publications(
+    author_id: uuid.UUID,
+    content_type: ContentTypeEnum | None = None,
+    profile_filter: ContentProfileFilterEnum = ContentProfileFilterEnum.PUBLIC,
+    order: ContentOrder = ContentOrder.PUBLISHED_AT,
+    desc: bool = True,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=0, lt=1000),
+    user: UserGet | None = Depends(get_current_optional_user),
+    content_service: ContentService = Depends(get_content_service),
+) -> list[ContentListItemGet]:
+    viewer_id = user.user_id if user is not None else None
+    return await content_service.get_publications(
+        author_id=author_id,
+        viewer_id=viewer_id,
+        content_type=content_type,
+        profile_filter=profile_filter,
+        order=order,
+        desc=desc,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get("/gallery")
+async def get_author_gallery(
+    author_id: uuid.UUID,
+    profile_filter: ContentProfileFilterEnum = ContentProfileFilterEnum.PUBLIC,
+    order: ContentOrder = ContentOrder.CREATED_AT,
+    desc: bool = True,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=0, lt=1000),
+    user: UserGet | None = Depends(get_current_optional_user),
+    content_service: ContentService = Depends(get_content_service),
+) -> list[ContentGalleryItemGet]:
+    viewer_id = user.user_id if user is not None else None
+    return await content_service.get_gallery(
+        author_id=author_id,
+        viewer_id=viewer_id,
+        profile_filter=profile_filter,
+        order=order,
+        desc=desc,
+        offset=offset,
+        limit=limit,
     )
 
 

@@ -15,6 +15,7 @@ function ContentList({
     refresh,
     renderItem,
     emptyText = "Nothing here yet",
+    onItemsChange = null,
 }) {
     const lastItem = createRef();
     const observerLoader = useRef();
@@ -24,12 +25,16 @@ function ContentList({
     const [offset, setOffset] = useState(0);
 
     const removeItem = (itemId) => {
-        setItems((prevItems) => prevItems.filter((item) => (
-            item.content_id !== itemId
-            && item.article_id !== itemId
-            && item.moment_id !== itemId
-            && item.content?.content_id !== itemId
-        )));
+        setItems((prevItems) => {
+            const nextItems = prevItems.filter((item) => (
+                item.content_id !== itemId
+                && item.article_id !== itemId
+                && item.moment_id !== itemId
+                && item.content?.content_id !== itemId
+            ));
+            onItemsChange?.(nextItems);
+            return nextItems;
+        });
     };
 
     useEffect(() => {
@@ -50,11 +55,15 @@ function ContentList({
         {
             keys: [offset, refresh, filtersKey],
             onSuccess: (fetchedItems) => {
-                setItems((prevItems) => (
-                    offset === 0
-                        ? fetchedItems
-                        : [...prevItems, ...fetchedItems]
-                ));
+                setItems((prevItems) => {
+                    const nextItems = (
+                        offset === 0
+                            ? fetchedItems
+                            : [...prevItems, ...fetchedItems]
+                    );
+                    onItemsChange?.(nextItems);
+                    return nextItems;
+                });
             },
         }
     );
