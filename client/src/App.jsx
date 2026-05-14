@@ -26,6 +26,7 @@ import VideoDetails from "./pages/video-details/VideoDetails";
 import VideoEditor from "./pages/video-editor/VideoEditor";
 import Moments from "./pages/moments/Moments";
 import MomentEditor from "./pages/moment-editor/MomentEditor";
+import Activity from "./pages/activity/Activity";
 
 import GlobalFeed from "./pages/global-feed/GlobalFeed";
 import PersonalFeed from "./pages/personal-feed/PersonalFeed";
@@ -170,6 +171,10 @@ const router = createBrowserRouter([
             {
                 path: "profile",
                 element: <Profile />,
+            },
+            {
+                path: "activity",
+                element: <Activity />,
             },
         ]
     }

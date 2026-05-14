@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import and_, delete, desc, exists, func, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,21 @@ from src.content.models import ContentModel, ContentReactionModel, ContentViewSe
 from src.users.models import SubscriptionModel, UserModel
 from src.videos.enums import VideoProcessingStatusEnum
 from src.videos.models import VideoPlaybackDetailsModel
+
+
+@dataclass(slots=True)
+class ContentReactionSetResult:
+    changed: bool
+    previous_reaction: ReactionTypeEnum | None
+    new_reaction: ReactionTypeEnum
+
+
+@dataclass(slots=True)
+class ContentReactionRemoveResult:
+    removed: bool
+    previous_reaction: ReactionTypeEnum | None
+
+
 class ContentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -180,6 +196,7 @@ class ContentRepository:
             )
             .outerjoin(VideoPlaybackDetailsModel)
             .where(ContentModel.status == ContentStatusEnum.PUBLISHED)
+            # TODO(activity): history currently exposes public content only; revisit if private owner history is needed.
             .where(ContentModel.visibility == ContentVisibilityEnum.PUBLIC)
             .where(ContentModel.deleted_at.is_(None))
             .where(
@@ -228,7 +245,7 @@ class ContentRepository:
         content_id: uuid.UUID,
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
-    ) -> None:
+    ) -> ContentReactionSetResult:
         existing = await self._get_reaction(content_id=content_id, user_id=user_id)
         if existing is None:
             await self._session.execute(
@@ -244,9 +261,18 @@ class ContentRepository:
                 dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
             )
             await self._session.commit()
-            return
+            return ContentReactionSetResult(
+                changed=True,
+                previous_reaction=None,
+                new_reaction=reaction_type,
+            )
         if existing.reaction_type == reaction_type:
-            return
+            return ContentReactionSetResult(
+                changed=False,
+                previous_reaction=existing.reaction_type,
+                new_reaction=reaction_type,
+            )
+        previous_reaction = existing.reaction_type
         await self._session.execute(
             update(ContentReactionModel)
             .where(ContentReactionModel.content_id == content_id)
@@ -259,6 +285,11 @@ class ContentRepository:
             dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else -1,
         )
         await self._session.commit()
+        return ContentReactionSetResult(
+            changed=True,
+            previous_reaction=previous_reaction,
+            new_reaction=reaction_type,
+        )
 
     async def remove_reaction(
         self,
@@ -266,12 +297,13 @@ class ContentRepository:
         content_id: uuid.UUID,
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum | None = None,
-    ) -> None:
+    ) -> ContentReactionRemoveResult:
         existing = await self._get_reaction(content_id=content_id, user_id=user_id)
         if existing is None:
-            return
+            return ContentReactionRemoveResult(removed=False, previous_reaction=None)
         if reaction_type is not None and existing.reaction_type != reaction_type:
-            return
+            return ContentReactionRemoveResult(removed=False, previous_reaction=existing.reaction_type)
+        previous_reaction = existing.reaction_type
         await self._session.execute(
             delete(ContentReactionModel)
             .where(ContentReactionModel.content_id == content_id)
@@ -283,6 +315,7 @@ class ContentRepository:
             dislike_delta=-1 if existing.reaction_type == ReactionTypeEnum.DISLIKE else 0,
         )
         await self._session.commit()
+        return ContentReactionRemoveResult(removed=True, previous_reaction=previous_reaction)
 
     async def create_view_session(
         self,
@@ -290,8 +323,15 @@ class ContentRepository:
         content_id: uuid.UUID,
         viewer_id: uuid.UUID,
         started_at: datetime.datetime,
-        position_seconds: int,
+        last_position_seconds: int,
+        max_position_seconds: int,
+        watched_seconds: int,
         progress_percent: int,
+        last_seen_at: datetime.datetime | None = None,
+        is_counted: bool = False,
+        counted_at: datetime.datetime | None = None,
+        counted_date: datetime.date | None = None,
+        increment_views: bool = False,
         source: str | None,
         metadata: dict,
     ) -> ContentViewSessionModel:
@@ -301,15 +341,25 @@ class ContentRepository:
                 content_id=content_id,
                 viewer_id=viewer_id,
                 started_at=started_at,
-                last_seen_at=started_at,
-                last_position_seconds=position_seconds,
-                max_position_seconds=position_seconds,
+                last_seen_at=last_seen_at or started_at,
+                last_position_seconds=last_position_seconds,
+                max_position_seconds=max_position_seconds,
+                watched_seconds=watched_seconds,
                 progress_percent=progress_percent,
+                is_counted=is_counted,
+                counted_at=counted_at,
+                counted_date=counted_date,
                 source=source,
                 view_metadata=metadata,
             )
             .returning(ContentViewSessionModel.view_session_id)
         )
+        if increment_views:
+            await self._session.execute(
+                update(ContentModel)
+                .where(ContentModel.content_id == content_id)
+                .values(views_count=ContentModel.views_count + 1)
+            )
         await self._session.commit()
         session = await self.get_view_session(
             view_session_id=result.scalar_one(),
@@ -413,6 +463,12 @@ class ContentRepository:
             )
         )
         return bool(result)
+
+    async def get_views_count(self, *, content_id: uuid.UUID) -> int:
+        views_count = await self._session.scalar(
+            select(ContentModel.views_count).where(ContentModel.content_id == content_id)
+        )
+        return int(views_count or 0)
 
     def _build_content_query(self, viewer_id: uuid.UUID | None):
         reaction_subquery = self._reaction_subquery(viewer_id=viewer_id)

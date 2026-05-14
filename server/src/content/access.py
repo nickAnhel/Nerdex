@@ -34,8 +34,8 @@ def can_access_comments(
     if content.status != ContentStatusEnum.PUBLISHED or not can_view_content(content=content, viewer_id=viewer_id):
         return False
     if getattr(content, "content_type", None) in {ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT}:
-        return (
-            content.video_playback_details is not None
-            and content.video_playback_details.processing_status == VideoProcessingStatusEnum.READY
-        )
+        playback_details = getattr(content, "video_playback_details", None)
+        if playback_details is not None:
+            return playback_details.processing_status == VideoProcessingStatusEnum.READY
+        return getattr(content, "video_processing_status", None) == VideoProcessingStatusEnum.READY
     return True

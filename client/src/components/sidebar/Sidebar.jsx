@@ -5,6 +5,7 @@ import { observer } from "mobx-react-lite";
 import "./Sidebar.css"
 
 import { StoreContext } from "../..";
+import ActivityIcon from "../icons/ActivityIcon";
 import ArticleIcon from "../icons/ArticleIcon";
 import ChatIcon from "../icons/ChatIcon";
 import FeedIcon from "../icons/FeedIcon";
@@ -47,6 +48,13 @@ function Sidebar() {
                     <ChatIcon />
                     Chats
                 </NavLink>
+                {
+                    store.isAuthenticated &&
+                    <NavLink to="/activity" className="sidebar-item">
+                        <ActivityIcon />
+                        Activity
+                    </NavLink>
+                }
             </div>
 
             <div id="sidebar-bottom">

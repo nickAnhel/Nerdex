@@ -13,7 +13,6 @@ jest.mock("../../components/video-card/VideoCard", () => () => <div />);
 jest.mock("../../service/ContentService", () => ({
     __esModule: true,
     default: {
-        getHistory: jest.fn(),
         getVideoRecommendations: jest.fn(),
         getVideoSubscriptions: jest.fn(),
     },
@@ -40,4 +39,5 @@ test("Videos sidebar does not render Moments tab", () => {
 
     expect(screen.getAllByText("Recommendations").length).toBeGreaterThan(0);
     expect(screen.queryByText("Moments")).toBeNull();
+    expect(screen.queryByText("History")).toBeNull();
 });

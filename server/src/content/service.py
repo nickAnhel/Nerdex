@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from src.content.access import can_view_content
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ReactionTypeEnum
 from src.content.enums_list import ContentOrder
-from src.content.exceptions import ContentNotFound, InvalidContentAction
+from src.content.exceptions import ContentNotFound
 from src.content.repository import ContentRepository
 from src.content.schemas import (
     ContentHistoryItemGet,
@@ -23,6 +23,7 @@ from src.users.schemas import UserGet
 from src.videos.enums import VideoProcessingStatusEnum
 
 if TYPE_CHECKING:
+    from src.activity.service import ActivityService
     from src.assets.storage import AssetStorage
     from src.content.projectors import ContentProjectorRegistry
 
@@ -33,10 +34,12 @@ class ContentService:
         repository: ContentRepository,
         asset_storage: AssetStorage,
         projector_registry: ContentProjectorRegistry,
+        activity_service: ActivityService | None = None,
     ) -> None:
         self._repository = repository
         self._asset_storage = asset_storage
         self._projector_registry = projector_registry
+        self._activity_service = activity_service
 
     async def get_feed(
         self,
@@ -109,12 +112,20 @@ class ContentService:
         user: UserGet,
         reaction_type: ReactionTypeEnum,
     ) -> ContentReactionGet:
-        await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
-        await self._repository.set_reaction(
+        content = await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
+        result = await self._repository.set_reaction(
             content_id=content_id,
             user_id=user.user_id,
             reaction_type=reaction_type,
         )
+        if self._activity_service is not None and getattr(result, "changed", False):
+            await self._activity_service.log_content_reaction(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                previous_reaction=result.previous_reaction,
+                new_reaction=result.new_reaction,
+            )
         return await self._build_reaction_get(content_id=content_id, viewer_id=user.user_id)
 
     async def remove_reaction(
@@ -124,12 +135,23 @@ class ContentService:
         user: UserGet,
         reaction_type: ReactionTypeEnum | None = None,
     ) -> ContentReactionGet:
-        await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
-        await self._repository.remove_reaction(
+        content = await self._get_reactable_content(content_id=content_id, viewer_id=user.user_id)
+        result = await self._repository.remove_reaction(
             content_id=content_id,
             user_id=user.user_id,
             reaction_type=reaction_type,
         )
+        if (
+            self._activity_service is not None
+            and getattr(result, "removed", False)
+            and result.previous_reaction is not None
+        ):
+            await self._activity_service.log_content_reaction_removed(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                previous_reaction=result.previous_reaction,
+            )
         return await self._build_reaction_get(content_id=content_id, viewer_id=user.user_id)
 
     async def start_view_session(
@@ -139,30 +161,63 @@ class ContentService:
         user: UserGet,
         data: ContentViewSessionStart,
     ) -> ContentViewSessionGet:
-        content = await self._get_viewable_playback_content(content_id=content_id, viewer_id=user.user_id)
+        content = await self._get_trackable_content(content_id=content_id, viewer_id=user.user_id)
         duration_seconds = self._content_duration_seconds(content)
-        position = self._bounded_position(data.initial_position_seconds or 0, duration_seconds)
         now = self._now()
         latest = await self._repository.get_latest_view_session(
             content_id=content_id,
             viewer_id=user.user_id,
         )
+        initial_state = self._initial_view_session_state(
+            content=content,
+            data=data,
+            latest=latest,
+            duration_seconds=duration_seconds,
+        )
+        counted_at = None
+        counted_date = None
+        is_counted = False
+        increment_views = False
+        if content.content_type == ContentTypeEnum.POST:
+            already_counted = await self._repository.has_counted_view_on_date(
+                content_id=content_id,
+                viewer_id=user.user_id,
+                counted_date=now.date(),
+            )
+            if not already_counted:
+                is_counted = True
+                counted_at = now
+                counted_date = now.date()
+                increment_views = self._should_increment_public_views(content=content, user_id=user.user_id)
+
         session = await self._repository.create_view_session(
             content_id=content_id,
             viewer_id=user.user_id,
             started_at=now,
-            position_seconds=position,
-            progress_percent=self._progress_percent(position, duration_seconds),
+            last_position_seconds=initial_state["last_position_seconds"],
+            max_position_seconds=initial_state["max_position_seconds"],
+            watched_seconds=initial_state["watched_seconds"],
+            progress_percent=initial_state["progress_percent"],
+            is_counted=is_counted,
+            counted_at=counted_at,
+            counted_date=counted_date,
+            increment_views=increment_views,
             source=data.source,
             metadata=data.metadata,
         )
-        if latest is not None:
-            session.last_position_seconds = latest.last_position_seconds
-            session.max_position_seconds = latest.max_position_seconds
-            session.watched_seconds = latest.watched_seconds
-            session.progress_percent = latest.progress_percent
-            session.last_seen_at = latest.last_seen_at
-        return self._build_view_session_get(session, views_count=content.views_count)
+        views_count = await self._repository.get_views_count(content_id=content_id)
+        if self._activity_service is not None and is_counted:
+            await self._activity_service.log_content_view(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                view_session_id=session.view_session_id,
+                source=session.source,
+                progress_percent=session.progress_percent,
+                watched_seconds=session.watched_seconds,
+                position_seconds=session.last_position_seconds,
+            )
+        return self._build_view_session_get(session, views_count=views_count)
 
     async def heartbeat_view_session(
         self,
@@ -371,15 +426,20 @@ class ContentService:
             raise ContentNotFound(f"Content with id {content_id!s} not found")
         return content
 
-    async def _get_viewable_playback_content(
+    async def _get_trackable_content(
         self,
         *,
         content_id: uuid.UUID,
         viewer_id: uuid.UUID,
     ):
         content = await self._get_reactable_content(content_id=content_id, viewer_id=viewer_id)
-        if content.content_type not in {ContentTypeEnum.VIDEO, ContentTypeEnum.MOMENT}:
-            raise InvalidContentAction("View sessions are currently supported for video-backed content only")
+        if content.content_type not in {
+            ContentTypeEnum.POST,
+            ContentTypeEnum.ARTICLE,
+            ContentTypeEnum.VIDEO,
+            ContentTypeEnum.MOMENT,
+        }:
+            raise ContentNotFound(f"Content with id {content_id!s} not found")
         return content
 
     async def _update_view_session(
@@ -390,7 +450,7 @@ class ContentService:
         user: UserGet,
         data: ContentViewSessionHeartbeat,
     ) -> ContentViewSessionGet:
-        content = await self._get_viewable_playback_content(content_id=content_id, viewer_id=user.user_id)
+        content = await self._get_trackable_content(content_id=content_id, viewer_id=user.user_id)
         session = await self._repository.get_view_session(
             view_session_id=session_id,
             content_id=content_id,
@@ -400,10 +460,21 @@ class ContentService:
             raise ContentNotFound(f"View session with id {session_id!s} not found")
 
         duration_seconds = data.duration_seconds or self._content_duration_seconds(content)
-        position = self._bounded_position(data.position_seconds, duration_seconds)
-        max_position = max(session.max_position_seconds, position)
+        position = self._session_position(
+            content=content,
+            session=session,
+            position_seconds=data.position_seconds,
+            duration_seconds=duration_seconds,
+        )
+        max_position = self._session_max_position(content=content, session=session, position=position)
         watched_seconds = session.watched_seconds + (data.watched_seconds_delta or 0)
-        progress_percent = self._progress_percent(max_position, duration_seconds)
+        progress_percent = self._session_progress_percent(
+            content=content,
+            session=session,
+            data=data,
+            max_position=max_position,
+            duration_seconds=duration_seconds,
+        )
         now = self._now()
         metadata = {**(session.view_metadata or {}), **data.metadata}
         source = data.source or session.source
@@ -411,6 +482,7 @@ class ContentService:
         counted_date = session.counted_date
         counted_at = session.counted_at
         is_counted = session.is_counted
+        was_counted = session.is_counted
         increment_views = False
         if not is_counted:
             today = now.date()
@@ -431,10 +503,7 @@ class ContentService:
                 is_counted = True
                 counted_at = now
                 counted_date = today
-                increment_views = not (
-                    content.content_type == ContentTypeEnum.MOMENT
-                    and content.author_id == user.user_id
-                )
+                increment_views = self._should_increment_public_views(content=content, user_id=user.user_id)
 
         views_count = await self._repository.update_view_session(
             view_session_id=session_id,
@@ -457,6 +526,17 @@ class ContentService:
             viewer_id=user.user_id,
         )
         assert updated is not None
+        if self._activity_service is not None and not was_counted and updated.is_counted:
+            await self._activity_service.log_content_view(
+                user_id=user.user_id,
+                content_id=content_id,
+                content_type=content.content_type,
+                view_session_id=updated.view_session_id,
+                source=updated.source,
+                progress_percent=updated.progress_percent,
+                watched_seconds=updated.watched_seconds,
+                position_seconds=updated.last_position_seconds,
+            )
         return self._build_view_session_get(updated, views_count=views_count)
 
     def _build_view_session_get(self, session, *, views_count: int = 0) -> ContentViewSessionGet:  # type: ignore[no-untyped-def]
@@ -487,7 +567,83 @@ class ContentService:
             return content.video_playback_details.duration_seconds
         return None
 
-    def _bounded_position(self, position_seconds: int, duration_seconds: int | None) -> int:
+    def _initial_view_session_state(
+        self,
+        *,
+        content,
+        data: ContentViewSessionStart,
+        latest,
+        duration_seconds: int | None,
+    ) -> dict[str, int]:  # type: ignore[no-untyped-def]
+        if content.content_type == ContentTypeEnum.POST:
+            return {
+                "last_position_seconds": 0,
+                "max_position_seconds": 0,
+                "watched_seconds": 0,
+                "progress_percent": 100,
+            }
+
+        if content.content_type == ContentTypeEnum.ARTICLE:
+            requested_progress = data.initial_progress_percent or 0
+            return {
+                "last_position_seconds": 0,
+                "max_position_seconds": 0,
+                "watched_seconds": latest.watched_seconds if latest is not None else 0,
+                "progress_percent": max(
+                    latest.progress_percent if latest is not None else 0,
+                    requested_progress,
+                ),
+            }
+
+        position = self._bounded_position(data.initial_position_seconds, duration_seconds)
+        state = {
+            "last_position_seconds": position,
+            "max_position_seconds": position,
+            "watched_seconds": 0,
+            "progress_percent": self._progress_percent(position, duration_seconds),
+        }
+        if latest is not None:
+            state["last_position_seconds"] = latest.last_position_seconds
+            state["max_position_seconds"] = latest.max_position_seconds
+            state["watched_seconds"] = latest.watched_seconds
+            state["progress_percent"] = latest.progress_percent
+        return state
+
+    def _session_position(
+        self,
+        *,
+        content,
+        session,
+        position_seconds: int | None,
+        duration_seconds: int | None,
+    ) -> int:  # type: ignore[no-untyped-def]
+        if content.content_type in {ContentTypeEnum.POST, ContentTypeEnum.ARTICLE}:
+            return session.last_position_seconds
+        if position_seconds is None:
+            return session.last_position_seconds
+        return self._bounded_position(position_seconds, duration_seconds)
+
+    def _session_max_position(self, *, content, session, position: int) -> int:  # type: ignore[no-untyped-def]
+        if content.content_type in {ContentTypeEnum.POST, ContentTypeEnum.ARTICLE}:
+            return session.max_position_seconds
+        return max(session.max_position_seconds, position)
+
+    def _session_progress_percent(
+        self,
+        *,
+        content,
+        session,
+        data: ContentViewSessionHeartbeat,
+        max_position: int,
+        duration_seconds: int | None,
+    ) -> int:  # type: ignore[no-untyped-def]
+        if content.content_type == ContentTypeEnum.POST:
+            return 100
+        if content.content_type == ContentTypeEnum.ARTICLE:
+            return max(session.progress_percent, data.progress_percent or 0)
+        return self._progress_percent(max_position, duration_seconds)
+
+    def _bounded_position(self, position_seconds: int | None, duration_seconds: int | None) -> int:
         position = max(0, int(position_seconds or 0))
         if duration_seconds is None or duration_seconds <= 0:
             return position
@@ -513,10 +669,20 @@ class ContentService:
         progress_percent: int,
         ended: bool,
     ) -> bool:  # type: ignore[no-untyped-def]
+        if content.content_type == ContentTypeEnum.POST:
+            return True
+        if content.content_type == ContentTypeEnum.ARTICLE:
+            return progress_percent >= 25 or watched_seconds >= 10
         if content.content_type == ContentTypeEnum.MOMENT:
             return watched_seconds >= 2 or progress_percent >= 50
         threshold = self._view_count_threshold(duration_seconds)
         return watched_seconds >= threshold or max_position >= threshold or ended
+
+    def _should_increment_public_views(self, *, content, user_id: uuid.UUID) -> bool:  # type: ignore[no-untyped-def]
+        return not (
+            content.content_type == ContentTypeEnum.MOMENT
+            and content.author_id == user_id
+        )
 
     def _now(self) -> datetime.datetime:
         return datetime.datetime.now(datetime.timezone.utc)

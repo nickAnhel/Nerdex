@@ -1,4 +1,5 @@
 def import_all_models() -> None:
+    import src.activity.models  # noqa: F401
     import src.admin.models  # noqa: F401
     import src.articles.models  # noqa: F401
     import src.assets.models  # noqa: F401

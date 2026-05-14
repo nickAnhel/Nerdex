@@ -9,18 +9,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from src.comments.models import CommentModel, CommentReactionModel
-from src.content.enums import ContentStatusEnum, ContentVisibilityEnum, ReactionTypeEnum
+from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel
 from src.users.models import UserModel
+from src.videos.enums import VideoProcessingStatusEnum
+from src.videos.models import VideoPlaybackDetailsModel
 
 
 @dataclass(slots=True)
 class ContentState:
     content_id: uuid.UUID
     author_id: uuid.UUID
+    content_type: ContentTypeEnum
     status: ContentStatusEnum
     visibility: ContentVisibilityEnum
     deleted_at: datetime.datetime | None
+    video_processing_status: VideoProcessingStatusEnum | None = None
 
 
 @dataclass(slots=True)
@@ -106,10 +110,17 @@ class CommentRepository:
             select(
                 ContentModel.content_id,
                 ContentModel.author_id,
+                ContentModel.content_type,
                 ContentModel.status,
                 ContentModel.visibility,
                 ContentModel.deleted_at,
-            ).where(ContentModel.content_id == content_id)
+                VideoPlaybackDetailsModel.processing_status.label("video_processing_status"),
+            )
+            .outerjoin(
+                VideoPlaybackDetailsModel,
+                VideoPlaybackDetailsModel.content_id == ContentModel.content_id,
+            )
+            .where(ContentModel.content_id == content_id)
         )
         row = result.one_or_none()
         if row is None:
@@ -118,9 +129,11 @@ class CommentRepository:
         return ContentState(
             content_id=row.content_id,
             author_id=row.author_id,
+            content_type=row.content_type,
             status=row.status,
             visibility=row.visibility,
             deleted_at=row.deleted_at,
+            video_processing_status=row.video_processing_status,
         )
 
     async def get_comment_state(

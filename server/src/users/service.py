@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
@@ -24,6 +27,9 @@ from src.users.schemas import (
 )
 from src.users.utils import get_password_hash
 
+if TYPE_CHECKING:
+    from src.activity.service import ActivityService
+
 LEGACY_PROFILE_PHOTO_SMALL_PREFIX = "PPs@"
 LEGACY_PROFILE_PHOTO_MEDIUM_PREFIX = "PPm@"
 LEGACY_PROFILE_PHOTO_LARGE_PREFIX = "PPl@"
@@ -35,10 +41,12 @@ class UserService:
         repository: UserRepository,
         asset_service: AssetService,
         avatar_storage: AssetStorage,
+        activity_service: ActivityService | None = None,
     ) -> None:
         self._repository: UserRepository = repository
         self._asset_service = asset_service
         self._avatar_storage = avatar_storage
+        self._activity_service = activity_service
 
     async def create_user(
         self,
@@ -165,9 +173,14 @@ class UserService:
             raise CantSubscribeToUser("Can't subscribe to yourself")
 
         try:
-            await self._repository.subscribe(
+            changed = await self._repository.subscribe(
                 user_id=user_id, subscriber_id=subscriber_id
             )
+            if changed and self._activity_service is not None:
+                await self._activity_service.log_user_follow(
+                    user_id=subscriber_id,
+                    target_user_id=user_id,
+                )
         except NoResultFound as exc:
             raise UserNotFound(f"User with id {user_id} not found") from exc
 
@@ -182,9 +195,14 @@ class UserService:
             raise CantUnsubscribeFromUser("Can't unsubscribe from yourself")
 
         try:
-            await self._repository.unsubscribe(
+            changed = await self._repository.unsubscribe(
                 user_id=user_id, subscriber_id=subscriber_id
             )
+            if changed and self._activity_service is not None:
+                await self._activity_service.log_user_unfollow(
+                    user_id=subscriber_id,
+                    target_user_id=user_id,
+                )
 
         except NoResultFound as exc:
             raise UserNotFound(f"User with id {user_id} not found") from exc

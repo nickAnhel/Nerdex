@@ -14,6 +14,7 @@ from src.articles.enums import ArticleOrder, ArticleProfileFilter
 from src.articles.models import ArticleDetailsModel
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel, ContentReactionModel
+from src.content.repository import ContentReactionRemoveResult, ContentReactionSetResult
 from src.users.models import SubscriptionModel, UserModel
 
 
@@ -276,7 +277,7 @@ class ArticleRepository:
         content_id: uuid.UUID,
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
-    ) -> None:
+    ) -> ContentReactionSetResult:
         existing = await self._get_reaction(content_id=content_id, user_id=user_id)
 
         if existing is None:
@@ -293,11 +294,20 @@ class ArticleRepository:
                 dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
             )
             await self._session.commit()
-            return
+            return ContentReactionSetResult(
+                changed=True,
+                previous_reaction=None,
+                new_reaction=reaction_type,
+            )
 
         if existing.reaction_type == reaction_type:
-            return
+            return ContentReactionSetResult(
+                changed=False,
+                previous_reaction=existing.reaction_type,
+                new_reaction=reaction_type,
+            )
 
+        previous_reaction = existing.reaction_type
         await self._session.execute(
             update(ContentReactionModel)
             .where(ContentReactionModel.content_id == content_id)
@@ -310,6 +320,11 @@ class ArticleRepository:
             dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else -1,
         )
         await self._session.commit()
+        return ContentReactionSetResult(
+            changed=True,
+            previous_reaction=previous_reaction,
+            new_reaction=reaction_type,
+        )
 
     async def remove_reaction(
         self,
@@ -317,11 +332,15 @@ class ArticleRepository:
         content_id: uuid.UUID,
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
-    ) -> None:
+    ) -> ContentReactionRemoveResult:
         existing = await self._get_reaction(content_id=content_id, user_id=user_id)
         if existing is None or existing.reaction_type != reaction_type:
-            return
+            return ContentReactionRemoveResult(
+                removed=False,
+                previous_reaction=existing.reaction_type if existing is not None else None,
+            )
 
+        previous_reaction = existing.reaction_type
         await self._session.execute(
             delete(ContentReactionModel)
             .where(ContentReactionModel.content_id == content_id)
@@ -333,6 +352,7 @@ class ArticleRepository:
             dislike_delta=-1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
         )
         await self._session.commit()
+        return ContentReactionRemoveResult(removed=True, previous_reaction=previous_reaction)
 
     async def get_user_subscriptions_articles(
         self,

@@ -12,6 +12,7 @@ from src.assets.models import AssetModel, ContentAssetModel
 import src.tags.models  # noqa: F401
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.content.models import ContentModel, ContentReactionModel, ContentViewSessionModel
+from src.content.repository import ContentReactionRemoveResult, ContentReactionSetResult
 from src.users.models import UserModel
 from src.videos.enums import VideoOrder, VideoProcessingStatusEnum, VideoProfileFilter
 from src.videos.models import VideoDetailsModel, VideoPlaybackDetailsModel
@@ -337,7 +338,7 @@ class VideoRepository:
         content_id: uuid.UUID,
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
-    ) -> None:
+    ) -> ContentReactionSetResult:
         existing = await self._get_reaction(content_id=content_id, user_id=user_id)
         if existing is None:
             await self._session.execute(
@@ -353,9 +354,18 @@ class VideoRepository:
                 dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
             )
             await self._session.commit()
-            return
+            return ContentReactionSetResult(
+                changed=True,
+                previous_reaction=None,
+                new_reaction=reaction_type,
+            )
         if existing.reaction_type == reaction_type:
-            return
+            return ContentReactionSetResult(
+                changed=False,
+                previous_reaction=existing.reaction_type,
+                new_reaction=reaction_type,
+            )
+        previous_reaction = existing.reaction_type
         await self._session.execute(
             update(ContentReactionModel)
             .where(ContentReactionModel.content_id == content_id)
@@ -368,6 +378,11 @@ class VideoRepository:
             dislike_delta=1 if reaction_type == ReactionTypeEnum.DISLIKE else -1,
         )
         await self._session.commit()
+        return ContentReactionSetResult(
+            changed=True,
+            previous_reaction=previous_reaction,
+            new_reaction=reaction_type,
+        )
 
     async def remove_reaction(
         self,
@@ -375,10 +390,14 @@ class VideoRepository:
         content_id: uuid.UUID,
         user_id: uuid.UUID,
         reaction_type: ReactionTypeEnum,
-    ) -> None:
+    ) -> ContentReactionRemoveResult:
         existing = await self._get_reaction(content_id=content_id, user_id=user_id)
         if existing is None or existing.reaction_type != reaction_type:
-            return
+            return ContentReactionRemoveResult(
+                removed=False,
+                previous_reaction=existing.reaction_type if existing is not None else None,
+            )
+        previous_reaction = existing.reaction_type
         await self._session.execute(
             delete(ContentReactionModel)
             .where(ContentReactionModel.content_id == content_id)
@@ -390,6 +409,7 @@ class VideoRepository:
             dislike_delta=-1 if reaction_type == ReactionTypeEnum.DISLIKE else 0,
         )
         await self._session.commit()
+        return ContentReactionRemoveResult(removed=True, previous_reaction=previous_reaction)
 
     async def update_processing_for_source_asset(
         self,

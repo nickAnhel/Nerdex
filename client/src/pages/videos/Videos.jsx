@@ -13,7 +13,6 @@ import VideoService from "../../service/VideoService";
 const VIDEO_TABS = {
     recommendations: "recommendations",
     subscriptions: "subscriptions",
-    history: "history",
 };
 
 const VIDEO_SECTIONS = [
@@ -29,13 +28,6 @@ const VIDEO_SECTIONS = [
         description: "Ready videos from people you follow.",
         authOnly: true,
         icon: <SubscriptionsIcon />,
-    },
-    {
-        id: VIDEO_TABS.history,
-        label: "History",
-        description: "Continue videos you started watching.",
-        authOnly: true,
-        icon: <HistoryIcon />,
     },
 ];
 
@@ -68,28 +60,6 @@ function Videos() {
     };
 
     const renderTabContent = () => {
-        if (activeTab === VIDEO_TABS.history) {
-            return (
-                <div className="videos-grid-panel videos-history-grid">
-                    <ContentList
-                        key={activeTab}
-                        fetchItems={(params) => ContentService.getHistory(withoutInternalFilters(params))}
-                        filters={{ content_type: "video", section: activeTab }}
-                        refresh={`${store.isRefreshPosts}-${activeTab}`}
-                        emptyText="No watched videos yet"
-                        renderItem={({ item, removeItem, ref }) => (
-                            <HistoryVideoItem
-                                key={item.content?.content_id || item.content_id}
-                                item={item}
-                                removeItem={removeItem}
-                                itemRef={ref}
-                            />
-                        )}
-                    />
-                </div>
-            );
-        }
-
         const fetchItems = activeTab === VIDEO_TABS.subscriptions
             ? ContentService.getVideoSubscriptions
             : activeTab === VIDEO_TABS.recommendations
@@ -165,35 +135,6 @@ function Videos() {
     );
 }
 
-const HistoryVideoItem = ({ item, removeItem, itemRef }) => {
-    const content = item.content || item;
-    const progress = item.progress || {};
-
-    if (!content || content.content_type !== "video") {
-        return null;
-    }
-
-    return (
-        <div className="videos-history-item" ref={itemRef}>
-            <VideoCard
-                video={{
-                    ...content,
-                    video_id: content.video_id || content.content_id,
-                }}
-                removeItem={removeItem}
-            />
-            <div className="videos-history-progress">
-                <span>{progress.progress_percent || 0}% watched</span>
-                <progress value={progress.progress_percent || 0} max="100" />
-                {
-                    progress.last_seen_at &&
-                    <span>Last viewed {new Date(progress.last_seen_at).toLocaleString()}</span>
-                }
-            </div>
-        </div>
-    );
-};
-
 function VideoNavIcon({ children }) {
     return (
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -214,14 +155,6 @@ function SubscriptionsIcon() {
     return (
         <VideoNavIcon>
             <path d="M7 4h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H9l-4 3v-3a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h2Zm3 4v6l5-3-5-3Z" fill="currentColor" />
-        </VideoNavIcon>
-    );
-}
-
-function HistoryIcon() {
-    return (
-        <VideoNavIcon>
-            <path d="M12 4a8 8 0 1 1-7.4 5H2l3.8-4L9.6 9H7a6 6 0 1 0 5-3 1 1 0 0 1 0-2Zm1 4v4.1l3 1.8-1 1.7-4-2.4V8h2Z" fill="currentColor" />
         </VideoNavIcon>
     );
 }

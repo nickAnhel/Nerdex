@@ -19,7 +19,7 @@ from src.comments.schemas import CommentCreate, CommentUpdate
 from src.comments.service import CommentService
 from src.comments.threading import MAX_COMMENT_DEPTH
 from src.common.exceptions import PermissionDenied
-from src.content.enums import ContentStatusEnum, ContentVisibilityEnum, ReactionTypeEnum
+from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum, ReactionTypeEnum
 from src.users.schemas import UserGet
 
 
@@ -29,6 +29,7 @@ class FakeContent:
     author_id: uuid.UUID
     status: ContentStatusEnum
     visibility: ContentVisibilityEnum
+    content_type: ContentTypeEnum = ContentTypeEnum.POST
     deleted_at: datetime.datetime | None = None
     comments_count: int = 0
 
@@ -71,6 +72,7 @@ class FakeCommentRepository:
         return ContentState(
             content_id=content.content_id,
             author_id=content.author_id,
+            content_type=content.content_type,
             status=content.status,
             visibility=content.visibility,
             deleted_at=content.deleted_at,

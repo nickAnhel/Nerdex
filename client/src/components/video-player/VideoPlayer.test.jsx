@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import VideoPlayer from "./VideoPlayer";
 
@@ -147,4 +147,37 @@ test("renders unavailable state when sources are empty", () => {
     render(<VideoPlayer title="Missing source player" sources={[]} />);
 
     expect(screen.getByText("Video source is unavailable.")).not.toBeNull();
+});
+
+test("toggles playback when autoPlay prop changes between slides", async () => {
+    const { rerender } = render(
+        <VideoPlayer
+            title="Moments auto play toggle"
+            sources={singleSource}
+            autoPlay={false}
+        />
+    );
+
+    const video = document.querySelector("video");
+    fireEvent.loadedMetadata(video);
+
+    rerender(
+        <VideoPlayer
+            title="Moments auto play toggle"
+            sources={singleSource}
+            autoPlay
+        />
+    );
+
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+
+    rerender(
+        <VideoPlayer
+            title="Moments auto play toggle"
+            sources={singleSource}
+            autoPlay={false}
+        />
+    );
+
+    await waitFor(() => expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1));
 });
