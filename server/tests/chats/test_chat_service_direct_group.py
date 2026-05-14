@@ -20,6 +20,9 @@ def _user(user_id: uuid.UUID, username: str):
     return SimpleNamespace(
         user_id=user_id,
         username=username,
+        display_name=None,
+        bio=None,
+        links=[],
         avatar_asset_id=None,
         avatar_crop=None,
         subscribers_count=0,
@@ -347,6 +350,7 @@ async def test_chat_history_preserves_timeline_order_and_seq() -> None:
 
     assert [item.item_type for item in history] == ["message", "event"]
     assert [item.chat_seq for item in history] == [1, 2]
+    assert history[1].user.display_name == "alice"
 
 
 @pytest.mark.asyncio

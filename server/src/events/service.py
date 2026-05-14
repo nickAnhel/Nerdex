@@ -1,6 +1,7 @@
 import uuid
 
 from src.events.repository import EventRepository
+from src.events.presentation import build_event_get_with_users
 from src.events.schemas import EventCreate, EventGet, EventGetWithUsers
 
 
@@ -29,4 +30,4 @@ class EventService:
             limit=limit,
         )
 
-        return [EventGetWithUsers.model_validate(event) for event in events]
+        return [await build_event_get_with_users(event) for event in events]
