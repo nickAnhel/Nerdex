@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import datetime
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import and_, desc, func, literal, literal_column, or_, select
+from sqlalchemy import and_, case, desc, func, literal, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.activity.enums import ActivityActionTypeEnum
+from src.activity.models import ActivityEventModel
 from src.assets.models import AssetModel, ContentAssetModel
 import src.articles.models  # noqa: F401
 import src.chats.models  # noqa: F401
@@ -18,7 +21,7 @@ import src.events.models  # noqa: F401
 import src.moments.models  # noqa: F401
 import src.messages.models  # noqa: F401
 import src.posts.models  # noqa: F401
-from src.search.enums import SearchSortEnum
+from src.search.enums import SearchPopularPeriodEnum, SearchSortEnum
 import src.tags.models  # noqa: F401
 from src.users.models import UserModel
 from src.videos.enums import VideoProcessingStatusEnum
@@ -240,6 +243,87 @@ class SearchRepository:
             for row in rows
         ], has_more
 
+    async def search_popular_content(
+        self,
+        *,
+        content_type: ContentTypeEnum | None,
+        period: SearchPopularPeriodEnum,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[SearchContentMatch], bool]:
+        sort_timestamp = func.coalesce(ContentModel.published_at, ContentModel.created_at)
+        if period == SearchPopularPeriodEnum.ALL_TIME:
+            score = (
+                ContentModel.views_count
+                + (ContentModel.likes_count * 4)
+                + (ContentModel.comments_count * 5)
+                - (ContentModel.dislikes_count * 6)
+            )
+            stmt = (
+                select(
+                    ContentModel.content_id.label("content_id"),
+                    score.label("score"),
+                    sort_timestamp.label("sort_timestamp"),
+                )
+                .select_from(ContentModel)
+                .outerjoin(VideoPlaybackDetailsModel, VideoPlaybackDetailsModel.content_id == ContentModel.content_id)
+                .where(*self._content_visibility_clauses())
+            )
+        else:
+            action_score = case(
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_VIEW, literal(1)),
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_LIKE, literal(4)),
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_COMMENT, literal(5)),
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_DISLIKE, literal(-6)),
+                else_=literal(0),
+            )
+            period_scores = (
+                select(
+                    ActivityEventModel.content_id.label("content_id"),
+                    func.sum(action_score).label("score"),
+                )
+                .where(ActivityEventModel.content_id.is_not(None))
+                .where(
+                    ActivityEventModel.action_type.in_(
+                        [
+                            ActivityActionTypeEnum.CONTENT_VIEW,
+                            ActivityActionTypeEnum.CONTENT_LIKE,
+                            ActivityActionTypeEnum.CONTENT_COMMENT,
+                            ActivityActionTypeEnum.CONTENT_DISLIKE,
+                        ]
+                    )
+                )
+                .where(ActivityEventModel.created_at >= self._popular_period_since(period))
+                .group_by(ActivityEventModel.content_id)
+                .subquery()
+            )
+            score = func.coalesce(period_scores.c.score, literal(0))
+            stmt = (
+                select(
+                    ContentModel.content_id.label("content_id"),
+                    score.label("score"),
+                    sort_timestamp.label("sort_timestamp"),
+                )
+                .select_from(ContentModel)
+                .join(period_scores, period_scores.c.content_id == ContentModel.content_id)
+                .outerjoin(VideoPlaybackDetailsModel, VideoPlaybackDetailsModel.content_id == ContentModel.content_id)
+                .where(*self._content_visibility_clauses())
+            )
+
+        if content_type is not None:
+            stmt = stmt.where(ContentModel.content_type == content_type)
+
+        stmt = stmt.order_by(desc(score), desc(sort_timestamp), desc(ContentModel.created_at))
+
+        result = await self._session.execute(stmt.offset(offset).limit(limit + 1))
+        rows = list(result.all())
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return [
+            SearchContentMatch(content_id=row.content_id, score=float(row.score or 0.0))
+            for row in rows
+        ], has_more
+
     async def get_content_by_ids(
         self,
         *,
@@ -367,3 +451,13 @@ class SearchRepository:
         if sort == SearchSortEnum.OLDEST:
             return stmt.order_by(UserModel.created_at.asc(), desc(score), desc(UserModel.subscribers_count))
         return stmt.order_by(desc(score), desc(UserModel.subscribers_count), desc(UserModel.created_at))
+
+    def _popular_period_since(self, period: SearchPopularPeriodEnum) -> datetime.datetime:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if period == SearchPopularPeriodEnum.WEEK:
+            return now - datetime.timedelta(days=7)
+        if period == SearchPopularPeriodEnum.MONTH:
+            return now - datetime.timedelta(days=30)
+        if period == SearchPopularPeriodEnum.YEAR:
+            return now - datetime.timedelta(days=365)
+        raise ValueError(f"Unsupported popular period: {period}")

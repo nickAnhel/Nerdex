@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from src.content.enums import ContentTypeEnum
-from src.search.enums import SearchSortEnum
+from src.search.enums import SearchPopularPeriodEnum, SearchSortEnum
 from src.search.repository import SearchRepository
 
 
@@ -137,3 +137,132 @@ async def test_search_authors_uses_user_search_vector_and_newest_sort() -> None:
     assert "to_tsvector('simple'" in sql
     assert "users.created_at DESC" in sql
     assert "OFFSET 5" in sql
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "period",
+    [
+        SearchPopularPeriodEnum.WEEK,
+        SearchPopularPeriodEnum.MONTH,
+        SearchPopularPeriodEnum.YEAR,
+    ],
+)
+async def test_search_popular_period_uses_activity_events_weighted_score(period: SearchPopularPeriodEnum) -> None:
+    content_id = uuid.uuid4()
+    session = CapturingSession(
+        [[
+            SimpleNamespace(
+                content_id=content_id,
+                score=11,
+                sort_timestamp=datetime.datetime.now(datetime.timezone.utc),
+            ),
+        ]]
+    )
+    repository = SearchRepository(session)  # type: ignore[arg-type]
+
+    matches, has_more = await repository.search_popular_content(
+        content_type=None,
+        period=period,
+        offset=0,
+        limit=20,
+    )
+
+    assert has_more is False
+    assert matches[0].content_id == content_id
+
+    sql = _compile_sql(session.statements[0])
+    assert "FROM user_activity_events" in sql
+    assert "user_activity_events.action_type IN ('content_view', 'content_like', 'content_comment', 'content_dislike')" in sql
+    assert "THEN 1" in sql
+    assert "THEN 4" in sql
+    assert "THEN 5" in sql
+    assert "THEN -6" in sql
+    assert "user_activity_events.created_at >=" in sql
+
+
+@pytest.mark.anyio
+async def test_search_popular_all_time_uses_content_counters_score() -> None:
+    content_id = uuid.uuid4()
+    session = CapturingSession(
+        [[
+            SimpleNamespace(
+                content_id=content_id,
+                score=23,
+                sort_timestamp=datetime.datetime.now(datetime.timezone.utc),
+            ),
+        ]]
+    )
+    repository = SearchRepository(session)  # type: ignore[arg-type]
+
+    matches, has_more = await repository.search_popular_content(
+        content_type=ContentTypeEnum.ARTICLE,
+        period=SearchPopularPeriodEnum.ALL_TIME,
+        offset=0,
+        limit=20,
+    )
+
+    assert has_more is False
+    assert matches[0].content_id == content_id
+
+    sql = _compile_sql(session.statements[0])
+    assert "FROM user_activity_events" not in sql
+    assert "content.views_count" in sql
+    assert "content.likes_count * 4" in sql
+    assert "content.comments_count * 5" in sql
+    assert "content.dislikes_count * 6" in sql
+    assert "content.content_type = 'article'" in sql
+
+
+@pytest.mark.anyio
+async def test_search_popular_applies_public_ready_visibility_filters() -> None:
+    content_id = uuid.uuid4()
+    session = CapturingSession(
+        [[
+            SimpleNamespace(
+                content_id=content_id,
+                score=7,
+                sort_timestamp=datetime.datetime.now(datetime.timezone.utc),
+            ),
+        ]]
+    )
+    repository = SearchRepository(session)  # type: ignore[arg-type]
+
+    await repository.search_popular_content(
+        content_type=ContentTypeEnum.VIDEO,
+        period=SearchPopularPeriodEnum.WEEK,
+        offset=0,
+        limit=10,
+    )
+
+    sql = _compile_sql(session.statements[0])
+    assert "content.status = 'published'" in sql
+    assert "content.visibility = 'public'" in sql
+    assert "content.deleted_at IS NULL" in sql
+    assert "video_playback_details.processing_status = 'ready'" in sql
+    assert "content.content_type = 'video'" in sql
+
+
+@pytest.mark.anyio
+async def test_search_popular_dislikes_can_make_score_negative() -> None:
+    content_id = uuid.uuid4()
+    session = CapturingSession(
+        [[
+            SimpleNamespace(
+                content_id=content_id,
+                score=-9,
+                sort_timestamp=datetime.datetime.now(datetime.timezone.utc),
+            ),
+        ]]
+    )
+    repository = SearchRepository(session)  # type: ignore[arg-type]
+
+    matches, has_more = await repository.search_popular_content(
+        content_type=None,
+        period=SearchPopularPeriodEnum.WEEK,
+        offset=0,
+        limit=20,
+    )
+
+    assert has_more is False
+    assert matches[0].score == pytest.approx(-9.0)

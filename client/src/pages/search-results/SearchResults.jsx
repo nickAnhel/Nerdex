@@ -11,22 +11,35 @@ import UserListItem from "../../components/user-list-item/UserListItem";
 import SearchService from "../../service/SearchService";
 
 
-const SEARCH_TYPES = [
+const CONTENT_TYPES = [
     { value: "all", label: "All" },
     { value: "post", label: "Posts" },
     { value: "video", label: "Videos" },
     { value: "article", label: "Articles" },
     { value: "moment", label: "Moments" },
+];
+
+const SEARCH_TYPES = [
+    ...CONTENT_TYPES,
     { value: "author", label: "Authors" },
 ];
 
-const SORTS = [
+const POPULAR_PERIODS = [
+    { value: "week", label: "Week" },
+    { value: "month", label: "Month" },
+    { value: "year", label: "Year" },
+    { value: "all_time", label: "All time" },
+];
+
+const SEARCH_SORTS = [
     { value: "relevance", label: "Relevance" },
     { value: "newest", label: "Newest" },
     { value: "oldest", label: "Oldest" },
 ];
 
 const DEFAULT_LIMIT = 20;
+const DEFAULT_PERIOD = "week";
+const DEFAULT_SORT = "relevance";
 
 function parseNonNegativeInt(value, fallback) {
     const parsed = Number.parseInt(value || "", 10);
@@ -40,13 +53,24 @@ function SearchResults() {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const rawQuery = (searchParams.get("q") || "").trim();
+    const isSearchMode = rawQuery.length > 0;
+
+    const availableTypes = isSearchMode ? SEARCH_TYPES : CONTENT_TYPES;
     const rawType = searchParams.get("type");
-    const type = SEARCH_TYPES.some((item) => item.value === rawType)
+    const type = availableTypes.some((item) => item.value === rawType)
         ? rawType
         : "all";
-    const sort = SORTS.some((item) => item.value === searchParams.get("sort"))
-        ? searchParams.get("sort")
-        : "relevance";
+
+    const rawPeriod = searchParams.get("period");
+    const period = POPULAR_PERIODS.some((item) => item.value === rawPeriod)
+        ? rawPeriod
+        : DEFAULT_PERIOD;
+
+    const rawSort = searchParams.get("sort");
+    const sort = SEARCH_SORTS.some((item) => item.value === rawSort)
+        ? rawSort
+        : DEFAULT_SORT;
+
     const offset = parseNonNegativeInt(searchParams.get("offset"), 0);
     const limit = Math.min(Math.max(parseNonNegativeInt(searchParams.get("limit"), DEFAULT_LIMIT), 1), 100);
 
@@ -72,6 +96,34 @@ function SearchResults() {
     }, [rawType, type, updateSearchParams]);
 
     useEffect(() => {
+        if (rawPeriod && rawPeriod === period) {
+            return;
+        }
+        updateSearchParams((params) => {
+            params.set("period", period);
+        }, { replace: true });
+    }, [rawPeriod, period, updateSearchParams]);
+
+    useEffect(() => {
+        if (!isSearchMode) {
+            if (!rawSort) {
+                return;
+            }
+            updateSearchParams((params) => {
+                params.delete("sort");
+            }, { replace: true });
+            return;
+        }
+
+        if (rawSort && rawSort === sort) {
+            return;
+        }
+        updateSearchParams((params) => {
+            params.set("sort", sort);
+        }, { replace: true });
+    }, [isSearchMode, rawSort, sort, updateSearchParams]);
+
+    useEffect(() => {
         const normalizedQuery = inputValue.trim();
         if (normalizedQuery === rawQuery) {
             return undefined;
@@ -94,45 +146,52 @@ function SearchResults() {
 
     const { isLoading, isError, error, data } = useQuery(
         async () => {
-            if (!rawQuery) {
-                return {
-                    items: [],
+            if (isSearchMode) {
+                const response = await SearchService.search({
+                    q: rawQuery,
+                    type,
+                    sort,
                     offset,
                     limit,
-                    has_more: false,
-                };
+                });
+                return response.data;
             }
 
-            const response = await SearchService.search({
-                q: rawQuery,
+            const response = await SearchService.popular({
                 type,
-                sort,
+                period,
                 offset,
                 limit,
             });
             return response.data;
         },
         {
-            keys: [rawQuery, type, sort, offset, limit],
+            keys: [isSearchMode, rawQuery, type, sort, period, offset, limit],
         }
     );
 
     const items = data?.items || [];
     const hasMore = Boolean(data?.has_more);
     const errorMessage = isError
-        ? (error?.response?.data?.detail || "Failed to load search results")
+        ? (error?.response?.data?.detail || (isSearchMode ? "Failed to load search results" : "Failed to load popular content"))
         : "";
 
     const activeTypeLabel = useMemo(
-        () => SEARCH_TYPES.find((item) => item.value === type)?.label || "All",
-        [type]
+        () => availableTypes.find((item) => item.value === type)?.label || "All",
+        [availableTypes, type]
     );
 
     return (
         <main id="search-results-page">
             <section className="search-results-header">
-                <h1>Search</h1>
-                <p>Discover posts, articles, videos, moments, and creators.</p>
+                <h1>{isSearchMode ? "Search" : "Popular"}</h1>
+                <p>
+                    {
+                        isSearchMode
+                            ? "Discover posts, articles, videos, moments, and creators."
+                            : "Discover trending public content by period and type."
+                    }
+                </p>
                 <GlobalSearchInput
                     value={inputValue}
                     onChange={setInputValue}
@@ -151,7 +210,7 @@ function SearchResults() {
             <section className="search-results-controls">
                 <div className="search-type-filters" role="tablist" aria-label="Search filters">
                     {
-                        SEARCH_TYPES.map((item) => (
+                        availableTypes.map((item) => (
                             <button
                                 key={item.value}
                                 type="button"
@@ -171,37 +230,61 @@ function SearchResults() {
                         ))
                     }
                 </div>
-                <label className="search-sort-control" htmlFor="search-sort-select">
-                    <span>Sort</span>
-                    <select
-                        id="search-sort-select"
-                        value={sort}
-                        onChange={(event) => {
-                            const nextSort = event.target.value;
-                            updateSearchParams((params) => {
-                                params.set("sort", nextSort);
-                                params.set("offset", "0");
-                            });
-                        }}
-                    >
-                        {
-                            SORTS.map((item) => (
-                                <option key={item.value} value={item.value}>
-                                    {item.label}
-                                </option>
-                            ))
-                        }
-                    </select>
-                </label>
+
+                {
+                    isSearchMode &&
+                    <label className="search-sort-control" htmlFor="search-sort-select">
+                        <span>Sort</span>
+                        <select
+                            id="search-sort-select"
+                            value={sort}
+                            onChange={(event) => {
+                                const nextSort = event.target.value;
+                                updateSearchParams((params) => {
+                                    params.set("sort", nextSort);
+                                    params.set("offset", "0");
+                                });
+                            }}
+                        >
+                            {
+                                SEARCH_SORTS.map((item) => (
+                                    <option key={item.value} value={item.value}>
+                                        {item.label}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                    </label>
+                }
+
+                {
+                    !isSearchMode &&
+                    <label className="search-sort-control" htmlFor="search-period-select">
+                        <span>Period</span>
+                        <select
+                            id="search-period-select"
+                            value={period}
+                            onChange={(event) => {
+                                const nextPeriod = event.target.value;
+                                updateSearchParams((params) => {
+                                    params.set("period", nextPeriod);
+                                    params.set("offset", "0");
+                                });
+                            }}
+                        >
+                            {
+                                POPULAR_PERIODS.map((item) => (
+                                    <option key={item.value} value={item.value}>
+                                        {item.label}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                    </label>
+                }
             </section>
 
             <section className="search-results-body">
-                {
-                    !rawQuery &&
-                    <div className="search-results-state">
-                        Enter a query to start searching.
-                    </div>
-                }
                 {
                     isError &&
                     <div className="search-results-state error">
@@ -209,15 +292,19 @@ function SearchResults() {
                     </div>
                 }
                 {
-                    rawQuery && isLoading &&
+                    isLoading &&
                     <div className="search-results-loader">
                         <Loader />
                     </div>
                 }
                 {
-                    rawQuery && !isLoading && !isError && items.length === 0 &&
+                    !isLoading && !isError && items.length === 0 &&
                     <div className="search-results-state">
-                        No results found for "{rawQuery}" in {activeTypeLabel}.
+                        {
+                            isSearchMode
+                                ? `No results found for "${rawQuery}" in ${activeTypeLabel}.`
+                                : `No popular content found for ${activeTypeLabel} in this period.`
+                        }
                     </div>
                 }
                 {
