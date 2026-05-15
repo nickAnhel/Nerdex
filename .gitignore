@@ -31,3 +31,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 client/build/
+
+# demo
+server/src/demo_seed/media_cache/
+server/src/demo_seed/output/

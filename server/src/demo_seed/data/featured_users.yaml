@@ -1,0 +1,282 @@
+version: 1
+
+defaults:
+  password_env: DEMO_SEED_USER_PASSWORD
+  fallback_password: "Demo123456!"
+  avatar_strategy: generated_initials
+  is_admin: false
+
+featured_users:
+  - username: demo_frontend_alex
+    display_name: "Alex Frontend"
+    role: active_author
+    bio: "Frontend developer writing about React, TypeScript, UI architecture and practical client-side engineering."
+    links:
+      - label: "Portfolio"
+        url: "https://example.com/demo/frontend-alex"
+      - label: "GitHub"
+        url: "https://github.com/demo-frontend-alex"
+    interests:
+      frontend: 0.95
+      product_ux: 0.45
+      backend: 0.2
+      education_career: 0.15
+    preferred_content_types:
+      post: 0.35
+      article: 0.35
+      video: 0.2
+      moment: 0.1
+    expected_tags:
+      - react
+      - typescript
+      - ui
+      - state-management
+      - css
+    author_profile:
+      primary_topics:
+        - frontend
+      secondary_topics:
+        - product_ux
+      publication_rate: high
+      engagement_level: high
+    presentation_note: "Хороший аккаунт для демонстрации frontend-рекомендаций, UI-публикаций и авторов по React."
+
+  - username: demo_backend_maria
+    display_name: "Maria Backend"
+    role: active_author
+    bio: "Python backend engineer focused on FastAPI, SQLAlchemy, async services, API design and clean architecture."
+    links:
+      - label: "Blog"
+        url: "https://example.com/demo/backend-maria"
+      - label: "GitHub"
+        url: "https://github.com/demo-backend-maria"
+    interests:
+      backend: 0.95
+      databases: 0.75
+      devops: 0.35
+      security: 0.25
+    preferred_content_types:
+      post: 0.25
+      article: 0.45
+      video: 0.2
+      moment: 0.1
+    expected_tags:
+      - python
+      - fastapi
+      - sqlalchemy
+      - api
+      - architecture
+      - postgresql
+    author_profile:
+      primary_topics:
+        - backend
+      secondary_topics:
+        - databases
+      publication_rate: high
+      engagement_level: high
+    presentation_note: "Основной аккаунт для демонстрации backend-рекомендаций, статей по архитектуре и связей с PostgreSQL."
+
+  - username: demo_db_oleg
+    display_name: "Oleg Databases"
+    role: popular_author
+    bio: "Database enthusiast writing about PostgreSQL, Neo4j, Redis, indexes, migrations and query optimization."
+    links:
+      - label: "Notes"
+        url: "https://example.com/demo/db-oleg"
+      - label: "GitHub"
+        url: "https://github.com/demo-db-oleg"
+    interests:
+      databases: 0.95
+      backend: 0.65
+      ai_ml: 0.3
+      devops: 0.25
+    preferred_content_types:
+      post: 0.25
+      article: 0.45
+      video: 0.25
+      moment: 0.05
+    expected_tags:
+      - postgresql
+      - neo4j
+      - redis
+      - indexes
+      - query-optimization
+    author_profile:
+      primary_topics:
+        - databases
+      secondary_topics:
+        - backend
+      publication_rate: medium
+      engagement_level: very_high
+    presentation_note: "Полезен для проверки рекомендаций по базам данных и будущего Neo4j recommendation graph."
+
+  - username: demo_devops_ivan
+    display_name: "Ivan DevOps"
+    role: active_author
+    bio: "DevOps-focused engineer sharing practical notes about Docker, Linux, deployment, CI/CD and monitoring."
+    links:
+      - label: "Runbook"
+        url: "https://example.com/demo/devops-ivan"
+      - label: "GitHub"
+        url: "https://github.com/demo-devops-ivan"
+    interests:
+      devops: 0.95
+      backend: 0.55
+      security: 0.35
+      databases: 0.25
+    preferred_content_types:
+      post: 0.3
+      article: 0.3
+      video: 0.3
+      moment: 0.1
+    expected_tags:
+      - docker
+      - linux
+      - deployment
+      - ci-cd
+      - monitoring
+      - nginx
+    author_profile:
+      primary_topics:
+        - devops
+      secondary_topics:
+        - backend
+        - security
+      publication_rate: medium
+      engagement_level: high
+    presentation_note: "Аккаунт для демонстрации DevOps-ленты, Docker/деплой-контента и видео."
+
+  - username: demo_ai_anna
+    display_name: "Anna AI"
+    role: active_author
+    bio: "AI and ML practitioner interested in recommendations, embeddings, LLM features and computer vision pipelines."
+    links:
+      - label: "Research"
+        url: "https://example.com/demo/ai-anna"
+      - label: "GitHub"
+        url: "https://github.com/demo-ai-anna"
+    interests:
+      ai_ml: 0.95
+      databases: 0.45
+      backend: 0.35
+      product_ux: 0.25
+    preferred_content_types:
+      post: 0.2
+      article: 0.4
+      video: 0.3
+      moment: 0.1
+    expected_tags:
+      - llm
+      - machine-learning
+      - embeddings
+      - recommendations
+      - computer-vision
+    author_profile:
+      primary_topics:
+        - ai_ml
+      secondary_topics:
+        - databases
+      publication_rate: high
+      engagement_level: high
+    presentation_note: "Лучший аккаунт для демонстрации будущих рекомендаций по ML, embeddings и графовой БД."
+
+  - username: demo_security_max
+    display_name: "Max Security"
+    role: active_commenter
+    bio: "Security-minded backend developer focused on authentication, privacy, access control and safe platform design."
+    links:
+      - label: "Security Notes"
+        url: "https://example.com/demo/security-max"
+    interests:
+      security: 0.95
+      backend: 0.5
+      devops: 0.35
+      databases: 0.2
+    preferred_content_types:
+      post: 0.35
+      article: 0.35
+      video: 0.2
+      moment: 0.1
+    expected_tags:
+      - auth
+      - jwt
+      - privacy
+      - access-control
+      - vulnerabilities
+      - security
+    author_profile:
+      primary_topics:
+        - security
+      secondary_topics:
+        - backend
+      publication_rate: medium
+      engagement_level: medium
+    presentation_note: "Подходит для проверки security-контента, комментариев и реакций на backend/devops-публикации."
+
+  - username: demo_product_lena
+    display_name: "Lena Product"
+    role: regular_user
+    bio: "Product and UX specialist interested in onboarding, analytics, user research and interface design."
+    links:
+      - label: "Portfolio"
+        url: "https://example.com/demo/product-lena"
+    interests:
+      product_ux: 0.95
+      frontend: 0.55
+      education_career: 0.35
+      ai_ml: 0.2
+    preferred_content_types:
+      post: 0.35
+      article: 0.35
+      video: 0.2
+      moment: 0.1
+    expected_tags:
+      - ux
+      - product
+      - analytics
+      - onboarding
+      - user-research
+      - interface-design
+    author_profile:
+      primary_topics:
+        - product_ux
+      secondary_topics:
+        - frontend
+      publication_rate: low
+      engagement_level: medium
+    presentation_note: "Хороший пользователь для демонстрации рекомендаций по UX, продукту и интерфейсам."
+
+  - username: demo_student_nikita
+    display_name: "Nikita Student"
+    role: cold_start_user
+    bio: "Computer science student exploring backend, databases, recommendations and diploma project development."
+    links:
+      - label: "Portfolio"
+        url: "https://example.com/demo/student-nikita"
+    interests:
+      education_career: 0.85
+      backend: 0.55
+      databases: 0.45
+      ai_ml: 0.35
+      frontend: 0.25
+    preferred_content_types:
+      post: 0.25
+      article: 0.45
+      video: 0.25
+      moment: 0.05
+    expected_tags:
+      - learning
+      - diploma
+      - python
+      - postgresql
+      - recommendations
+      - architecture
+    author_profile:
+      primary_topics:
+        - education_career
+      secondary_topics:
+        - backend
+        - databases
+      publication_rate: low
+      engagement_level: low
+    presentation_note: "Аккаунт для проверки cold-start/near-cold-start рекомендаций и учебно-проектного сценария."

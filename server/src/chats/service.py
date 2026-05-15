@@ -25,6 +25,7 @@ from src.chats.schemas import (
 )
 from src.common.exceptions import PermissionDenied
 from src.content.service import ContentService
+from src.events.presentation import build_event_get_with_users
 from src.messages.models import MessageModel
 from src.messages.presentation import build_message_get_with_user, build_reply_preview
 from src.messages.schemas import MessageGetWithUser, MessageReplyPreview
@@ -213,7 +214,12 @@ class ChatService:
                 )
                 items.append(MessageHistoryItem(**message.model_dump()))
             else:
-                items.append(EventHistoryItem.model_validate(item))
+                event = await build_event_get_with_users(
+                    item,
+                    storage=self._storage,
+                    viewer_id=user_id,
+                )
+                items.append(EventHistoryItem(**event.model_dump()))
 
         return items
 

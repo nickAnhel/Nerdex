@@ -1,0 +1,6 @@
+version: 1
+templates:
+  - "Can you share your checklist for {topic} rollout?"
+  - "I reviewed the latest {topic} update and it looks ready for validation."
+  - "Let us compare implementation notes for {topic} after the next deploy."
+  - "I attached a draft file with tasks for the {topic} milestone."

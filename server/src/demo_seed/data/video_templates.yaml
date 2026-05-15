@@ -1,0 +1,10 @@
+version: 1
+chapter_templates:
+  - title: "Context"
+    startsAtSeconds: 0
+  - title: "Implementation"
+    startsAtSeconds: 20
+  - title: "Validation"
+    startsAtSeconds: 45
+summary_templates:
+  - "This walkthrough focuses on practical engineering trade-offs and measurable quality checks."
