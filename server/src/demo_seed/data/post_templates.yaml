@@ -1,0 +1,5 @@
+version: 1
+templates:
+  - "Practical notes on {angle}: key constraints, implementation trade-offs, and verification steps."
+  - "A quick implementation log for {angle} with pitfalls to avoid in production."
+  - "What worked for {angle}: explicit contracts, robust error paths, and measurable outcomes."

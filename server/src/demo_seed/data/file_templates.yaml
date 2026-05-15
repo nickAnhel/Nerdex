@@ -1,0 +1,43 @@
+version: 1
+files:
+  - filename: react-component-checklist.pdf
+    mime_type: application/pdf
+    content: |
+      React component checklist
+      - props contract
+      - loading state
+      - error state
+  - filename: fastapi-service-layer-notes.pdf
+    mime_type: application/pdf
+    content: |
+      FastAPI service layer notes
+      - permission checks
+      - repository boundaries
+  - filename: postgresql-indexes-cheatsheet.pdf
+    mime_type: application/pdf
+    content: |
+      PostgreSQL indexes cheatsheet
+      - btree
+      - gin
+      - partial indexes
+  - filename: docker-compose-template.yml
+    mime_type: text/yaml
+    content: |
+      services:
+        api:
+          image: nerdex-api
+  - filename: neo4j-recommendations-draft.md
+    mime_type: text/markdown
+    content: |
+      # Neo4j recommendations draft
+
+      Graph schema notes.
+  - filename: jwt-auth-flow.json
+    mime_type: application/json
+    content: |
+      {"flow": ["login", "issue_token", "refresh"]}
+  - filename: deployment-commands.txt
+    mime_type: text/plain
+    content: |
+      docker compose pull
+      docker compose up -d

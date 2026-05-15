@@ -1,0 +1,6 @@
+version: 1
+templates:
+  - "Useful breakdown. I would also verify edge-case behavior under production load."
+  - "Strong point on maintainability. Explicit invariants here make future changes safer."
+  - "I tested a similar approach and transaction ordering was critical to avoid regressions."
+  - "Clear and practical. The permission boundaries are the most important part of this flow."

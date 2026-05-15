@@ -1,0 +1,284 @@
+version: 1
+
+topics:
+  frontend:
+    title: "Frontend Development"
+    description: "React, TypeScript, UI architecture, component design, state management and client-side performance."
+    weight: 1.0
+    tags:
+      - slug: react
+        title: "React"
+        weight: 1.0
+      - slug: typescript
+        title: "TypeScript"
+        weight: 0.9
+      - slug: css
+        title: "CSS"
+        weight: 0.75
+      - slug: vite
+        title: "Vite"
+        weight: 0.65
+      - slug: ui
+        title: "UI"
+        weight: 0.8
+      - slug: state-management
+        title: "State Management"
+        weight: 0.85
+    adjacent_topics:
+      backend: 0.25
+      product_ux: 0.55
+      education_career: 0.25
+    content_angles:
+      - "component architecture"
+      - "frontend performance"
+      - "forms and validation"
+      - "routing and layouts"
+      - "API integration"
+      - "UI states and error handling"
+
+  backend:
+    title: "Backend Development"
+    description: "Python backend engineering, FastAPI, async services, API design, business logic and clean architecture."
+    weight: 1.0
+    tags:
+      - slug: python
+        title: "Python"
+        weight: 1.0
+      - slug: fastapi
+        title: "FastAPI"
+        weight: 0.95
+      - slug: sqlalchemy
+        title: "SQLAlchemy"
+        weight: 0.85
+      - slug: api
+        title: "API"
+        weight: 0.8
+      - slug: async
+        title: "Async"
+        weight: 0.75
+      - slug: architecture
+        title: "Architecture"
+        weight: 0.9
+    adjacent_topics:
+      databases: 0.65
+      devops: 0.45
+      security: 0.4
+      frontend: 0.25
+    content_angles:
+      - "service layer design"
+      - "repository pattern"
+      - "validation and permissions"
+      - "background tasks"
+      - "API contracts"
+      - "error handling and logging"
+
+  databases:
+    title: "Databases"
+    description: "PostgreSQL, Neo4j, Redis, indexes, migrations, query optimization and storage design."
+    weight: 1.0
+    tags:
+      - slug: postgresql
+        title: "PostgreSQL"
+        weight: 1.0
+      - slug: neo4j
+        title: "Neo4j"
+        weight: 0.85
+      - slug: redis
+        title: "Redis"
+        weight: 0.75
+      - slug: indexes
+        title: "Indexes"
+        weight: 0.85
+      - slug: migrations
+        title: "Migrations"
+        weight: 0.75
+      - slug: query-optimization
+        title: "Query Optimization"
+        weight: 0.9
+    adjacent_topics:
+      backend: 0.65
+      devops: 0.35
+      ai_ml: 0.35
+    content_angles:
+      - "schema design"
+      - "indexes and constraints"
+      - "query performance"
+      - "graph data modeling"
+      - "migrations"
+      - "cache and read models"
+
+  devops:
+    title: "DevOps"
+    description: "Docker, Linux, deployment, CI/CD, Nginx, monitoring and infrastructure reliability."
+    weight: 1.0
+    tags:
+      - slug: docker
+        title: "Docker"
+        weight: 1.0
+      - slug: linux
+        title: "Linux"
+        weight: 0.85
+      - slug: nginx
+        title: "Nginx"
+        weight: 0.75
+      - slug: ci-cd
+        title: "CI/CD"
+        weight: 0.8
+      - slug: monitoring
+        title: "Monitoring"
+        weight: 0.8
+      - slug: deployment
+        title: "Deployment"
+        weight: 0.9
+    adjacent_topics:
+      backend: 0.45
+      databases: 0.35
+      security: 0.4
+    content_angles:
+      - "Docker Compose setup"
+      - "deployment automation"
+      - "server hardening"
+      - "reverse proxy setup"
+      - "logs and metrics"
+      - "CI/CD workflows"
+
+  ai_ml:
+    title: "AI and Machine Learning"
+    description: "Machine learning, LLMs, embeddings, recommendations, computer vision and data-driven features."
+    weight: 1.0
+    tags:
+      - slug: llm
+        title: "LLM"
+        weight: 0.95
+      - slug: machine-learning
+        title: "Machine Learning"
+        weight: 1.0
+      - slug: computer-vision
+        title: "Computer Vision"
+        weight: 0.85
+      - slug: embeddings
+        title: "Embeddings"
+        weight: 0.85
+      - slug: recommendations
+        title: "Recommendations"
+        weight: 0.95
+      - slug: data-science
+        title: "Data Science"
+        weight: 0.75
+    adjacent_topics:
+      databases: 0.35
+      backend: 0.35
+      product_ux: 0.25
+    content_angles:
+      - "recommendation systems"
+      - "graph-based recommendations"
+      - "embeddings"
+      - "LLM features"
+      - "computer vision pipelines"
+      - "model evaluation"
+
+  security:
+    title: "Security"
+    description: "Authentication, JWT, privacy, access control, vulnerabilities and secure backend design."
+    weight: 1.0
+    tags:
+      - slug: auth
+        title: "Authentication"
+        weight: 1.0
+      - slug: jwt
+        title: "JWT"
+        weight: 0.85
+      - slug: privacy
+        title: "Privacy"
+        weight: 0.85
+      - slug: access-control
+        title: "Access Control"
+        weight: 0.9
+      - slug: vulnerabilities
+        title: "Vulnerabilities"
+        weight: 0.8
+      - slug: security
+        title: "Security"
+        weight: 0.95
+    adjacent_topics:
+      backend: 0.4
+      devops: 0.4
+      databases: 0.25
+    content_angles:
+      - "authentication flow"
+      - "permission checks"
+      - "secure file access"
+      - "token handling"
+      - "privacy-aware features"
+      - "threat modeling"
+
+  product_ux:
+    title: "Product and UX"
+    description: "UX research, product thinking, analytics, onboarding, interface design and user experience."
+    weight: 1.0
+    tags:
+      - slug: ux
+        title: "UX"
+        weight: 1.0
+      - slug: product
+        title: "Product"
+        weight: 0.9
+      - slug: analytics
+        title: "Analytics"
+        weight: 0.8
+      - slug: onboarding
+        title: "Onboarding"
+        weight: 0.85
+      - slug: user-research
+        title: "User Research"
+        weight: 0.85
+      - slug: interface-design
+        title: "Interface Design"
+        weight: 0.9
+    adjacent_topics:
+      frontend: 0.55
+      ai_ml: 0.25
+      education_career: 0.3
+    content_angles:
+      - "onboarding flows"
+      - "empty states"
+      - "user research"
+      - "product metrics"
+      - "interface structure"
+      - "content discovery"
+
+  education_career:
+    title: "Education and Career"
+    description: "Learning, university projects, diploma work, interviews, career growth and developer portfolio."
+    weight: 1.0
+    tags:
+      - slug: learning
+        title: "Learning"
+        weight: 1.0
+      - slug: university
+        title: "University"
+        weight: 0.8
+      - slug: diploma
+        title: "Diploma"
+        weight: 0.85
+      - slug: interview
+        title: "Interview"
+        weight: 0.85
+      - slug: career
+        title: "Career"
+        weight: 0.9
+      - slug: portfolio
+        title: "Portfolio"
+        weight: 0.75
+    adjacent_topics:
+      frontend: 0.25
+      backend: 0.25
+      product_ux: 0.3
+      ai_ml: 0.2
+    content_angles:
+      - "learning roadmap"
+      - "diploma project planning"
+      - "portfolio preparation"
+      - "interview tasks"
+      - "career notes"
+      - "study workflow"

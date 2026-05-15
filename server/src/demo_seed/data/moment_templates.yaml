@@ -1,0 +1,5 @@
+version: 1
+templates:
+  - "Short progress update on {angle}."
+  - "Quick engineering note from today on {angle}."
+  - "Compact status update: what changed in {angle} and why it matters."

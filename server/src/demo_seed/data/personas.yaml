@@ -1,0 +1,22 @@
+version: 1
+personas:
+  - role: active_author
+    publication_rate: high
+    engagement_level: high
+    description: "Writes frequently and receives steady engagement."
+  - role: popular_author
+    publication_rate: medium
+    engagement_level: very_high
+    description: "Publishes less often but consistently attracts high engagement."
+  - role: active_commenter
+    publication_rate: low
+    engagement_level: high
+    description: "Comments actively and shapes discussion threads."
+  - role: regular_user
+    publication_rate: low
+    engagement_level: medium
+    description: "Consumes content and reacts consistently."
+  - role: cold_start_user
+    publication_rate: low
+    engagement_level: low
+    description: "Has sparse interaction history for recommendation cold-start testing."
