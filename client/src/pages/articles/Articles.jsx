@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "./Articles.css";
@@ -8,11 +8,13 @@ import ArticleService from "../../service/ArticleService";
 
 import ContentList from "../../components/content-list/ContentList";
 import ArticleCard from "../../components/article-card/ArticleCard";
+import GlobalSearchInput from "../../components/global-search-input/GlobalSearchInput";
 
 
 function Articles() {
     const { store } = useContext(StoreContext);
     const navigate = useNavigate();
+    const [searchQuery, setSearchQuery] = useState("");
 
     return (
         <div id="articles-page">
@@ -33,6 +35,13 @@ function Articles() {
                     </button>
                 }
             </div>
+
+            <GlobalSearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                onSubmit={(query) => navigate(`/search?q=${encodeURIComponent(query)}&type=article`)}
+                placeholder="Search articles and creators"
+            />
 
             <ContentList
                 fetchItems={ArticleService.getArticles}

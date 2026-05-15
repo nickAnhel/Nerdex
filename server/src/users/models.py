@@ -1,7 +1,8 @@
+import datetime
 import typing as tp
 import uuid
 
-from sqlalchemy import JSON, ForeignKey, Index, Text, text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +59,11 @@ class UserModel(Base):
     subscribers_count: Mapped[int] = mapped_column(default=0)
 
     is_admin: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+        server_default=text("now()"),
+    )
 
     created_posts: Mapped[list["ContentModel"]] = relationship(  # type: ignore[name-defined]
         back_populates="author",

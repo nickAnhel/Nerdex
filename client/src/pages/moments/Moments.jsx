@@ -1,16 +1,19 @@
-import { useContext } from "react";
-import { Link } from "react-router-dom";
+import { useContext, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import "./Moments.css";
 
 import { StoreContext } from "../..";
 import AddIcon from "../../components/icons/AddIcon";
+import GlobalSearchInput from "../../components/global-search-input/GlobalSearchInput";
 import MomentsIcon from "../../components/icons/MomentsIcon";
 import MomentsViewer from "../videos/MomentsViewer";
 
 
 function Moments() {
     const { store } = useContext(StoreContext);
+    const navigate = useNavigate();
+    const [searchQuery, setSearchQuery] = useState("");
 
     return (
         <main className="moments-page">
@@ -30,6 +33,14 @@ function Moments() {
                     </Link>
                 }
             </header>
+            <div className="moments-page-search">
+                <GlobalSearchInput
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    onSubmit={(query) => navigate(`/search?q=${encodeURIComponent(query)}&type=moment`)}
+                    placeholder="Search moments and creators"
+                />
+            </div>
             <MomentsViewer />
         </main>
     );

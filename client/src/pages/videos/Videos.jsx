@@ -1,5 +1,6 @@
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import "./Videos.css";
 
@@ -8,6 +9,7 @@ import ContentList from "../../components/content-list/ContentList";
 import VideoCard from "../../components/video-card/VideoCard";
 import ContentService from "../../service/ContentService";
 import VideoService from "../../service/VideoService";
+import GlobalSearchInput from "../../components/global-search-input/GlobalSearchInput";
 
 
 const VIDEO_TABS = {
@@ -40,7 +42,9 @@ function withoutInternalFilters(params) {
 
 function Videos() {
     const { store } = useContext(StoreContext);
+    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
+    const [searchQuery, setSearchQuery] = useState("");
     const requestedTab = searchParams.get("tab") || VIDEO_TABS.recommendations;
 
     const tabs = VIDEO_SECTIONS.filter((tab) => !tab.authOnly || store.isAuthenticated);
@@ -122,6 +126,13 @@ function Videos() {
             </aside>
 
             <section className="videos-content">
+                <GlobalSearchInput
+                    className="videos-search-entry"
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    onSubmit={(query) => navigate(`/search?q=${encodeURIComponent(query)}&type=video`)}
+                    placeholder="Search videos, tags, and creators"
+                />
                 <header className="videos-page-header">
                     <div>
                         <h1>{activeSection.label}</h1>
