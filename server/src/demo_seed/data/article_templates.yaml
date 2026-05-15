@@ -1,0 +1,10 @@
+version: 1
+sections:
+  - "Problem framing"
+  - "Implementation details"
+  - "Failure modes"
+  - "Operational checklist"
+  - "Summary"
+outro_templates:
+  - "Adopt this incrementally, validate invariants first, and measure impact before expanding scope."
+  - "Start with the smallest coherent implementation and add complexity only when data justifies it."

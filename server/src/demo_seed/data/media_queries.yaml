@@ -1,0 +1,323 @@
+version: 1
+
+provider: pixabay
+
+defaults:
+  lang: en
+  safesearch: true
+  order: popular
+  images:
+    image_type: photo
+    orientation: horizontal
+    min_width: 960
+    min_height: 540
+    per_page: 40
+    max_file_size_mb: 2
+  videos:
+    video_type: film
+    min_width: 640
+    min_height: 360
+    per_page: 20
+    max_file_size_mb: 25
+    preferred_renditions:
+      - small
+      - tiny
+    forbidden_renditions:
+      - medium
+      - large
+    max_duration_seconds: 120
+  moments:
+    video_type: film
+    per_page: 20
+    max_file_size_mb: 20
+    preferred_renditions:
+      - tiny
+      - small
+    max_duration_seconds: 90
+    require_portrait: true
+
+topics:
+  frontend:
+    categories:
+      - computer
+      - business
+      - education
+    image_queries:
+      - web development
+      - programming
+      - coding workspace
+      - user interface design
+      - software developer
+      - laptop code
+    video_queries:
+      - programming
+      - coding
+      - computer work
+      - developer laptop
+      - software technology
+    moment_queries:
+      - coding
+      - laptop work
+      - computer screen
+      - creative workspace
+    generated_cover_keywords:
+      - React
+      - TypeScript
+      - UI components
+      - State management
+      - Frontend architecture
+    negative_keywords:
+      - food
+      - beach
+      - flowers
+      - animals
+      - wedding
+      - sport
+
+  backend:
+    categories:
+      - computer
+      - business
+      - industry
+    image_queries:
+      - server room
+      - backend development
+      - software architecture
+      - code screen
+      - api development
+      - cloud server
+    video_queries:
+      - server room
+      - programming
+      - data center
+      - cloud technology
+      - software development
+    moment_queries:
+      - computer work
+      - code screen
+      - server technology
+    generated_cover_keywords:
+      - Python
+      - FastAPI
+      - API design
+      - Async backend
+      - Service layer
+    negative_keywords:
+      - food
+      - travel
+      - beach
+      - family
+      - fashion
+
+  databases:
+    categories:
+      - computer
+      - science
+      - industry
+    image_queries:
+      - database
+      - data center
+      - server rack
+      - data storage
+      - network server
+      - code database
+    video_queries:
+      - data center
+      - server
+      - network technology
+      - data storage
+      - cloud computing
+    moment_queries:
+      - server rack
+      - data center
+      - technology network
+    generated_cover_keywords:
+      - PostgreSQL
+      - Neo4j
+      - Redis
+      - Indexes
+      - Migrations
+    negative_keywords:
+      - food
+      - nature
+      - beach
+      - animals
+      - flowers
+
+  devops:
+    categories:
+      - computer
+      - industry
+      - business
+    image_queries:
+      - cloud computing
+      - server maintenance
+      - linux terminal
+      - deployment
+      - data center
+      - network cables
+    video_queries:
+      - cloud technology
+      - server
+      - network
+      - data center
+      - technology infrastructure
+    moment_queries:
+      - server room
+      - computer terminal
+      - network cables
+    generated_cover_keywords:
+      - Docker
+      - CI CD
+      - Linux
+      - Deployment
+      - Monitoring
+    negative_keywords:
+      - food
+      - fashion
+      - wedding
+      - beach
+      - animals
+
+  ai_ml:
+    categories:
+      - computer
+      - science
+      - business
+    image_queries:
+      - artificial intelligence
+      - machine learning
+      - neural network
+      - robot technology
+      - data science
+      - computer vision
+    video_queries:
+      - artificial intelligence
+      - neural network
+      - technology abstract
+      - data visualization
+      - robot technology
+    moment_queries:
+      - artificial intelligence
+      - robot
+      - technology abstract
+      - data visualization
+    generated_cover_keywords:
+      - Machine Learning
+      - LLM
+      - Embeddings
+      - Recommendations
+      - Computer Vision
+    negative_keywords:
+      - food
+      - flowers
+      - beach
+      - wedding
+      - animals
+
+  security:
+    categories:
+      - computer
+      - business
+      - science
+    image_queries:
+      - cyber security
+      - data protection
+      - digital lock
+      - hacker
+      - privacy technology
+      - secure login
+    video_queries:
+      - cyber security
+      - data protection
+      - digital security
+      - hacker code
+      - network security
+    moment_queries:
+      - digital security
+      - lock technology
+      - code screen
+    generated_cover_keywords:
+      - JWT Auth
+      - Privacy
+      - Security
+      - Vulnerabilities
+      - Access Control
+    negative_keywords:
+      - weapons
+      - violence
+      - food
+      - beach
+      - fashion
+
+  product_ux:
+    categories:
+      - business
+      - computer
+      - education
+    image_queries:
+      - ux design
+      - product design
+      - analytics dashboard
+      - design team
+      - startup team
+      - user research
+    video_queries:
+      - design team
+      - office work
+      - analytics dashboard
+      - product design
+      - teamwork
+    moment_queries:
+      - office work
+      - design desk
+      - team meeting
+      - laptop presentation
+    generated_cover_keywords:
+      - UX Research
+      - Product Analytics
+      - Onboarding
+      - User Journey
+      - Interface Design
+    negative_keywords:
+      - food
+      - wedding
+      - beach
+      - animals
+      - fashion runway
+
+  education_career:
+    categories:
+      - education
+      - business
+      - computer
+    image_queries:
+      - online learning
+      - student laptop
+      - study desk
+      - interview preparation
+      - programming course
+      - education technology
+    video_queries:
+      - online education
+      - studying
+      - laptop learning
+      - classroom technology
+      - student computer
+    moment_queries:
+      - studying
+      - student laptop
+      - online learning
+      - notes laptop
+    generated_cover_keywords:
+      - Learning
+      - Interview
+      - University
+      - Career
+      - Diploma Project
+    negative_keywords:
+      - food
+      - beach
+      - wedding
+      - animals
+      - party
