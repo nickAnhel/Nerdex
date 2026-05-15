@@ -5,7 +5,7 @@ import typing as tp
 import uuid
 
 from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.models import Base
@@ -71,6 +71,11 @@ class ContentModel(Base):
         JSON().with_variant(JSONB, "postgresql"),
         default=dict,
         server_default=text("'{}'::jsonb"),
+    )
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        nullable=False,
+        server_default=text("''::tsvector"),
     )
 
     author: Mapped["UserModel"] = relationship(  # type: ignore[name-defined]

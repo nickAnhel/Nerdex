@@ -13,6 +13,10 @@
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
 }
 
+#feed-sidebar .global-search-input {
+    margin-bottom: 0.35rem;
+}
+
 #feed-sidebar button {
     font-size: 1.2rem;
     margin-top: 1.5rem;

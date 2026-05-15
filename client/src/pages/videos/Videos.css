@@ -77,6 +77,10 @@
     padding: 1.5rem;
 }
 
+.videos-search-entry {
+    margin-bottom: 1rem;
+}
+
 .videos-page-header {
     display: flex;
     align-items: center;

@@ -21,6 +21,7 @@ from src.assets.router import router as assets_router
 from src.videos.router import router as videos_router
 from src.moments.router import router as moments_router
 from src.activity.router import router as activity_router
+from src.search.router import router as search_router
 
 # Exception handlers
 from src.common.exceptions import (
@@ -133,6 +134,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(videos_router)
     app.include_router(moments_router)
     app.include_router(activity_router)
+    app.include_router(search_router)
 
     app.mount("/ws", ws_app)
 

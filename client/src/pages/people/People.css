@@ -18,3 +18,7 @@
     background-color: #8B40ED;
     border-radius: 1rem;
 }
+
+#people .global-search-input {
+    width: min(52rem, 90%);
+}

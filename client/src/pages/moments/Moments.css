@@ -17,6 +17,10 @@
     padding: 1rem 1.5rem 0.4rem;
 }
 
+.moments-page-search {
+    padding: 0.4rem 1.5rem 0.9rem;
+}
+
 .moments-page-title {
     display: flex;
     align-items: center;
@@ -76,6 +80,10 @@
 
     .moments-page-title p {
         display: none;
+    }
+
+    .moments-page-search {
+        padding: 0.4rem 1rem 0.7rem;
     }
 
     .moments-page-new span {

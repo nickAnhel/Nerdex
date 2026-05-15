@@ -1,20 +1,30 @@
 import { useContext, useState } from "react";
-import { NavLink } from "react-router-dom"
+import { NavLink, useNavigate } from "react-router-dom";
 import "./FeedSidebar.css";
 
 import { StoreContext } from "../..";
 import PostService from "../../service/PostService";
 
+import GlobalSearchInput from "../global-search-input/GlobalSearchInput";
 import PostModal from "../post-modal/PostModal";
 
 
 function FeedSidebar() {
     const { store } = useContext(StoreContext);
+    const navigate = useNavigate();
 
     const [isCreatePostModalActive, setIsCreatePostModalActive] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     return (
         <div id="feed-sidebar">
+            <GlobalSearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                onSubmit={(query) => navigate(`/search?q=${encodeURIComponent(query)}&type=all`)}
+                placeholder="Search all content"
+            />
+
             <div id="feed-page-selector">
                 <NavLink end to="/feed" className="feed-sidebar-item" >
                     Global

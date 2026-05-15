@@ -12,6 +12,7 @@ import FeedIcon from "../icons/FeedIcon";
 import LoginIcon from "../icons/LoginIcon";
 import MomentsIcon from "../icons/MomentsIcon";
 import PeopleIcon from "../icons/PeopleIcon";
+import SearchIcon from "../icons/SearchIcon";
 import VideoIcon from "../icons/VideoIcon";
 import { getAvatarRenderKey, getAvatarUrl } from "../../utils/avatar";
 
@@ -31,6 +32,10 @@ function Sidebar() {
                 <NavLink to="/feed" className="sidebar-item">
                     <FeedIcon />
                     Feed
+                </NavLink>
+                <NavLink to="/search?type=all" className="sidebar-item">
+                    <SearchIcon />
+                    Search
                 </NavLink>
                 <NavLink to="/articles" className="sidebar-item">
                     <ArticleIcon />
