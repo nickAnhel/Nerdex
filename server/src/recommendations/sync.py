@@ -7,9 +7,12 @@ import json
 from src.common.database import async_session_maker
 from src.common.model_registry import import_all_models
 from src.config import settings
+from src.observability import configure_logging
 from src.recommendations.graph_repository import RecommendationGraphRepository, create_neo4j_driver
 from src.recommendations.postgres_repository import RecommendationPostgresRepository
 from src.recommendations.sync_service import RecommendationGraphSyncService
+
+configure_logging()
 
 
 def build_parser() -> argparse.ArgumentParser:

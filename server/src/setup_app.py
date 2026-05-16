@@ -23,6 +23,8 @@ from src.moments.router import router as moments_router
 from src.activity.router import router as activity_router
 from src.search.router import router as search_router
 from src.recommendations.router import router as recommendations_router
+from src.observability.router import router as observability_router
+from src.observability.middleware import request_logging_middleware
 
 # Exception handlers
 from src.common.exceptions import (
@@ -137,6 +139,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(activity_router)
     app.include_router(search_router)
     app.include_router(recommendations_router)
+    app.include_router(observability_router)
 
     app.mount("/ws", ws_app)
 
@@ -196,8 +199,9 @@ def register_middleware(app: FastAPI) -> None:
         allow_origins=settings.cors.allowed_hosts,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "Accept"],
+        allow_headers=["Content-Type", "Authorization", "Accept", "X-Request-ID"],
     )
+    app.middleware("http")(request_logging_middleware)
 
 
 def setup_app(app: FastAPI) -> None:

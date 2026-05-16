@@ -107,15 +107,18 @@ def _check_token_type(
 
 def get_current_user_closure() -> Callable[..., Coroutine[Any, Any, UserGet]]:
     async def get_current_user_wrapper(
+        request: Request,
         token_payload: dict[str, Any] = Depends(_get_token_payload_from_header),
         user_service: UserService = Depends(get_user_service),
     ) -> UserGet:
         _check_token_type(token_payload, ACCESS_TOKEN_TYPE)
 
         try:
-            return await user_service.get_user(
+            user = await user_service.get_user(
                 user_id=token_payload.get("sub"),
             )
+            request.state.user_id = user.user_id
+            return user
 
         except UserNotFound as exc:
             raise HTTPException(
@@ -130,6 +133,7 @@ get_current_user = get_current_user_closure()
 
 
 async def get_current_optional_user(
+    request: Request,
     token_payload: dict[str, Any] | None = Depends(_get_token_payload_from_header_optional),
     user_service: UserService = Depends(get_user_service),
 ) -> UserGet | None:
@@ -139,9 +143,11 @@ async def get_current_optional_user(
     _check_token_type(token_payload, ACCESS_TOKEN_TYPE)
 
     try:
-        return await user_service.get_user(
+        user = await user_service.get_user(
             user_id=token_payload.get("sub"),
         )
+        request.state.user_id = user.user_id
+        return user
 
     except UserNotFound as exc:
         raise HTTPException(
@@ -151,15 +157,18 @@ async def get_current_optional_user(
 
 
 async def get_current_user_for_refresh(
+    request: Request,
     token_payload: dict[str, Any] = Depends(_get_token_payload_from_cookie),
     user_service: UserService = Depends(get_user_service),
 ) -> UserGet:
     _check_token_type(token_payload, REFRESH_TOKEN_TYPE)
 
     try:
-        return await user_service.get_user(
+        user = await user_service.get_user(
             user_id=token_payload.get("sub"),
         )
+        request.state.user_id = user.user_id
+        return user
 
     except UserNotFound as exc:
         raise HTTPException(

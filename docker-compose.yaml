@@ -194,7 +194,69 @@ services:
       server:
         condition: service_healthy
 
+  loki:
+    container_name: loki
+    image: grafana/loki:3.0.0
+    restart: on-failure
+    command: -config.file=/etc/loki/config.yaml
+    ports:
+      - 3100:3100
+    volumes:
+      - ./monitoring/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+
+  alloy:
+    container_name: alloy
+    image: grafana/alloy:v1.7.2
+    restart: on-failure
+    command: run /etc/alloy/config.alloy
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      loki:
+        condition: service_started
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.53.0
+    restart: on-failure
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - 9090:9090
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      server:
+        condition: service_healthy
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:11.0.0
+    restart: on-failure
+    ports:
+      - 3001:3000
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+
 volumes:
   postgres_data:
   neo4j_data:
   node_modules:
+  loki_data:
+  prometheus_data:
+  grafana_data:

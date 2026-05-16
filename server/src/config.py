@@ -1,7 +1,7 @@
 from urllib.parse import urlsplit, urlunsplit
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,9 +45,22 @@ class ProjectSettings(ConfigBase):
 
 
 class LoggingConfig(ConfigBase):
-    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-
-    model_config = SettingsConfigDict(env_prefix="logging_")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        validation_alias=AliasChoices("LOG_LEVEL", "LOGGING_LEVEL"),
+    )
+    format: Literal["plain", "json"] = Field(
+        default="plain",
+        validation_alias="LOG_FORMAT",
+    )
+    slow_request_threshold_ms: int = Field(
+        default=1000,
+        validation_alias="SLOW_REQUEST_THRESHOLD_MS",
+    )
+    slow_recommendation_threshold_ms: int = Field(
+        default=1000,
+        validation_alias="SLOW_RECOMMENDATION_THRESHOLD_MS",
+    )
 
 
 class AdminSettings(ConfigBase):

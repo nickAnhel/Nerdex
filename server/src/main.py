@@ -2,7 +2,10 @@ from fastapi import FastAPI
 
 from src.admin.admin import create_admin
 from src.config import settings
+from src.observability import configure_logging
 from src.setup_app import setup_app
+
+configure_logging()
 
 
 app = FastAPI(
