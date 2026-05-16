@@ -43,6 +43,7 @@
 .article-hero,
 .article-body,
 .article-feedback,
+.article-similar,
 .article-comments,
 .article-toc-card {
     background: #1f1f1f;
@@ -53,6 +54,7 @@
 
 .article-hero,
 .article-body,
+.article-similar,
 .article-comments {
     padding: 1.5rem;
 }
@@ -296,6 +298,7 @@
 
     .article-hero,
     .article-body,
+    .article-similar,
     .article-comments {
         padding: 1rem;
     }

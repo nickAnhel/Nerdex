@@ -30,6 +30,10 @@ export default class ContentService {
         return api.get("/contents/history", { params });
     }
 
+    static async getSimilarContent(contentId, params) {
+        return api.get(`/recommendations/content/${contentId}/similar`, { params });
+    }
+
     static async setReaction(contentId, reactionType) {
         return api.post(`/contents/${contentId}/reaction`, { reaction_type: reactionType });
     }

@@ -1,0 +1,25 @@
+.similar-content-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.similar-content-block h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #e8eaed;
+}
+
+.similar-content-state {
+    border: 1px solid #303030;
+    border-radius: 1rem;
+    padding: 1rem;
+    color: #b5b5b5;
+    background: #151515;
+}
+
+.similar-content-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}

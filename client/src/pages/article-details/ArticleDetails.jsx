@@ -11,6 +11,7 @@ import Loader from "../../components/loader/Loader";
 import Modal from "../../components/modal/Modal";
 import CommentSection from "../../components/comment-section/CommentSection";
 import ArticleRenderer from "../../components/article-renderer/ArticleRenderer";
+import SimilarContentBlock from "../../components/similar-content-block/SimilarContentBlock";
 import TagChip from "../../components/tag-chip/TagChip";
 import CommentIcon from "../../components/icons/CommentIcon";
 import DislikeIcon from "../../components/icons/DislikeIcon";
@@ -456,6 +457,14 @@ function ArticleDetails() {
                                 </button>
                             </>
                         }
+                    </section>
+
+                    <section className="article-similar">
+                        <SimilarContentBlock
+                            contentId={article.article_id}
+                            contentType="article"
+                            limit={4}
+                        />
                     </section>
 
                     <section className="article-comments" ref={commentsRef}>

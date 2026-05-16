@@ -12,6 +12,7 @@ dependencies = [
     "bcrypt[crypto]>=4.3.0",
     "celery[redis]>=5.4.0",
     "fastapi>=0.115.11",
+    "neo4j>=5.28.2",
     "pillow>=11.2.1",
     "pydantic-settings>=2.8.1",
     "pyjwt[crypto]>=2.10.1",

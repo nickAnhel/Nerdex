@@ -71,6 +71,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      neo4j:
+        condition: service_healthy
 
   celery_beat:
     container_name: celery_beat
@@ -92,6 +94,31 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      neo4j:
+        condition: service_healthy
+
+  neo4j_backfill:
+    container_name: neo4j_backfill
+    restart: "no"
+    command: bash -c "python -m src.recommendations.sync full-rebuild"
+    build:
+      context: ./server
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./server/src:/app/src
+      - ./server/alembic:/app/alembic
+      - ./server/tests:/app/tests
+      - ./server/pyproject.toml:/app/pyproject.toml
+      - ./server/uv.lock:/app/uv.lock
+      - ./server/alembic.ini:/app/alembic.ini
+      - ./server/.env:/app/.env
+    env_file:
+      - ./server/.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      neo4j:
+        condition: service_healthy
 
   db:
     container_name: db
@@ -120,6 +147,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: neo4j
+    restart: on-failure
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/password
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -a bolt://127.0.0.1:7687 -u neo4j -p password 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   pgadmin:
     container_name: pgadmin
@@ -152,4 +196,5 @@ services:
 
 volumes:
   postgres_data:
+  neo4j_data:
   node_modules:
