@@ -94,6 +94,7 @@ async def get_author_gallery(
 
 @router.get("/subscriptions")
 async def get_subscriptions_feed(
+    content_type: ContentTypeEnum | None = None,
     order: ContentOrder = ContentOrder.CREATED_AT,
     desc: bool = True,
     offset: int = Query(default=0, ge=0),
@@ -103,6 +104,7 @@ async def get_subscriptions_feed(
 ) -> list[ContentListItemGet]:
     return await content_service.get_subscriptions_feed(
         user_id=user.user_id,
+        content_type=content_type,
         order=order,
         desc=desc,
         offset=offset,

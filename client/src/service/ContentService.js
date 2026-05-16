@@ -2,6 +2,10 @@ import api from "../http";
 
 
 export default class ContentService {
+    static async getRecommendationsFeed(params) {
+        return api.get("/recommendations/feed", { params });
+    }
+
     static async getFeed(params) {
         return api.get("/contents/list", { params });
     }

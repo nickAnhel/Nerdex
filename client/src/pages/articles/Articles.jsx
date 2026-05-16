@@ -1,20 +1,59 @@
-import { useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useContext, useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import "./Articles.css";
 
 import { StoreContext } from "../..";
-import ArticleService from "../../service/ArticleService";
+import ContentService from "../../service/ContentService";
 
 import ContentList from "../../components/content-list/ContentList";
 import ArticleCard from "../../components/article-card/ArticleCard";
 import GlobalSearchInput from "../../components/global-search-input/GlobalSearchInput";
 
+const ARTICLE_TABS = {
+    recommendations: "recommendations",
+    subscriptions: "subscriptions",
+};
+
 
 function Articles() {
     const { store } = useContext(StoreContext);
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [searchQuery, setSearchQuery] = useState("");
+    const requestedTab = searchParams.get("tab") || ARTICLE_TABS.recommendations;
+    const activeTab = (
+        requestedTab === ARTICLE_TABS.subscriptions && store.isAuthenticated
+            ? ARTICLE_TABS.subscriptions
+            : ARTICLE_TABS.recommendations
+    );
+
+    useEffect(() => {
+        if (requestedTab !== activeTab) {
+            setSearchParams({ tab: activeTab }, { replace: true });
+        }
+    }, [activeTab, requestedTab, setSearchParams]);
+
+    const setTab = (tab) => {
+        setSearchParams({ tab });
+    };
+
+    const fetchItems = activeTab === ARTICLE_TABS.subscriptions
+        ? ContentService.getSubscriptionsFeed
+        : ContentService.getRecommendationsFeed;
+    const filters = activeTab === ARTICLE_TABS.subscriptions
+        ? {
+            content_type: "article",
+            order: "published_at",
+            desc: true,
+        }
+        : {
+            content_type: "article",
+            sort: "relevance",
+        };
+    const emptyText = activeTab === ARTICLE_TABS.subscriptions
+        ? "No articles from subscriptions"
+        : "No article recommendations yet";
 
     return (
         <div id="articles-page">
@@ -43,11 +82,32 @@ function Articles() {
                 placeholder="Search articles and creators"
             />
 
+            <div className="articles-page-sections" role="tablist" aria-label="Article sections">
+                <button
+                    type="button"
+                    className={activeTab === ARTICLE_TABS.recommendations ? "active" : ""}
+                    onClick={() => setTab(ARTICLE_TABS.recommendations)}
+                >
+                    Recommendations
+                </button>
+                {
+                    store.isAuthenticated &&
+                    <button
+                        type="button"
+                        className={activeTab === ARTICLE_TABS.subscriptions ? "active" : ""}
+                        onClick={() => setTab(ARTICLE_TABS.subscriptions)}
+                    >
+                        Subscriptions
+                    </button>
+                }
+            </div>
+
             <ContentList
-                fetchItems={ArticleService.getArticles}
-                filters={{ desc: true, order: "published_at" }}
-                refresh={store.isRefreshPosts}
-                emptyText="No articles yet"
+                key={`articles-${activeTab}`}
+                fetchItems={fetchItems}
+                filters={filters}
+                refresh={`${store.isRefreshPosts}-${activeTab}`}
+                emptyText={emptyText}
                 renderItem={({ item, removeItem, ref }) => (
                     <ArticleCard
                         key={item.article_id || item.content_id}

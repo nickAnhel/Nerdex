@@ -83,6 +83,7 @@ class ContentRepository:
         self,
         *,
         user_id: uuid.UUID,
+        content_type: ContentTypeEnum | None,
         order: ContentOrder,
         order_desc: bool,
         offset: int,
@@ -113,6 +114,11 @@ class ContentRepository:
                     VideoPlaybackDetailsModel.processing_status == VideoProcessingStatusEnum.READY,
                 )
             )
+        )
+        if content_type is not None:
+            stmt = stmt.where(ContentModel.content_type == content_type)
+        stmt = (
+            stmt
             .order_by(self._order_by_clause(order=order, order_desc=order_desc))
             .offset(offset)
             .limit(limit)

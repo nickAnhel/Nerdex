@@ -49,7 +49,7 @@ def test_event_mapping_tracks_only_supported_recommendation_events() -> None:
         _event(action_type="content_reaction_removed", content_id=content_id, metadata={"previous_reaction": "like"}),
         _event(action_type="content_reaction_removed", content_id=content_id, metadata={"previous_reaction": "dislike"}),
         _event(action_type="content_reaction_removed", content_id=content_id, metadata={"previous_reaction": "heart"}),
-        _event(action_type="content_view", content_id=content_id),
+        _event(action_type="content_view", content_id=content_id, metadata={"progress_percent": 96}),
         _event(action_type="content_comment", content_id=content_id),
         _event(action_type="user_follow", target_user_id=target_user_id),
         _event(action_type="user_unfollow", target_user_id=target_user_id),
@@ -61,6 +61,7 @@ def test_event_mapping_tracks_only_supported_recommendation_events() -> None:
     assert len(remove_liked_rows) == 1
     assert len(remove_disliked_rows) == 1
     assert len(viewed_rows) == 1
+    assert viewed_rows[0]["progress_percent"] == 96
     assert len(commented_rows) == 1
     assert len(followed_rows) == 1
     assert len(unfollowed_rows) == 1

@@ -6,8 +6,12 @@ import pytest
 
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum
 from src.content.schemas import ContentListItemGet
-from src.recommendations.graph_repository import SimilarContentGraphResult
-from src.recommendations.schemas import SimilarContentListGet
+from src.recommendations.graph_repository import RecommendationFeedGraphResult, SimilarContentGraphResult
+from src.recommendations.schemas import (
+    RecommendationFeedContentTypeEnum,
+    RecommendationFeedSortEnum,
+    SimilarContentListGet,
+)
 from src.recommendations.service import RecommendationService
 from src.users.schemas import UserGet
 
@@ -32,9 +36,31 @@ class FakeGraphRepository:
         return self.rows
 
 
+class FakeGraphFeedRepository(FakeGraphRepository):
+    def __init__(
+        self,
+        rows: list[RecommendationFeedGraphResult],
+        should_fail: bool = False,
+    ) -> None:
+        super().__init__(rows=[], should_fail=should_fail)
+        self.feed_rows = rows
+
+    async def get_recommendation_feed(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(kwargs)
+        if self.should_fail:
+            raise RuntimeError("neo4j unavailable")
+        return self.feed_rows
+
+
 class FakePostgresRepository:
-    def __init__(self, hydrated: dict[uuid.UUID, FakeContent]) -> None:
+    def __init__(
+        self,
+        hydrated: dict[uuid.UUID, FakeContent],
+        fallback_items: list[FakeContent] | None = None,
+    ) -> None:
         self.hydrated = hydrated
+        self.fallback_items = fallback_items or []
+        self.fallback_calls: list[dict] = []
 
     async def get_visible_content_by_ids(self, *, content_ids, viewer_id):  # type: ignore[no-untyped-def]
         return {
@@ -42,6 +68,10 @@ class FakePostgresRepository:
             for content_id in content_ids
             if content_id in self.hydrated
         }
+
+    async def get_recommendation_fallback_content(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.fallback_calls.append(kwargs)
+        return self.fallback_items
 
 
 class FakeProjector:
@@ -145,3 +175,79 @@ async def test_service_returns_empty_when_graph_unavailable() -> None:
 
     assert response.items == []
     assert response.limit == 4
+
+
+@pytest.mark.anyio
+async def test_recommendations_feed_hydrates_graph_order_and_filters_missing() -> None:
+    viewer_id = uuid.uuid4()
+    kept_id = uuid.uuid4()
+    missing_id = uuid.uuid4()
+
+    graph = FakeGraphFeedRepository(
+        rows=[
+            RecommendationFeedGraphResult(content_id=missing_id, score=10.0, reason="personalized_graph_feed"),
+            RecommendationFeedGraphResult(content_id=kept_id, score=9.0, reason="personalized_graph_feed"),
+        ]
+    )
+    postgres = FakePostgresRepository(
+        hydrated={
+            kept_id: FakeContent(
+                content_id=kept_id,
+                content_type=ContentTypeEnum.POST,
+                author_id=uuid.uuid4(),
+            )
+        }
+    )
+    service = RecommendationService(
+        graph_repository=graph,  # type: ignore[arg-type]
+        postgres_repository=postgres,  # type: ignore[arg-type]
+        projector_registry=FakeProjectorRegistry(),  # type: ignore[arg-type]
+        asset_storage=None,
+    )
+
+    response = await service.get_recommendations_feed(
+        viewer_id=viewer_id,
+        content_type=RecommendationFeedContentTypeEnum.ALL,
+        sort=RecommendationFeedSortEnum.RELEVANCE,
+        offset=0,
+        limit=5,
+    )
+
+    assert [item.content_id for item in response] == [kept_id]
+
+
+@pytest.mark.anyio
+async def test_recommendations_feed_uses_fallback_when_graph_fails() -> None:
+    fallback_id = uuid.uuid4()
+    viewer_id = uuid.uuid4()
+    graph = FakeGraphFeedRepository(rows=[], should_fail=True)
+    postgres = FakePostgresRepository(
+        hydrated={},
+        fallback_items=[
+            FakeContent(
+                content_id=fallback_id,
+                content_type=ContentTypeEnum.VIDEO,
+                author_id=uuid.uuid4(),
+            )
+        ],
+    )
+    service = RecommendationService(
+        graph_repository=graph,  # type: ignore[arg-type]
+        postgres_repository=postgres,  # type: ignore[arg-type]
+        projector_registry=FakeProjectorRegistry(),  # type: ignore[arg-type]
+        asset_storage=None,
+    )
+
+    response = await service.get_recommendations_feed(
+        viewer_id=viewer_id,
+        content_type=RecommendationFeedContentTypeEnum.VIDEO,
+        sort=RecommendationFeedSortEnum.NEWEST,
+        offset=4,
+        limit=3,
+    )
+
+    assert [item.content_id for item in response] == [fallback_id]
+    assert len(postgres.fallback_calls) == 1
+    assert postgres.fallback_calls[0]["offset"] == 4
+    assert postgres.fallback_calls[0]["sort"] == "newest"
+    assert postgres.fallback_calls[0]["content_type"] == ContentTypeEnum.VIDEO

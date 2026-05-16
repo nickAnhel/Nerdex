@@ -57,6 +57,7 @@ class ContentViewedGraphRow:
     user_id: uuid.UUID
     content_id: uuid.UUID
     views_count: int
+    progress_percent: int
     last_seen_at: datetime.datetime
 
 
@@ -149,6 +150,7 @@ class RecommendationPostgresRepository:
                 ContentViewSessionModel.viewer_id,
                 ContentViewSessionModel.content_id,
                 func.count(ContentViewSessionModel.view_session_id).label("views_count"),
+                func.max(ContentViewSessionModel.progress_percent).label("progress_percent"),
                 func.max(ContentViewSessionModel.last_seen_at).label("last_seen_at"),
             )
             .where(ContentViewSessionModel.viewer_id.is_not(None))
@@ -159,6 +161,7 @@ class RecommendationPostgresRepository:
                 user_id=row.viewer_id,
                 content_id=row.content_id,
                 views_count=int(row.views_count or 0),
+                progress_percent=int(row.progress_percent or 0),
                 last_seen_at=row.last_seen_at,
             )
             for row in result.all()
@@ -277,6 +280,78 @@ class RecommendationPostgresRepository:
             item.my_reaction = my_reaction
             item.is_owner = item.author_id == viewer_id
             items[item.content_id] = item
+        return items
+
+    async def get_recommendation_fallback_content(
+        self,
+        *,
+        viewer_id: uuid.UUID | None,
+        content_type: ContentTypeEnum | None,
+        sort: str,
+        offset: int,
+        limit: int,
+        exclude_content_ids: list[uuid.UUID],
+    ) -> list[ContentModel]:
+        query = (
+            self._build_content_query(viewer_id=viewer_id)
+            .outerjoin(VideoPlaybackDetailsModel)
+            .where(*self._content_visibility_clauses())
+        )
+
+        if content_type is not None:
+            query = query.where(ContentModel.content_type == content_type)
+        if exclude_content_ids:
+            query = query.where(ContentModel.content_id.notin_(exclude_content_ids))
+
+        if viewer_id is not None:
+            disliked_subquery = (
+                select(ContentReactionModel.content_id)
+                .where(ContentReactionModel.user_id == viewer_id)
+                .where(ContentReactionModel.reaction_type == ReactionTypeEnum.DISLIKE)
+                .subquery()
+            )
+            finished_subquery = (
+                select(ContentViewSessionModel.content_id)
+                .where(ContentViewSessionModel.viewer_id == viewer_id)
+                .where(ContentViewSessionModel.progress_percent >= 90)
+                .group_by(ContentViewSessionModel.content_id)
+                .subquery()
+            )
+            query = (
+                query
+                .where(ContentModel.author_id != viewer_id)
+                .where(ContentModel.content_id.notin_(select(disliked_subquery.c.content_id)))
+                .where(ContentModel.content_id.notin_(select(finished_subquery.c.content_id)))
+            )
+
+        published_sort = func.coalesce(ContentModel.published_at, ContentModel.created_at)
+        if sort == "oldest":
+            query = query.order_by(published_sort.asc())
+        elif sort == "newest":
+            query = query.order_by(desc(published_sort))
+        else:
+            relevance_score = (
+                (ContentModel.likes_count * 4)
+                - (ContentModel.dislikes_count * 6)
+                + (ContentModel.comments_count * 5)
+                + ContentModel.views_count
+            )
+            query = query.order_by(desc(relevance_score), desc(published_sort))
+
+        result = await self._session.execute(query.offset(offset).limit(limit))
+
+        if viewer_id is None:
+            items = list(result.scalars().unique().all())
+            for item in items:
+                item.my_reaction = None
+                item.is_owner = False
+            return items
+
+        items: list[ContentModel] = []
+        for item, my_reaction in result.unique().all():
+            item.my_reaction = my_reaction
+            item.is_owner = item.author_id == viewer_id
+            items.append(item)
         return items
 
     async def _get_content_nodes_query(

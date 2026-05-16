@@ -42,6 +42,28 @@
     line-height: 1.7;
 }
 
+.articles-page-sections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.articles-page-sections button {
+    border: 1px solid #3f3f3f;
+    background: #1a1a1a;
+    color: #d7d7d7;
+    border-radius: 999px;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.articles-page-sections button.active {
+    border-color: #8b40ed;
+    background: rgba(139, 64, 237, 0.18);
+    color: #ffffff;
+}
+
 @media (max-width: 760px) {
     #articles-page {
         padding: 1rem 0.75rem 1.5rem;

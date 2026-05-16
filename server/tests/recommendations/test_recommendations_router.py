@@ -4,8 +4,12 @@ import pytest
 
 from src.auth.dependencies import get_current_optional_user
 from src.content.enums import ContentTypeEnum
-from src.recommendations.router import get_similar_content, router
-from src.recommendations.schemas import SimilarContentListGet
+from src.recommendations.router import get_recommendations_feed, get_similar_content, router
+from src.recommendations.schemas import (
+    RecommendationFeedContentTypeEnum,
+    RecommendationFeedSortEnum,
+    SimilarContentListGet,
+)
 from src.users.schemas import UserGet
 
 
@@ -16,6 +20,10 @@ class FakeRecommendationService:
     async def get_similar_content(self, **kwargs):  # type: ignore[no-untyped-def]
         self.calls.append(kwargs)
         return SimilarContentListGet(items=[], limit=kwargs["limit"])
+
+    async def get_recommendations_feed(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(kwargs)
+        return []
 
 
 @pytest.fixture
@@ -59,3 +67,33 @@ async def test_similar_endpoint_passes_filters_to_service() -> None:
     assert call["viewer_id"] == viewer.user_id
     assert call["limit"] == 6
     assert call["content_type"] == ContentTypeEnum.VIDEO
+
+
+@pytest.mark.anyio
+async def test_recommendations_feed_endpoint_passes_filters_to_service() -> None:
+    viewer = UserGet(
+        user_id=uuid.uuid4(),
+        username="viewer",
+        is_admin=False,
+        subscribers_count=0,
+        avatar=None,
+        avatar_asset_id=None,
+    )
+    service = FakeRecommendationService()
+
+    response = await get_recommendations_feed(
+        content_type=RecommendationFeedContentTypeEnum.VIDEO,
+        sort=RecommendationFeedSortEnum.NEWEST,
+        offset=10,
+        limit=5,
+        user=viewer,
+        recommendation_service=service,  # type: ignore[arg-type]
+    )
+
+    assert response == []
+    call = service.calls[0]
+    assert call["viewer_id"] == viewer.user_id
+    assert call["content_type"] == RecommendationFeedContentTypeEnum.VIDEO
+    assert call["sort"] == RecommendationFeedSortEnum.NEWEST
+    assert call["offset"] == 10
+    assert call["limit"] == 5

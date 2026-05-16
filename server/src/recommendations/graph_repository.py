@@ -9,10 +9,28 @@ from neo4j import AsyncGraphDatabase
 
 from src.config import settings
 from src.recommendations.enums import RecommendationSyncStateKey
+from src.recommendations.scoring import (
+    AUTHOR_AFFINITY_WEIGHT,
+    COLLABORATIVE_COMMENT_WEIGHT,
+    COLLABORATIVE_LIKE_WEIGHT,
+    COLLABORATIVE_VIEW_WEIGHT,
+    COLLABORATIVE_WEIGHT,
+    CONTENT_QUALITY_WEIGHT,
+    FRESHNESS_DECAY_DAYS,
+    FRESHNESS_WEIGHT,
+    TAG_AFFINITY_WEIGHT,
+)
 
 
 @dataclass(slots=True)
 class SimilarContentGraphResult:
+    content_id: uuid.UUID
+    score: float
+    reason: str
+
+
+@dataclass(slots=True)
+class RecommendationFeedGraphResult:
     content_id: uuid.UUID
     score: float
     reason: str
@@ -209,6 +227,7 @@ class RecommendationGraphRepository:
             MERGE (u)-[rel:VIEWED]->(c)
             SET
                 rel.views_count = row.views_count,
+                rel.progress_percent = coalesce(row.progress_percent, 0),
                 rel.last_seen_at = CASE WHEN row.last_seen_at IS NULL THEN datetime() ELSE datetime(row.last_seen_at) END,
                 rel.updated_at = datetime()
             """,
@@ -225,6 +244,14 @@ class RecommendationGraphRepository:
             ON CREATE SET rel.views_count = 0
             SET
                 rel.views_count = coalesce(rel.views_count, 0) + coalesce(row.views_count, 1),
+                rel.progress_percent = CASE
+                    WHEN row.progress_percent IS NULL THEN coalesce(rel.progress_percent, 0)
+                    ELSE CASE
+                        WHEN row.progress_percent > coalesce(rel.progress_percent, 0)
+                            THEN row.progress_percent
+                        ELSE coalesce(rel.progress_percent, 0)
+                    END
+                END,
                 rel.last_seen_at = CASE WHEN row.last_seen_at IS NULL THEN datetime() ELSE datetime(row.last_seen_at) END,
                 rel.updated_at = datetime()
             """,
@@ -512,6 +539,150 @@ class RecommendationGraphRepository:
                     content_id=uuid.UUID(candidate_content_id),
                     score=float(row.get("score") or 0.0),
                     reason=str(row.get("reason") or "quality"),
+                )
+            )
+        return result
+
+    async def get_recommendation_feed(
+        self,
+        *,
+        viewer_id: uuid.UUID | None,
+        content_type: str | None,
+        sort: str,
+        offset: int,
+        limit: int,
+    ) -> list[RecommendationFeedGraphResult]:
+        rows = await self._read(
+            """
+            OPTIONAL MATCH (viewer:User {user_id: $viewer_id})
+            MATCH (candidate:Content)
+            WHERE candidate.status = 'published'
+                AND candidate.visibility = 'public'
+                AND ($content_type IS NULL OR candidate.content_type = $content_type)
+                AND (
+                    viewer IS NULL
+                    OR candidate.author_id IS NULL
+                    OR candidate.author_id <> viewer.user_id
+                )
+                AND (
+                    viewer IS NULL
+                    OR NOT EXISTS {
+                        MATCH (viewer)-[:DISLIKED]->(candidate)
+                    }
+                )
+                AND (
+                    viewer IS NULL
+                    OR NOT EXISTS {
+                        MATCH (viewer)-[seen:VIEWED]->(candidate)
+                        WHERE coalesce(seen.progress_percent, 0) >= 90
+                    }
+                )
+            OPTIONAL MATCH (viewer)-[interest:INTERESTED_IN]->(:Tag)<-[:HAS_TAG]-(candidate)
+            WITH viewer, candidate, coalesce(sum(interest.weight), 0.0) AS tag_affinity
+            OPTIONAL MATCH (viewer)-[author_affinity:AFFINITY_TO_AUTHOR]->(:User)-[:AUTHORED]->(candidate)
+            WITH
+                viewer,
+                candidate,
+                tag_affinity,
+                coalesce(sum(author_affinity.weight), 0.0) AS author_affinity
+            CALL {
+                WITH viewer, candidate
+                WITH viewer, candidate WHERE viewer IS NOT NULL
+                MATCH (viewer)-[:LIKED|VIEWED|COMMENTED]->(seed:Content)<-[:LIKED|VIEWED|COMMENTED]-(peer:User)
+                WHERE peer.user_id <> viewer.user_id
+                WITH candidate, peer, count(DISTINCT seed) AS overlap
+                WHERE overlap > 0
+                MATCH (peer)-[peer_rel:LIKED|VIEWED|COMMENTED]->(candidate)
+                RETURN coalesce(sum(
+                    CASE type(peer_rel)
+                        WHEN 'LIKED' THEN toFloat(overlap) * $collaborative_like_weight
+                        WHEN 'VIEWED' THEN toFloat(overlap) * $collaborative_view_weight
+                        WHEN 'COMMENTED' THEN toFloat(overlap) * $collaborative_comment_weight
+                        ELSE 0.0
+                    END
+                ), 0.0) AS collaborative_score
+                UNION
+                WITH candidate
+                RETURN 0.0 AS collaborative_score
+            }
+            WITH
+                candidate,
+                tag_affinity,
+                author_affinity,
+                max(collaborative_score) AS collaborative_score
+            WITH
+                candidate,
+                tag_affinity,
+                author_affinity,
+                collaborative_score,
+                coalesce(candidate.quality_score, 0.0) AS content_quality_score,
+                duration.inDays(coalesce(candidate.published_at, candidate.created_at), datetime()).days AS age_days
+            WITH
+                candidate,
+                tag_affinity,
+                author_affinity,
+                collaborative_score,
+                content_quality_score,
+                (
+                    1.0
+                    / (1.0 + (toFloat(abs(coalesce(age_days, 0))) / $freshness_decay_days))
+                ) AS freshness_score
+            WITH
+                candidate,
+                tag_affinity,
+                author_affinity,
+                collaborative_score,
+                content_quality_score,
+                freshness_score,
+                (
+                    (tag_affinity * $tag_affinity_weight)
+                    + (author_affinity * $author_affinity_weight)
+                    + (collaborative_score * $collaborative_weight)
+                    + (content_quality_score * $content_quality_weight)
+                    + (freshness_score * $freshness_weight)
+                ) AS score,
+                coalesce(candidate.published_at, candidate.created_at) AS published_sort
+            WITH candidate, score, published_sort
+            ORDER BY
+                CASE WHEN $sort = 'relevance' THEN score ELSE 0.0 END DESC,
+                CASE WHEN $sort = 'newest' THEN published_sort END DESC,
+                CASE WHEN $sort = 'oldest' THEN published_sort END ASC,
+                CASE WHEN $sort = 'relevance' THEN published_sort END DESC
+            SKIP $offset
+            LIMIT $limit
+            RETURN
+                candidate.content_id AS content_id,
+                score AS score,
+                'personalized_graph_feed' AS reason
+            """,
+            {
+                "viewer_id": str(viewer_id) if viewer_id is not None else None,
+                "content_type": content_type,
+                "sort": sort,
+                "offset": offset,
+                "limit": limit,
+                "tag_affinity_weight": TAG_AFFINITY_WEIGHT,
+                "author_affinity_weight": AUTHOR_AFFINITY_WEIGHT,
+                "collaborative_weight": COLLABORATIVE_WEIGHT,
+                "content_quality_weight": CONTENT_QUALITY_WEIGHT,
+                "freshness_weight": FRESHNESS_WEIGHT,
+                "freshness_decay_days": FRESHNESS_DECAY_DAYS,
+                "collaborative_like_weight": COLLABORATIVE_LIKE_WEIGHT,
+                "collaborative_view_weight": COLLABORATIVE_VIEW_WEIGHT,
+                "collaborative_comment_weight": COLLABORATIVE_COMMENT_WEIGHT,
+            },
+        )
+
+        result: list[RecommendationFeedGraphResult] = []
+        for row in rows:
+            candidate_content_id = row.get("content_id")
+            if not isinstance(candidate_content_id, str):
+                continue
+            result.append(
+                RecommendationFeedGraphResult(
+                    content_id=uuid.UUID(candidate_content_id),
+                    score=float(row.get("score") or 0.0),
+                    reason=str(row.get("reason") or "personalized_graph_feed"),
                 )
             )
         return result

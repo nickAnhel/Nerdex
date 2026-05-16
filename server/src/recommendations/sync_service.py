@@ -124,6 +124,7 @@ class RecommendationGraphSyncService:
                     "user_id": str(row.user_id),
                     "content_id": str(row.content_id),
                     "views_count": row.views_count,
+                    "progress_percent": row.progress_percent,
                     "last_seen_at": self._datetime_to_iso(row.last_seen_at),
                 }
                 for row in views
@@ -341,6 +342,7 @@ class RecommendationGraphSyncService:
                         "user_id": str(event.user_id),
                         "content_id": str(event.content_id),
                         "views_count": 1,
+                        "progress_percent": self._extract_progress_percent(event.metadata),
                         "last_seen_at": self._datetime_to_iso(event.created_at),
                     }
                 )
@@ -413,6 +415,17 @@ class RecommendationGraphSyncService:
             followed_rows,
             unfollowed_rows,
         )
+
+    @staticmethod
+    def _extract_progress_percent(metadata: dict) -> int:
+        raw = metadata.get("progress_percent")
+        if raw is None:
+            return 0
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, min(value, 100))
 
     @staticmethod
     def _datetime_to_iso(value: datetime.datetime | None) -> str | None:

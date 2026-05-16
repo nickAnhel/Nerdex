@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import "./FeedSidebar.css";
 
 import { StoreContext } from "../..";
@@ -12,9 +12,15 @@ import PostModal from "../post-modal/PostModal";
 function FeedSidebar() {
     const { store } = useContext(StoreContext);
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [isCreatePostModalActive, setIsCreatePostModalActive] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const activeTab = new URLSearchParams(location.search).get("tab") || "recommendations";
+
+    const navItemClass = (tabId) => (
+        `feed-sidebar-item${activeTab === tabId ? " active" : ""}`
+    );
 
     return (
         <div id="feed-sidebar">
@@ -26,14 +32,20 @@ function FeedSidebar() {
             />
 
             <div id="feed-page-selector">
-                <NavLink end to="/feed" className="feed-sidebar-item" >
-                    Global
+                <NavLink
+                    to="/feed?tab=recommendations&type=all&sort=relevance"
+                    className={navItemClass("recommendations")}
+                >
+                    Recommendations
                 </NavLink>
 
                 {
                     store.isAuthenticated &&
-                    <NavLink to="/feed/personal" className="feed-sidebar-item">
-                        Personal
+                    <NavLink
+                        to="/feed?tab=subscriptions&type=all&sort=newest"
+                        className={navItemClass("subscriptions")}
+                    >
+                        Subscriptions
                     </NavLink>
                 }
             </div>
