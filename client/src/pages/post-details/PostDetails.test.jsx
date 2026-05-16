@@ -22,6 +22,7 @@ jest.mock("../../components/loader/Loader", () => () => <div>Loading</div>);
 jest.mock("../../components/comment-section/CommentSection", () => () => <div />);
 jest.mock("../../components/modal/Modal", () => ({ children }) => <div>{children}</div>);
 jest.mock("../../components/post-list-item/PostListItem", () => ({ post }) => <div>{post.content}</div>);
+jest.mock("../../components/similar-content-block/SimilarContentBlock", () => () => <div />);
 jest.mock("../../service/PostService", () => ({
     __esModule: true,
     default: {

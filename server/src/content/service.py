@@ -70,6 +70,7 @@ class ContentService:
         self,
         *,
         user_id: uuid.UUID,
+        content_type: ContentTypeEnum | None,
         order: ContentOrder,
         desc: bool,
         offset: int,
@@ -77,6 +78,7 @@ class ContentService:
     ) -> list[ContentListItemGet]:
         content_items = await self._repository.get_user_subscriptions_feed(
             user_id=user_id,
+            content_type=content_type,
             order=order,
             order_desc=desc,
             offset=offset,

@@ -63,4 +63,12 @@ export default class UserService {
             { params }
         );
     }
+
+    static async unsubscribeFromUser(userId) {
+        return this.unsubscribFromuser(userId);
+    }
+
+    static async getSubscriptions(params) {
+        return this.getSubsctiptions(params);
+    }
 }

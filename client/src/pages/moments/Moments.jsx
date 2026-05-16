@@ -1,5 +1,5 @@
-import { useContext, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useContext, useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import "./Moments.css";
 
@@ -13,7 +13,25 @@ import MomentsViewer from "../videos/MomentsViewer";
 function Moments() {
     const { store } = useContext(StoreContext);
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [searchQuery, setSearchQuery] = useState("");
+    const deepLinkedMomentId = searchParams.get("moment");
+
+    useEffect(() => {
+        const shouldResetToRecommendations = (
+            searchParams.has("tab")
+            || searchParams.has("section")
+            || searchParams.has("feed")
+        );
+        if (!shouldResetToRecommendations) {
+            return;
+        }
+        const nextSearchParams = new URLSearchParams();
+        if (deepLinkedMomentId) {
+            nextSearchParams.set("moment", deepLinkedMomentId);
+        }
+        setSearchParams(nextSearchParams, { replace: true });
+    }, [deepLinkedMomentId, searchParams, setSearchParams]);
 
     return (
         <main className="moments-page">
@@ -22,7 +40,7 @@ function Moments() {
                     <span aria-hidden="true"><MomentsIcon /></span>
                     <div>
                         <h1>Moments</h1>
-                        <p>Short vertical videos from the community.</p>
+                        <p>Recommendations: short vertical videos from the community.</p>
                     </div>
                 </div>
                 {

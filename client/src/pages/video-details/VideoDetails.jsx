@@ -12,6 +12,7 @@ import Loader from "../../components/loader/Loader";
 import Modal from "../../components/modal/Modal";
 import TagChip from "../../components/tag-chip/TagChip";
 import VideoPlayer from "../../components/video-player/VideoPlayer";
+import SimilarContentBlock from "../../components/similar-content-block/SimilarContentBlock";
 import ContentService from "../../service/ContentService";
 import VideoService from "../../service/VideoService";
 import { getAvatarUrl } from "../../utils/avatar";
@@ -382,6 +383,13 @@ function VideoDetails() {
             </section>
 
             <section ref={commentsRef}>
+                <div className="video-details-similar">
+                    <SimilarContentBlock
+                        contentId={video.video_id}
+                        contentType="video"
+                        limit={4}
+                    />
+                </div>
                 <CommentSection
                     contentId={video.content_id}
                     isEnabled={video.status === "published" && ready}

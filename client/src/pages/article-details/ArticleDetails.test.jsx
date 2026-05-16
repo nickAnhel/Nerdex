@@ -21,6 +21,7 @@ jest.mock("../../components/loader/Loader", () => () => <div>Loading</div>);
 jest.mock("../../components/modal/Modal", () => ({ children }) => <div>{children}</div>);
 jest.mock("../../components/comment-section/CommentSection", () => () => <div />);
 jest.mock("../../components/article-renderer/ArticleRenderer", () => () => <article>Article body</article>);
+jest.mock("../../components/similar-content-block/SimilarContentBlock", () => () => <div />);
 jest.mock("../../components/tag-chip/TagChip", () => ({ slug }) => <span>{slug}</span>);
 jest.mock("../../components/icons/CommentIcon", () => () => <span />);
 jest.mock("../../components/icons/DislikeIcon", () => () => <span />);

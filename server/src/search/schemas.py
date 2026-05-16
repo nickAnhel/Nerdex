@@ -14,7 +14,7 @@ class SearchResultItemGet(BaseSchema):
     result_type: Literal["content", "author"]
     content: ContentListItemGet | None = None
     author: UserGet | None = None
-    score: float = Field(ge=0)
+    score: float
 
 
 class SearchListGet(BaseSchema):

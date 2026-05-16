@@ -8,6 +8,7 @@ import Loader from "../../components/loader/Loader";
 import CommentSection from "../../components/comment-section/CommentSection";
 import Modal from "../../components/modal/Modal";
 import PostListItem from "../../components/post-list-item/PostListItem";
+import SimilarContentBlock from "../../components/similar-content-block/SimilarContentBlock";
 import ContentService from "../../service/ContentService";
 import PostService from "../../service/PostService";
 
@@ -135,6 +136,13 @@ function PostDetails() {
                         onGalleryClose={closeGallery}
                         onGalleryIndexChange={updateGalleryIndex}
                     />
+                    <div className="post-details-similar">
+                        <SimilarContentBlock
+                            contentId={post.post_id}
+                            contentType="post"
+                            limit={4}
+                        />
+                    </div>
                     <div className="post-details-comments">
                         <CommentSection
                             contentId={post.post_id}

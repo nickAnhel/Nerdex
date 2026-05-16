@@ -21,6 +21,7 @@ jest.mock("../../components/video-player/VideoPlayer", () => (props) => (
     </div>
 ));
 jest.mock("../../components/comment-section/CommentSection", () => () => <div />);
+jest.mock("../../components/similar-content-block/SimilarContentBlock", () => () => <div />);
 jest.mock("../../service/VideoService", () => ({
     __esModule: true,
     default: {

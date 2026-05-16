@@ -6,7 +6,7 @@ import pytest
 
 from src.content.enums import ContentStatusEnum, ContentTypeEnum, ContentVisibilityEnum
 from src.content.schemas import ContentListItemGet
-from src.search.enums import SearchSortEnum, SearchTypeEnum
+from src.search.enums import SearchContentTypeEnum, SearchPopularPeriodEnum, SearchSortEnum, SearchTypeEnum
 from src.search.repository import SearchAuthorMatch, SearchContentMatch, SearchMixedMatch
 from src.search.service import SearchService
 from src.users.schemas import UserGet
@@ -83,6 +83,8 @@ class FakeRepository:
         self.has_more_content = False
         self.has_more_authors = False
         self.has_more_all = False
+        self.has_more_popular = False
+        self.has_more_popular_authors = False
 
     async def search_content(self, **kwargs):  # type: ignore[no-untyped-def]
         self.calls.append(("search_content", kwargs))
@@ -95,6 +97,14 @@ class FakeRepository:
     async def search_all(self, **kwargs):  # type: ignore[no-untyped-def]
         self.calls.append(("search_all", kwargs))
         return self.mixed_matches, self.has_more_all
+
+    async def search_popular_content(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(("search_popular_content", kwargs))
+        return self.content_matches, self.has_more_popular
+
+    async def search_popular_authors(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(("search_popular_authors", kwargs))
+        return self.author_matches, self.has_more_popular_authors
 
     async def get_content_by_ids(self, *, content_ids, viewer_id):  # type: ignore[no-untyped-def]
         self.calls.append(("get_content_by_ids", {"content_ids": content_ids, "viewer_id": viewer_id}))
@@ -232,3 +242,78 @@ async def test_search_post_type_uses_content_mapping() -> None:
     assert search_call[1]["sort"] == SearchSortEnum.NEWEST
     assert search_call[1]["offset"] == 5
     assert search_call[1]["limit"] == 10
+
+
+@pytest.mark.anyio
+async def test_search_popular_uses_popular_repository_and_allows_negative_scores() -> None:
+    viewer_id = uuid.uuid4()
+    author = UserGet(
+        user_id=uuid.uuid4(),
+        username="writer",
+        is_admin=False,
+        subscribers_count=0,
+        avatar=None,
+        avatar_asset_id=None,
+    )
+    content_id = uuid.uuid4()
+
+    repository = FakeRepository()
+    repository.content_matches = [SearchContentMatch(content_id=content_id, score=-2.0)]
+    repository.content_map[content_id] = FakeContent(content_id=content_id, content_type=ContentTypeEnum.POST, author=author)
+
+    service = SearchService(
+        repository=repository,  # type: ignore[arg-type]
+        projector_registry=FakeProjectorRegistry(),  # type: ignore[arg-type]
+        asset_storage=None,
+    )
+
+    response = await service.search_popular(
+        search_type=SearchContentTypeEnum.POST,
+        period=SearchPopularPeriodEnum.YEAR,
+        offset=10,
+        limit=5,
+        viewer_id=viewer_id,
+    )
+
+    assert len(response.items) == 1
+    assert response.items[0].result_type == "content"
+    assert response.items[0].score == pytest.approx(-2.0)
+
+    popular_call = next(call for call in repository.calls if call[0] == "search_popular_content")
+    assert popular_call[1]["period"] == SearchPopularPeriodEnum.YEAR
+    assert popular_call[1]["offset"] == 10
+    assert popular_call[1]["limit"] == 5
+    assert popular_call[1]["content_type"] == ContentTypeEnum.POST
+
+
+@pytest.mark.anyio
+async def test_search_popular_authors_returns_author_results() -> None:
+    viewer_id = uuid.uuid4()
+    author_id = uuid.uuid4()
+    repository = FakeRepository()
+    repository.author_matches = [SearchAuthorMatch(author_id=author_id, score=13.4)]
+    repository.user_map[author_id] = FakeUser(user_id=author_id, username="popular-author")
+
+    service = SearchService(
+        repository=repository,  # type: ignore[arg-type]
+        projector_registry=FakeProjectorRegistry(),  # type: ignore[arg-type]
+        asset_storage=None,
+    )
+
+    response = await service.search_popular_authors(
+        period=SearchPopularPeriodEnum.MONTH,
+        offset=2,
+        limit=3,
+        viewer_id=viewer_id,
+    )
+
+    assert len(response.items) == 1
+    assert response.items[0].result_type == "author"
+    assert response.items[0].author is not None
+    assert response.items[0].author.username == "popular-author"
+    assert response.items[0].score == pytest.approx(13.4)
+
+    popular_call = next(call for call in repository.calls if call[0] == "search_popular_authors")
+    assert popular_call[1]["period"] == SearchPopularPeriodEnum.MONTH
+    assert popular_call[1]["offset"] == 2
+    assert popular_call[1]["limit"] == 3

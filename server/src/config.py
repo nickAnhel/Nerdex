@@ -137,6 +137,15 @@ class CelerySettings(ConfigBase):
     model_config = SettingsConfigDict(env_prefix="celery_")
 
 
+class Neo4jSettings(ConfigBase):
+    uri: str = "bolt://neo4j:7687"
+    user: str = "neo4j"
+    password: str = "password"
+    database: str = "neo4j"
+
+    model_config = SettingsConfigDict(env_prefix="neo4j_")
+
+
 class Settings(BaseSettings):
     db: DBSettings = Field(default_factory=DBSettings)  # type: ignore
     logging: LoggingConfig = Field(default_factory=LoggingConfig)  # type: ignore
@@ -148,6 +157,7 @@ class Settings(BaseSettings):
     assets: AssetsSettings = Field(default_factory=AssetsSettings)  # type: ignore
     redis: RedisSettings = Field(default_factory=RedisSettings)  # type: ignore
     celery: CelerySettings = Field(default_factory=CelerySettings)  # type: ignore
+    neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)  # type: ignore
 
 
 settings = Settings()

@@ -1,4 +1,4 @@
-from src.config import AssetsSettings, CelerySettings, RedisSettings, StorageSettings
+from src.config import AssetsSettings, CelerySettings, Neo4jSettings, RedisSettings, StorageSettings
 
 
 def test_new_config_sections_read_from_env(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -24,11 +24,16 @@ def test_new_config_sections_read_from_env(monkeypatch) -> None:  # type: ignore
     monkeypatch.setenv("CELERY_BROKER_URL", "redis://redis:6379/0")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
     monkeypatch.setenv("CELERY_MEDIA_QUEUE_NAME", "media")
+    monkeypatch.setenv("NEO4J_URI", "bolt://neo4j:7687")
+    monkeypatch.setenv("NEO4J_USER", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "password")
+    monkeypatch.setenv("NEO4J_DATABASE", "neo4j")
 
     storage = StorageSettings()
     assets = AssetsSettings()
     redis = RedisSettings()
     celery = CelerySettings()
+    neo4j = Neo4jSettings()
 
     assert storage.private_bucket == "nerdex-dev-private"
     assert storage.addressing_style == "path"
@@ -36,6 +41,7 @@ def test_new_config_sections_read_from_env(monkeypatch) -> None:  # type: ignore
     assert redis.url == "redis://redis:6379/0"
     assert redis.socketio_manager_url == "redis://redis:6379/2"
     assert celery.media_queue_name == "media"
+    assert neo4j.uri == "bolt://neo4j:7687"
 
 
 def test_socketio_redis_url_falls_back_to_default_redis() -> None:

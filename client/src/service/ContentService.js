@@ -2,6 +2,14 @@ import api from "../http";
 
 
 export default class ContentService {
+    static async getRecommendationsFeed(params) {
+        return api.get("/recommendations/feed", { params });
+    }
+
+    static async getRecommendedAuthors(params) {
+        return api.get("/recommendations/authors", { params });
+    }
+
     static async getFeed(params) {
         return api.get("/contents/list", { params });
     }
@@ -28,6 +36,10 @@ export default class ContentService {
 
     static async getHistory(params) {
         return api.get("/contents/history", { params });
+    }
+
+    static async getSimilarContent(contentId, params) {
+        return api.get(`/recommendations/content/${contentId}/similar`, { params });
     }
 
     static async setReaction(contentId, reactionType) {

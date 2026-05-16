@@ -36,6 +36,10 @@ TEST_ENV_DEFAULTS = {
     "CELERY_BROKER_URL": "redis://localhost:6379/0",
     "CELERY_RESULT_BACKEND": "redis://localhost:6379/1",
     "CELERY_MEDIA_QUEUE_NAME": "media",
+    "NEO4J_URI": "bolt://localhost:7687",
+    "NEO4J_USER": "neo4j",
+    "NEO4J_PASSWORD": "password",
+    "NEO4J_DATABASE": "neo4j",
 }
 
 

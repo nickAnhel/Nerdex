@@ -7,7 +7,7 @@ celery_app = Celery(
     "nerdex",
     broker=settings.celery.broker_url,
     backend=settings.celery.result_backend,
-    include=["src.assets.tasks"],
+    include=["src.assets.tasks", "src.recommendations.tasks"],
 )
 
 celery_app.conf.update(
@@ -26,6 +26,10 @@ celery_app.conf.update(
         "reconcile-failed-assets": {
             "task": "assets.reconcile_failed_assets",
             "schedule": 60 * 60,
+        },
+        "recommendations-incremental-sync": {
+            "task": "recommendations.incremental_sync",
+            "schedule": 60 * 5,
         },
     },
 )

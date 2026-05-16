@@ -4,7 +4,7 @@ import uuid
 
 from src.content.enums import ContentTypeEnum
 from src.content.projectors import ContentProjectorRegistry
-from src.search.enums import SearchSortEnum, SearchTypeEnum
+from src.search.enums import SearchContentTypeEnum, SearchPopularPeriodEnum, SearchSortEnum, SearchTypeEnum
 from src.search.repository import SearchRepository
 from src.search.schemas import SearchListGet, SearchResultItemGet
 from src.users.presentation import build_user_get
@@ -149,6 +149,84 @@ class SearchService:
 
         return SearchListGet(items=items, offset=offset, limit=limit, has_more=has_more)
 
+    async def search_popular(
+        self,
+        *,
+        search_type: SearchContentTypeEnum,
+        period: SearchPopularPeriodEnum,
+        offset: int,
+        limit: int,
+        viewer_id: uuid.UUID | None,
+    ) -> SearchListGet:
+        content_type = self._content_type_from_search_content_type(search_type)
+        content_matches, has_more = await self._repository.search_popular_content(
+            content_type=content_type,
+            period=period,
+            offset=offset,
+            limit=limit,
+        )
+        content_map = await self._repository.get_content_by_ids(
+            content_ids=[match.content_id for match in content_matches],
+            viewer_id=viewer_id,
+        )
+
+        items = []
+        for match in content_matches:
+            content = content_map.get(match.content_id)
+            if content is None:
+                continue
+            projector = self._projector_registry.get(content.content_type)
+            items.append(
+                SearchResultItemGet(
+                    result_type="content",
+                    content=await projector.project_feed_item(
+                        content,
+                        viewer_id=viewer_id,
+                        storage=self._asset_storage,
+                    ),
+                    author=None,
+                    score=match.score,
+                )
+            )
+
+        return SearchListGet(items=items, offset=offset, limit=limit, has_more=has_more)
+
+    async def search_popular_authors(
+        self,
+        *,
+        period: SearchPopularPeriodEnum,
+        offset: int,
+        limit: int,
+        viewer_id: uuid.UUID | None,
+    ) -> SearchListGet:
+        author_matches, has_more = await self._repository.search_popular_authors(
+            period=period,
+            offset=offset,
+            limit=limit,
+        )
+        authors = await self._repository.get_users_by_ids(
+            user_ids=[match.author_id for match in author_matches],
+        )
+
+        items = []
+        for match in author_matches:
+            author = authors.get(match.author_id)
+            if author is None:
+                continue
+            items.append(
+                SearchResultItemGet(
+                    result_type="author",
+                    content=None,
+                    author=await build_user_get(
+                        author,
+                        viewer_id=viewer_id,
+                        storage=self._asset_storage,
+                    ),
+                    score=match.score,
+                )
+            )
+        return SearchListGet(items=items, offset=offset, limit=limit, has_more=has_more)
+
     def _content_type_from_search_type(self, search_type: SearchTypeEnum) -> ContentTypeEnum:
         mapping = {
             SearchTypeEnum.POST: ContentTypeEnum.POST,
@@ -159,4 +237,18 @@ class SearchService:
         content_type = mapping.get(search_type)
         if content_type is None:
             raise ValueError(f"Unsupported search type: {search_type}")
+        return content_type
+
+    def _content_type_from_search_content_type(self, search_type: SearchContentTypeEnum) -> ContentTypeEnum | None:
+        if search_type == SearchContentTypeEnum.ALL:
+            return None
+        mapping = {
+            SearchContentTypeEnum.POST: ContentTypeEnum.POST,
+            SearchContentTypeEnum.ARTICLE: ContentTypeEnum.ARTICLE,
+            SearchContentTypeEnum.VIDEO: ContentTypeEnum.VIDEO,
+            SearchContentTypeEnum.MOMENT: ContentTypeEnum.MOMENT,
+        }
+        content_type = mapping.get(search_type)
+        if content_type is None:
+            raise ValueError(f"Unsupported search content type: {search_type}")
         return content_type
