@@ -40,6 +40,7 @@ const SEARCH_SORTS = [
 const DEFAULT_LIMIT = 20;
 const DEFAULT_PERIOD = "week";
 const DEFAULT_SORT = "relevance";
+const POPULAR_AUTHORS_LIMIT = 6;
 
 function parseNonNegativeInt(value, fallback) {
     const parsed = Number.parseInt(value || "", 10);
@@ -169,9 +170,36 @@ function SearchResults() {
             keys: [isSearchMode, rawQuery, type, sort, period, offset, limit],
         }
     );
+    const {
+        isLoading: isPopularAuthorsLoading,
+        isError: isPopularAuthorsError,
+        error: popularAuthorsError,
+        data: popularAuthorsData,
+    } = useQuery(
+        async () => {
+            if (isSearchMode) {
+                return {
+                    items: [],
+                    offset: 0,
+                    limit: POPULAR_AUTHORS_LIMIT,
+                    has_more: false,
+                };
+            }
+            const response = await SearchService.popularAuthors({
+                period,
+                offset: 0,
+                limit: POPULAR_AUTHORS_LIMIT,
+            });
+            return response.data;
+        },
+        {
+            keys: [isSearchMode, period],
+        }
+    );
 
     const items = data?.items || [];
     const hasMore = Boolean(data?.has_more);
+    const popularAuthorItems = popularAuthorsData?.items || [];
     const errorMessage = isError
         ? (error?.response?.data?.detail || (isSearchMode ? "Failed to load search results" : "Failed to load popular content"))
         : "";
@@ -179,6 +207,80 @@ function SearchResults() {
     const activeTypeLabel = useMemo(
         () => availableTypes.find((item) => item.value === type)?.label || "All",
         [availableTypes, type]
+    );
+
+    const resultsBody = (
+        <section className="search-results-body">
+            {
+                isError &&
+                <div className="search-results-state error">
+                    {errorMessage}
+                </div>
+            }
+            {
+                isLoading &&
+                <div className="search-results-loader">
+                    <Loader />
+                </div>
+            }
+            {
+                !isLoading && !isError && items.length === 0 &&
+                <div className="search-results-state">
+                    {
+                        isSearchMode
+                            ? `No results found for "${rawQuery}" in ${activeTypeLabel}.`
+                            : `No popular content found for ${activeTypeLabel} in this period.`
+                    }
+                </div>
+            }
+            {
+                !isLoading && !isError && items.length > 0 &&
+                <>
+                    <div className="search-results-list">
+                        {
+                            items.map((item, index) => {
+                                if (item.result_type === "content" && item.content) {
+                                    return (
+                                        <FeedContentCard
+                                            key={`content-${item.content.content_id}-${index}`}
+                                            item={item.content}
+                                            removeItem={() => {}}
+                                        />
+                                    );
+                                }
+
+                                if (item.result_type === "author" && item.author) {
+                                    return (
+                                        <div className="search-author-result" key={`author-${item.author.user_id}-${index}`}>
+                                            <UserListItem user={item.author} />
+                                        </div>
+                                    );
+                                }
+
+                                return null;
+                            })
+                        }
+                    </div>
+
+                    {
+                        hasMore &&
+                        <div className="search-results-pagination">
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    updateSearchParams((params) => {
+                                        params.set("offset", String(offset + limit));
+                                    });
+                                }}
+                            >
+                                Load more
+                            </button>
+                        </div>
+                    }
+                </>
+            }
+        </section>
     );
 
     return (
@@ -284,77 +386,53 @@ function SearchResults() {
                 }
             </section>
 
-            <section className="search-results-body">
-                {
-                    isError &&
-                    <div className="search-results-state error">
-                        {errorMessage}
-                    </div>
-                }
-                {
-                    isLoading &&
-                    <div className="search-results-loader">
-                        <Loader />
-                    </div>
-                }
-                {
-                    !isLoading && !isError && items.length === 0 &&
-                    <div className="search-results-state">
-                        {
-                            isSearchMode
-                                ? `No results found for "${rawQuery}" in ${activeTypeLabel}.`
-                                : `No popular content found for ${activeTypeLabel} in this period.`
-                        }
-                    </div>
-                }
-                {
-                    !isLoading && !isError && items.length > 0 &&
-                    <>
-                        <div className="search-results-list">
-                            {
-                                items.map((item, index) => {
-                                    if (item.result_type === "content" && item.content) {
-                                        return (
-                                            <FeedContentCard
-                                                key={`content-${item.content.content_id}-${index}`}
-                                                item={item.content}
-                                                removeItem={() => {}}
-                                            />
-                                        );
-                                    }
-
-                                    if (item.result_type === "author" && item.author) {
-                                        return (
-                                            <div className="search-author-result" key={`author-${item.author.user_id}-${index}`}>
-                                                <UserListItem user={item.author} />
-                                            </div>
-                                        );
-                                    }
-
-                                    return null;
-                                })
-                            }
-                        </div>
-
-                        {
-                            hasMore &&
-                            <div className="search-results-pagination">
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={() => {
-                                        updateSearchParams((params) => {
-                                            params.set("offset", String(offset + limit));
-                                        });
-                                    }}
-                                >
-                                    Load more
-                                </button>
-                            </div>
-                        }
-                    </>
-                }
-            </section>
+            {
+                isSearchMode
+                    ? resultsBody
+                    : (
+                        <section className="search-discovery-layout">
+                            {resultsBody}
+                            <aside className="popular-authors-column">
+                                <h2>Popular authors</h2>
+                                {
+                                    isPopularAuthorsLoading &&
+                                    <div className="search-results-loader">
+                                        <Loader />
+                                    </div>
+                                }
+                                {
+                                    !isPopularAuthorsLoading && isPopularAuthorsError &&
+                                    <div className="search-results-state error">
+                                        {popularAuthorsError?.response?.data?.detail || "Failed to load popular authors"}
+                                    </div>
+                                }
+                                {
+                                    !isPopularAuthorsLoading && !isPopularAuthorsError && popularAuthorItems.length === 0 &&
+                                    <div className="search-results-state">
+                                        No popular authors found for this period.
+                                    </div>
+                                }
+                                {
+                                    !isPopularAuthorsLoading && !isPopularAuthorsError && popularAuthorItems.length > 0 &&
+                                    <div className="popular-authors-list">
+                                        {
+                                            popularAuthorItems.map((item, index) => {
+                                                if (!item.author) {
+                                                    return null;
+                                                }
+                                                return (
+                                                    <div className="search-author-result" key={`popular-author-${item.author.user_id}-${index}`}>
+                                                        <UserListItem user={item.author} />
+                                                    </div>
+                                                );
+                                            })
+                                        }
+                                    </div>
+                                }
+                            </aside>
+                        </section>
+                    )
+            }
         </main>
     );
 }

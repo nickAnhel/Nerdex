@@ -84,6 +84,7 @@ class FakeRepository:
         self.has_more_authors = False
         self.has_more_all = False
         self.has_more_popular = False
+        self.has_more_popular_authors = False
 
     async def search_content(self, **kwargs):  # type: ignore[no-untyped-def]
         self.calls.append(("search_content", kwargs))
@@ -100,6 +101,10 @@ class FakeRepository:
     async def search_popular_content(self, **kwargs):  # type: ignore[no-untyped-def]
         self.calls.append(("search_popular_content", kwargs))
         return self.content_matches, self.has_more_popular
+
+    async def search_popular_authors(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(("search_popular_authors", kwargs))
+        return self.author_matches, self.has_more_popular_authors
 
     async def get_content_by_ids(self, *, content_ids, viewer_id):  # type: ignore[no-untyped-def]
         self.calls.append(("get_content_by_ids", {"content_ids": content_ids, "viewer_id": viewer_id}))
@@ -279,3 +284,36 @@ async def test_search_popular_uses_popular_repository_and_allows_negative_scores
     assert popular_call[1]["offset"] == 10
     assert popular_call[1]["limit"] == 5
     assert popular_call[1]["content_type"] == ContentTypeEnum.POST
+
+
+@pytest.mark.anyio
+async def test_search_popular_authors_returns_author_results() -> None:
+    viewer_id = uuid.uuid4()
+    author_id = uuid.uuid4()
+    repository = FakeRepository()
+    repository.author_matches = [SearchAuthorMatch(author_id=author_id, score=13.4)]
+    repository.user_map[author_id] = FakeUser(user_id=author_id, username="popular-author")
+
+    service = SearchService(
+        repository=repository,  # type: ignore[arg-type]
+        projector_registry=FakeProjectorRegistry(),  # type: ignore[arg-type]
+        asset_storage=None,
+    )
+
+    response = await service.search_popular_authors(
+        period=SearchPopularPeriodEnum.MONTH,
+        offset=2,
+        limit=3,
+        viewer_id=viewer_id,
+    )
+
+    assert len(response.items) == 1
+    assert response.items[0].result_type == "author"
+    assert response.items[0].author is not None
+    assert response.items[0].author.username == "popular-author"
+    assert response.items[0].score == pytest.approx(13.4)
+
+    popular_call = next(call for call in repository.calls if call[0] == "search_popular_authors")
+    assert popular_call[1]["period"] == SearchPopularPeriodEnum.MONTH
+    assert popular_call[1]["offset"] == 2
+    assert popular_call[1]["limit"] == 3

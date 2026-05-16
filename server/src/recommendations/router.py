@@ -2,11 +2,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 
-from src.auth.dependencies import get_current_optional_user
+from src.auth.dependencies import get_current_optional_user, get_current_user
 from src.content.enums import ContentTypeEnum
 from src.content.schemas import ContentListItemGet
 from src.recommendations.dependencies import get_recommendation_service
 from src.recommendations.schemas import (
+    RecommendedAuthorItemGet,
     RecommendationFeedContentTypeEnum,
     RecommendationFeedSortEnum,
     SimilarContentListGet,
@@ -34,6 +35,20 @@ async def get_recommendations_feed(
         viewer_id=user.user_id if user is not None else None,
         content_type=content_type,
         sort=sort,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get("/authors")
+async def get_recommended_authors(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: UserGet = Depends(get_current_user),
+    recommendation_service: RecommendationService = Depends(get_recommendation_service),
+) -> list[RecommendedAuthorItemGet]:
+    return await recommendation_service.get_recommended_authors(
+        viewer_id=user.user_id,
         offset=offset,
         limit=limit,
     )

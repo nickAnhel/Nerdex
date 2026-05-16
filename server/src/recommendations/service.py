@@ -7,16 +7,19 @@ from src.content.enums import ContentTypeEnum
 from src.content.projectors import ContentProjectorRegistry
 from src.content.schemas import ContentListItemGet
 from src.recommendations.graph_repository import (
+    RecommendationAuthorGraphResult,
     RecommendationFeedGraphResult,
     RecommendationGraphRepository,
 )
 from src.recommendations.postgres_repository import RecommendationPostgresRepository
 from src.recommendations.schemas import (
+    RecommendedAuthorItemGet,
     RecommendationFeedContentTypeEnum,
     RecommendationFeedSortEnum,
     SimilarContentItemGet,
     SimilarContentListGet,
 )
+from src.users.presentation import build_user_get
 
 
 logger = logging.getLogger(__name__)
@@ -135,6 +138,68 @@ class RecommendationService:
         )
         for content in fallback_items:
             items.append(await self._project_content(content=content, viewer_id=viewer_id))
+            if len(items) >= limit:
+                break
+
+        return items
+
+    async def get_recommended_authors(
+        self,
+        *,
+        viewer_id: uuid.UUID,
+        offset: int,
+        limit: int,
+    ) -> list[RecommendedAuthorItemGet]:
+        graph_limit = max(limit * 4, limit)
+
+        graph_rows: list[RecommendationAuthorGraphResult] = []
+        try:
+            graph_rows = await self._graph_repository.get_recommended_authors(
+                viewer_id=viewer_id,
+                offset=offset,
+                limit=graph_limit,
+            )
+        except Exception:
+            logger.exception("Neo4j recommended-authors query failed")
+            return []
+
+        if not graph_rows:
+            return []
+
+        candidate_user_ids = [row.user_id for row in graph_rows]
+        users_by_id = await self._postgres_repository.get_users_by_ids(user_ids=candidate_user_ids)
+        visible_author_ids = await self._postgres_repository.get_public_author_ids_by_ids(author_ids=candidate_user_ids)
+        subscribed_author_ids = await self._postgres_repository.get_subscribed_user_ids(subscriber_id=viewer_id)
+
+        items: list[RecommendedAuthorItemGet] = []
+        for row in graph_rows:
+            if row.user_id == viewer_id:
+                continue
+            if row.user_id in subscribed_author_ids:
+                continue
+            if row.user_id not in visible_author_ids:
+                continue
+
+            author_model = users_by_id.get(row.user_id)
+            if author_model is None:
+                continue
+
+            author = await build_user_get(
+                author_model,
+                viewer_id=viewer_id,
+                storage=self._asset_storage,
+            )
+            if bool(author.is_subscribed):
+                continue
+
+            items.append(
+                RecommendedAuthorItemGet(
+                    user_id=row.user_id,
+                    score=row.score,
+                    reason=row.reason,
+                    author=author,
+                )
+            )
             if len(items) >= limit:
                 break
 

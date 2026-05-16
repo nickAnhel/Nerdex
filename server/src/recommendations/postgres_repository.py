@@ -102,6 +102,42 @@ class RecommendationPostgresRepository:
         )
         return list(result.scalars().all())
 
+    async def get_users_by_ids(self, *, user_ids: list[uuid.UUID]) -> dict[uuid.UUID, UserModel]:
+        if not user_ids:
+            return {}
+
+        result = await self._session.execute(
+            select(UserModel)
+            .where(UserModel.user_id.in_(user_ids))
+            .options(selectinload(UserModel.subscribers))
+            .options(
+                selectinload(UserModel.avatar_asset)
+                .selectinload(AssetModel.variants)
+            )
+        )
+        users = list(result.scalars().all())
+        return {user.user_id: user for user in users}
+
+    async def get_subscribed_user_ids(self, *, subscriber_id: uuid.UUID) -> set[uuid.UUID]:
+        result = await self._session.execute(
+            select(SubscriptionModel.subscribed_id)
+            .where(SubscriptionModel.subscriber_id == subscriber_id)
+        )
+        return set(result.scalars().all())
+
+    async def get_public_author_ids_by_ids(self, *, author_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+        if not author_ids:
+            return set()
+
+        result = await self._session.execute(
+            select(ContentModel.author_id)
+            .outerjoin(VideoPlaybackDetailsModel, VideoPlaybackDetailsModel.content_id == ContentModel.content_id)
+            .where(ContentModel.author_id.in_(author_ids))
+            .where(*self._content_visibility_clauses())
+            .group_by(ContentModel.author_id)
+        )
+        return set(result.scalars().all())
+
     async def get_all_subscriptions(self) -> list[tuple[uuid.UUID, uuid.UUID]]:
         result = await self._session.execute(
             select(SubscriptionModel.subscriber_id, SubscriptionModel.subscribed_id)

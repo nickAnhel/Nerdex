@@ -37,6 +37,13 @@ class RecommendationFeedGraphResult:
 
 
 @dataclass(slots=True)
+class RecommendationAuthorGraphResult:
+    user_id: uuid.UUID
+    score: float
+    reason: str
+
+
+@dataclass(slots=True)
 class RecommendationGraphSyncState:
     last_event_at: datetime.datetime | None
     last_event_id: uuid.UUID | None
@@ -683,6 +690,145 @@ class RecommendationGraphRepository:
                     content_id=uuid.UUID(candidate_content_id),
                     score=float(row.get("score") or 0.0),
                     reason=str(row.get("reason") or "personalized_graph_feed"),
+                )
+            )
+        return result
+
+    async def get_recommended_authors(
+        self,
+        *,
+        viewer_id: uuid.UUID,
+        offset: int,
+        limit: int,
+    ) -> list[RecommendationAuthorGraphResult]:
+        rows = await self._read(
+            """
+            MATCH (viewer:User {user_id: $viewer_id})
+            CALL {
+                WITH viewer
+                MATCH (viewer)-[:INTERESTED_IN]->(:Tag)<-[:HAS_TAG]-(:Content)<-[:AUTHORED]-(candidate:User)
+                WHERE candidate.user_id <> viewer.user_id
+                RETURN DISTINCT candidate.user_id AS candidate_id
+                UNION
+                WITH viewer
+                MATCH (viewer)-[:INTERESTED_IN]->(:Tag)<-[:INTERESTED_IN]-(peer:User)-[:FOLLOWS]->(candidate:User)
+                WHERE peer.user_id <> viewer.user_id AND candidate.user_id <> viewer.user_id
+                RETURN DISTINCT candidate.user_id AS candidate_id
+            }
+            WITH viewer, candidate_id
+            MATCH (candidate:User {user_id: candidate_id})
+            WHERE candidate.user_id <> viewer.user_id
+                AND NOT EXISTS {
+                    MATCH (viewer)-[:FOLLOWS]->(candidate)
+                }
+            OPTIONAL MATCH (viewer)-[interest:INTERESTED_IN]->(:Tag)<-[:HAS_TAG]-(:Content)<-[:AUTHORED]-(candidate)
+            WITH viewer, candidate, coalesce(sum(interest.weight), 0.0) AS tag_affinity
+            CALL {
+                WITH viewer, candidate
+                OPTIONAL MATCH (viewer)-[viewer_interest:INTERESTED_IN]->(tag:Tag)<-[peer_interest:INTERESTED_IN]-(peer:User)-[:FOLLOWS]->(candidate)
+                WHERE peer.user_id <> viewer.user_id
+                WITH
+                    peer,
+                    sum(
+                        CASE
+                            WHEN coalesce(viewer_interest.weight, 0.0) < coalesce(peer_interest.weight, 0.0)
+                                THEN coalesce(viewer_interest.weight, 0.0)
+                            ELSE coalesce(peer_interest.weight, 0.0)
+                        END
+                    ) AS peer_similarity
+                WHERE peer IS NOT NULL AND peer_similarity > 0
+                RETURN coalesce(sum(peer_similarity), 0.0) AS similar_users_follow_score
+            }
+            CALL {
+                WITH candidate
+                MATCH (candidate)-[:AUTHORED]->(published:Content)
+                WHERE published.status = 'published'
+                    AND published.visibility = 'public'
+                WITH
+                    count(published) AS published_count,
+                    coalesce(sum(
+                        (toFloat(coalesce(published.likes_count, 0)) * 4.0)
+                        + (toFloat(coalesce(published.comments_count, 0)) * 5.0)
+                        + (toFloat(coalesce(published.views_count, 0)) * 1.0)
+                        - (toFloat(coalesce(published.dislikes_count, 0)) * 6.0)
+                    ), 0.0) AS raw_quality_score,
+                    coalesce(sum(
+                        1.0 / (
+                            1.0
+                            + (
+                                toFloat(abs(duration.inDays(coalesce(published.published_at, published.created_at), datetime()).days))
+                                / 30.0
+                            )
+                        )
+                    ), 0.0) AS recent_publication_score
+                RETURN published_count, raw_quality_score, recent_publication_score
+            }
+            WITH
+                candidate,
+                tag_affinity,
+                similar_users_follow_score,
+                published_count,
+                raw_quality_score,
+                recent_publication_score
+            WHERE published_count > 0
+            WITH
+                candidate,
+                tag_affinity,
+                similar_users_follow_score,
+                recent_publication_score,
+                CASE
+                    WHEN raw_quality_score = 0.0 THEN 0.0
+                    WHEN raw_quality_score > 0.0 THEN log(1.0 + raw_quality_score)
+                    ELSE -log(1.0 + abs(raw_quality_score))
+                END AS author_quality_score
+            WITH
+                candidate,
+                tag_affinity,
+                similar_users_follow_score,
+                author_quality_score,
+                recent_publication_score,
+                (
+                    tag_affinity
+                    + (similar_users_follow_score * 1.5)
+                    + (author_quality_score * 2.0)
+                    + (recent_publication_score * 1.2)
+                ) AS score
+            ORDER BY score DESC, candidate.user_id
+            SKIP $offset
+            LIMIT $limit
+            RETURN
+                candidate.user_id AS user_id,
+                score AS score,
+                CASE
+                    WHEN tag_affinity >= similar_users_follow_score
+                        AND tag_affinity >= author_quality_score
+                        AND tag_affinity >= recent_publication_score
+                        THEN 'topic_author_affinity'
+                    WHEN similar_users_follow_score >= author_quality_score
+                        AND similar_users_follow_score >= recent_publication_score
+                        THEN 'similar_users_follow'
+                    WHEN author_quality_score >= recent_publication_score
+                        THEN 'author_quality'
+                    ELSE 'recent_publication'
+                END AS reason
+            """,
+            {
+                "viewer_id": str(viewer_id),
+                "offset": offset,
+                "limit": limit,
+            },
+        )
+
+        result: list[RecommendationAuthorGraphResult] = []
+        for row in rows:
+            candidate_user_id = row.get("user_id")
+            if not isinstance(candidate_user_id, str):
+                continue
+            result.append(
+                RecommendationAuthorGraphResult(
+                    user_id=uuid.UUID(candidate_user_id),
+                    score=float(row.get("score") or 0.0),
+                    reason=str(row.get("reason") or "topic_author_affinity"),
                 )
             )
         return result

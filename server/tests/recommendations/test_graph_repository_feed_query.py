@@ -75,3 +75,40 @@ async def test_feed_query_accepts_anonymous_viewer() -> None:
     assert captured["parameters"]["sort"] == "newest"
     assert captured["parameters"]["offset"] == 5
     assert captured["parameters"]["limit"] == 7
+
+
+@pytest.mark.anyio
+async def test_recommended_authors_query_excludes_self_followed_and_requires_published_public_content() -> None:
+    repository = RecommendationGraphRepository(driver=DummyDriver(), database="neo4j")
+    captured: dict = {}
+    viewer_id = uuid.uuid4()
+
+    async def fake_read(query, parameters=None):  # type: ignore[no-untyped-def]
+        captured["query"] = query
+        captured["parameters"] = parameters or {}
+        return [
+            {
+                "user_id": str(uuid.uuid4()),
+                "score": 7.8,
+                "reason": "topic_author_affinity",
+            }
+        ]
+
+    repository._read = fake_read  # type: ignore[method-assign]
+
+    rows = await repository.get_recommended_authors(
+        viewer_id=viewer_id,
+        offset=4,
+        limit=6,
+    )
+
+    assert len(rows) == 1
+    query = captured["query"]
+    assert "candidate.user_id <> viewer.user_id" in query
+    assert "MATCH (viewer)-[:FOLLOWS]->(candidate)" in query
+    assert "published.status = 'published'" in query
+    assert "published.visibility = 'public'" in query
+    assert "topic_author_affinity" in query
+    assert captured["parameters"]["viewer_id"] == str(viewer_id)
+    assert captured["parameters"]["offset"] == 4
+    assert captured["parameters"]["limit"] == 6

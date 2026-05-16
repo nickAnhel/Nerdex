@@ -191,6 +191,42 @@ class SearchService:
 
         return SearchListGet(items=items, offset=offset, limit=limit, has_more=has_more)
 
+    async def search_popular_authors(
+        self,
+        *,
+        period: SearchPopularPeriodEnum,
+        offset: int,
+        limit: int,
+        viewer_id: uuid.UUID | None,
+    ) -> SearchListGet:
+        author_matches, has_more = await self._repository.search_popular_authors(
+            period=period,
+            offset=offset,
+            limit=limit,
+        )
+        authors = await self._repository.get_users_by_ids(
+            user_ids=[match.author_id for match in author_matches],
+        )
+
+        items = []
+        for match in author_matches:
+            author = authors.get(match.author_id)
+            if author is None:
+                continue
+            items.append(
+                SearchResultItemGet(
+                    result_type="author",
+                    content=None,
+                    author=await build_user_get(
+                        author,
+                        viewer_id=viewer_id,
+                        storage=self._asset_storage,
+                    ),
+                    score=match.score,
+                )
+            )
+        return SearchListGet(items=items, offset=offset, limit=limit, has_more=has_more)
+
     def _content_type_from_search_type(self, search_type: SearchTypeEnum) -> ContentTypeEnum:
         mapping = {
             SearchTypeEnum.POST: ContentTypeEnum.POST,

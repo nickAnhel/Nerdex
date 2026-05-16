@@ -51,3 +51,19 @@ async def search_popular(
         limit=limit,
         viewer_id=user.user_id if user is not None else None,
     )
+
+
+@router.get("/popular-authors")
+async def search_popular_authors(
+    period: SearchPopularPeriodEnum = SearchPopularPeriodEnum.WEEK,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    user: UserGet | None = Depends(get_current_optional_user),
+    search_service: SearchService = Depends(get_search_service),
+) -> SearchListGet:
+    return await search_service.search_popular_authors(
+        period=period,
+        offset=offset,
+        limit=limit,
+        viewer_id=user.user_id if user is not None else None,
+    )

@@ -266,3 +266,81 @@ async def test_search_popular_dislikes_can_make_score_negative() -> None:
 
     assert has_more is False
     assert matches[0].score == pytest.approx(-9.0)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "period",
+    [
+        SearchPopularPeriodEnum.WEEK,
+        SearchPopularPeriodEnum.MONTH,
+        SearchPopularPeriodEnum.YEAR,
+    ],
+)
+async def test_search_popular_authors_period_uses_activity_weighted_score(period: SearchPopularPeriodEnum) -> None:
+    author_id = uuid.uuid4()
+    session = CapturingSession(
+        [[
+            SimpleNamespace(
+                author_id=author_id,
+                score=41,
+                sort_timestamp=datetime.datetime.now(datetime.timezone.utc),
+            ),
+        ]]
+    )
+    repository = SearchRepository(session)  # type: ignore[arg-type]
+
+    matches, has_more = await repository.search_popular_authors(
+        period=period,
+        offset=0,
+        limit=10,
+    )
+
+    assert has_more is False
+    assert matches[0].author_id == author_id
+    assert matches[0].score == pytest.approx(41.0)
+
+    sql = _compile_sql(session.statements[0])
+    assert "FROM user_activity_events" in sql
+    assert "user_activity_events.action_type IN ('content_view', 'content_like', 'content_comment', 'content_dislike')" in sql
+    assert "THEN 1" in sql
+    assert "THEN 4" in sql
+    assert "THEN 5" in sql
+    assert "THEN -6" in sql
+    assert "user_activity_events.created_at >=" in sql
+    assert "GROUP BY content.author_id" in sql
+
+
+@pytest.mark.anyio
+async def test_search_popular_authors_all_time_uses_content_counters_and_visibility() -> None:
+    author_id = uuid.uuid4()
+    session = CapturingSession(
+        [[
+            SimpleNamespace(
+                author_id=author_id,
+                score=77,
+                sort_timestamp=datetime.datetime.now(datetime.timezone.utc),
+            ),
+        ]]
+    )
+    repository = SearchRepository(session)  # type: ignore[arg-type]
+
+    matches, has_more = await repository.search_popular_authors(
+        period=SearchPopularPeriodEnum.ALL_TIME,
+        offset=0,
+        limit=10,
+    )
+
+    assert has_more is False
+    assert matches[0].author_id == author_id
+    assert matches[0].score == pytest.approx(77.0)
+
+    sql = _compile_sql(session.statements[0])
+    assert "FROM user_activity_events" not in sql
+    assert "content.views_count" in sql
+    assert "content.likes_count * 4" in sql
+    assert "content.comments_count * 5" in sql
+    assert "content.dislikes_count * 6" in sql
+    assert "content.status = 'published'" in sql
+    assert "content.visibility = 'public'" in sql
+    assert "video_playback_details.processing_status = 'ready'" in sql

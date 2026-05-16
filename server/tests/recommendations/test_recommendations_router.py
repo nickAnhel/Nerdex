@@ -4,8 +4,9 @@ import pytest
 
 from src.auth.dependencies import get_current_optional_user
 from src.content.enums import ContentTypeEnum
-from src.recommendations.router import get_recommendations_feed, get_similar_content, router
+from src.recommendations.router import get_recommendations_feed, get_recommended_authors, get_similar_content, router
 from src.recommendations.schemas import (
+    RecommendedAuthorItemGet,
     RecommendationFeedContentTypeEnum,
     RecommendationFeedSortEnum,
     SimilarContentListGet,
@@ -24,6 +25,24 @@ class FakeRecommendationService:
     async def get_recommendations_feed(self, **kwargs):  # type: ignore[no-untyped-def]
         self.calls.append(kwargs)
         return []
+
+    async def get_recommended_authors(self, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(kwargs)
+        return [
+            RecommendedAuthorItemGet(
+                user_id=kwargs["viewer_id"],
+                score=8.5,
+                reason="topic_author_affinity",
+                author=UserGet(
+                    user_id=kwargs["viewer_id"],
+                    username="viewer",
+                    is_admin=False,
+                    subscribers_count=0,
+                    avatar=None,
+                    avatar_asset_id=None,
+                ),
+            )
+        ]
 
 
 @pytest.fixture
@@ -97,3 +116,30 @@ async def test_recommendations_feed_endpoint_passes_filters_to_service() -> None
     assert call["sort"] == RecommendationFeedSortEnum.NEWEST
     assert call["offset"] == 10
     assert call["limit"] == 5
+
+
+@pytest.mark.anyio
+async def test_recommended_authors_endpoint_passes_params_to_service() -> None:
+    viewer = UserGet(
+        user_id=uuid.uuid4(),
+        username="viewer",
+        is_admin=False,
+        subscribers_count=0,
+        avatar=None,
+        avatar_asset_id=None,
+    )
+    service = FakeRecommendationService()
+
+    response = await get_recommended_authors(
+        offset=12,
+        limit=9,
+        user=viewer,
+        recommendation_service=service,  # type: ignore[arg-type]
+    )
+
+    assert len(response) == 1
+    assert response[0].user_id == viewer.user_id
+    call = service.calls[0]
+    assert call["viewer_id"] == viewer.user_id
+    assert call["offset"] == 12
+    assert call["limit"] == 9

@@ -100,7 +100,7 @@ services:
   neo4j_backfill:
     container_name: neo4j_backfill
     restart: "no"
-    command: bash -c "python -m src.recommendations.sync full-rebuild"
+    command: bash -c "python -m src.recommendations.sync incremental-sync"
     build:
       context: ./server
       dockerfile: ./Dockerfile

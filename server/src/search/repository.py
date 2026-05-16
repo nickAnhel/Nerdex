@@ -324,6 +324,76 @@ class SearchRepository:
             for row in rows
         ], has_more
 
+    async def search_popular_authors(
+        self,
+        *,
+        period: SearchPopularPeriodEnum,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[SearchAuthorMatch], bool]:
+        sort_timestamp = func.coalesce(ContentModel.published_at, ContentModel.created_at)
+        if period == SearchPopularPeriodEnum.ALL_TIME:
+            author_score = func.sum(
+                ContentModel.views_count
+                + (ContentModel.likes_count * 4)
+                + (ContentModel.comments_count * 5)
+                - (ContentModel.dislikes_count * 6)
+            )
+            stmt = (
+                select(
+                    ContentModel.author_id.label("author_id"),
+                    author_score.label("score"),
+                    func.max(sort_timestamp).label("sort_timestamp"),
+                )
+                .select_from(ContentModel)
+                .outerjoin(VideoPlaybackDetailsModel, VideoPlaybackDetailsModel.content_id == ContentModel.content_id)
+                .where(*self._content_visibility_clauses())
+                .group_by(ContentModel.author_id)
+            )
+        else:
+            action_score = case(
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_VIEW, literal(1)),
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_LIKE, literal(4)),
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_COMMENT, literal(5)),
+                (ActivityEventModel.action_type == ActivityActionTypeEnum.CONTENT_DISLIKE, literal(-6)),
+                else_=literal(0),
+            )
+            author_score = func.sum(action_score)
+            stmt = (
+                select(
+                    ContentModel.author_id.label("author_id"),
+                    author_score.label("score"),
+                    func.max(sort_timestamp).label("sort_timestamp"),
+                )
+                .select_from(ActivityEventModel)
+                .join(ContentModel, ContentModel.content_id == ActivityEventModel.content_id)
+                .outerjoin(VideoPlaybackDetailsModel, VideoPlaybackDetailsModel.content_id == ContentModel.content_id)
+                .where(
+                    ActivityEventModel.action_type.in_(
+                        [
+                            ActivityActionTypeEnum.CONTENT_VIEW,
+                            ActivityActionTypeEnum.CONTENT_LIKE,
+                            ActivityActionTypeEnum.CONTENT_COMMENT,
+                            ActivityActionTypeEnum.CONTENT_DISLIKE,
+                        ]
+                    )
+                )
+                .where(ActivityEventModel.created_at >= self._popular_period_since(period))
+                .where(*self._content_visibility_clauses())
+                .group_by(ContentModel.author_id)
+            )
+
+        stmt = stmt.order_by(desc(author_score), desc(literal_column("sort_timestamp")), desc(ContentModel.author_id))
+        result = await self._session.execute(stmt.offset(offset).limit(limit + 1))
+        rows = list(result.all())
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+
+        return [
+            SearchAuthorMatch(author_id=row.author_id, score=float(row.score or 0.0))
+            for row in rows
+        ], has_more
+
     async def get_content_by_ids(
         self,
         *,

@@ -6,6 +6,10 @@ export default class ContentService {
         return api.get("/recommendations/feed", { params });
     }
 
+    static async getRecommendedAuthors(params) {
+        return api.get("/recommendations/authors", { params });
+    }
+
     static async getFeed(params) {
         return api.get("/contents/list", { params });
     }

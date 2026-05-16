@@ -3,6 +3,8 @@
     height: 100%;
     padding: 1.2rem 1.4rem 2rem;
     overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -80,6 +82,19 @@
 .search-results-body {
     width: 100%;
     min-height: 14rem;
+    min-width: 0;
+}
+
+.search-discovery-layout {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(16rem, 28vw, 22rem);
+    gap: 1rem;
+    align-items: start;
+}
+
+.search-discovery-layout > * {
+    min-width: 0;
 }
 
 .search-results-loader {
@@ -135,6 +150,51 @@
     padding-top: 0.7rem;
 }
 
+.popular-authors-column {
+    border: 1px solid #2f2f2f;
+    border-radius: 1rem;
+    padding: 1rem;
+    background: #121212;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    position: sticky;
+    top: 0;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.popular-authors-column h2 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.popular-authors-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.popular-authors-list .search-author-result {
+    width: 100%;
+}
+
+.popular-authors-list .search-author-result .user-list-item {
+    width: 100%;
+    min-width: 0;
+}
+
+.popular-authors-column .search-author-result .user-list-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.popular-authors-column .search-author-result .user-list-item .right {
+    width: 100%;
+}
+
 @media (max-width: 760px) {
     #search-results-page {
         padding: 0.8rem;
@@ -142,6 +202,14 @@
 
     .search-results-header {
         padding: 1rem;
+    }
+
+    .search-discovery-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .popular-authors-column {
+        position: static;
     }
 
     .search-author-result .user-list-item {

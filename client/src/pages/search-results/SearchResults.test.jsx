@@ -101,6 +101,7 @@ jest.mock("../../service/SearchService", () => ({
     default: {
         search: jest.fn(),
         popular: jest.fn(),
+        popularAuthors: jest.fn(),
     },
 }));
 
@@ -140,6 +141,24 @@ beforeEach(() => {
     jest.clearAllMocks();
     SearchService.search.mockResolvedValue(contentResponse("search-content"));
     SearchService.popular.mockResolvedValue(contentResponse("popular-content"));
+    SearchService.popularAuthors.mockResolvedValue({
+        data: {
+            items: [
+                {
+                    result_type: "author",
+                    content: null,
+                    author: {
+                        user_id: "popular-author-1",
+                        username: "popular-creator",
+                    },
+                    score: 10,
+                },
+            ],
+            offset: 0,
+            limit: 6,
+            has_more: false,
+        },
+    });
 });
 
 
@@ -154,12 +173,21 @@ test("/search without q loads popular mode and hides authors filter", async () =
             limit: 20,
         })
     ));
+    await waitFor(() => expect(SearchService.popularAuthors).toHaveBeenCalledWith(
+        expect.objectContaining({
+            period: "week",
+            offset: 0,
+            limit: 6,
+        })
+    ));
 
     expect(screen.getByRole("heading", { name: "Popular" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Authors" })).toBeNull();
     expect(screen.queryByText("Sort")).toBeNull();
     expect(screen.getByText("Period")).not.toBeNull();
     expect(screen.getByText("Content card: popular-content")).not.toBeNull();
+    expect(screen.getByText("Popular authors")).not.toBeNull();
+    expect(screen.getByText("User item: popular-creator")).not.toBeNull();
 });
 
 
@@ -201,6 +229,7 @@ test("/search?q=something loads search results mode with authors and sort", asyn
     expect(screen.queryByText("Period")).toBeNull();
     expect(screen.getByText("User item: creator")).not.toBeNull();
     expect(SearchService.popular).not.toHaveBeenCalled();
+    expect(SearchService.popularAuthors).not.toHaveBeenCalled();
 });
 
 
@@ -211,6 +240,13 @@ test("popular mode normalizes unsupported author type to all", async () => {
         expect.objectContaining({
             type: "all",
             period: "month",
+        })
+    ));
+    await waitFor(() => expect(SearchService.popularAuthors).toHaveBeenCalledWith(
+        expect.objectContaining({
+            period: "month",
+            offset: 0,
+            limit: 6,
         })
     ));
 
@@ -240,6 +276,13 @@ test("changing period resets pagination and refetches popular", async () => {
             period: "month",
             offset: 0,
             limit: 20,
+        })
+    ));
+    await waitFor(() => expect(SearchService.popularAuthors).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+            period: "month",
+            offset: 0,
+            limit: 6,
         })
     ));
 });

@@ -9,4 +9,8 @@ export default class SearchService {
     static async popular(params) {
         return api.get("/search/popular", { params });
     }
+
+    static async popularAuthors(params) {
+        return api.get("/search/popular-authors", { params });
+    }
 }
